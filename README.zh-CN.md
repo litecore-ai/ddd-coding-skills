@@ -86,7 +86,7 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 ### Claude Code（插件市场）
 
 ```bash
-/install-plugin litecore-ai/ddd-coding-skill
+/install-plugin litecore-ai/ddd-coding-skills
 ```
 
 ### 手动安装
@@ -95,14 +95,14 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 ```bash
 cd ~/.claude/plugins
-git clone https://github.com/litecore-ai/ddd-coding-skill.git
+git clone https://github.com/litecore-ai/ddd-coding-skills.git
 ```
 
 或添加为个人技能：
 
 ```bash
 cd ~/.claude/skills
-git clone https://github.com/litecore-ai/ddd-coding-skill.git
+git clone https://github.com/litecore-ai/ddd-coding-skills.git
 ```
 
 ## 要求
@@ -113,7 +113,7 @@ git clone https://github.com/litecore-ai/ddd-coding-skill.git
 ## 项目结构
 
 ```
-ddd-coding-skill/
+ddd-coding-skills/
 ├── .claude-plugin/
 │   └── plugin.json          # 插件清单
 ├── skills/

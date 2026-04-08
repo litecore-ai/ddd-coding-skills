@@ -68,7 +68,7 @@ Supports incremental (diff) mode, configurable via `.audit-config.yml`, and gene
 ### Claude Code (Plugin Marketplace)
 
 ```bash
-/install-plugin litecore-ai/ddd-coding-skill
+/install-plugin litecore-ai/ddd-coding-skills
 ```
 
 ### Manual Installation
@@ -77,14 +77,14 @@ Clone into your Claude Code plugins directory:
 
 ```bash
 cd ~/.claude/plugins
-git clone https://github.com/litecore-ai/ddd-coding-skill.git
+git clone https://github.com/litecore-ai/ddd-coding-skills.git
 ```
 
 Or add as a personal skill:
 
 ```bash
 cd ~/.claude/skills
-git clone https://github.com/litecore-ai/ddd-coding-skill.git
+git clone https://github.com/litecore-ai/ddd-coding-skills.git
 ```
 
 ## Requirements
@@ -95,7 +95,7 @@ git clone https://github.com/litecore-ai/ddd-coding-skill.git
 ## Project Structure
 
 ```
-ddd-coding-skill/
+ddd-coding-skills/
 ├── .claude-plugin/
 │   └── plugin.json          # Plugin manifest
 ├── skills/
