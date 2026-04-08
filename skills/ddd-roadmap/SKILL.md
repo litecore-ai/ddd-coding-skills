@@ -1,11 +1,21 @@
 ---
 name: ddd-roadmap
-description: Use when planning a DDD project's development roadmap, generating phased feature plans, or when user says "generate roadmap", "plan development phases", "create roadmap" - produces structured checkbox-format roadmap compatible with ddd-develop consumption
+description: Use when planning a DDD project's development roadmap, generating phased feature plans, or when user says "generate roadmap", "plan development phases", "create roadmap", or "/ddd-roadmap <scope description>". Supports full-project roadmaps, scoped roadmaps for specific features, and interactive mode. Produces structured checkbox-format roadmap compatible with ddd-develop consumption.
 ---
 
 # DDD Roadmap Generator
 
 Analyze a DDD project, align on product goals, and generate a structured, phased roadmap. Output format is standardized for ddd-develop skill consumption.
+
+Supports three input modes:
+1. **Scoped roadmap** — `/ddd-roadmap <scope>` generates a roadmap focused on the given feature area or requirement
+2. **Full-project roadmap** — `/ddd-roadmap` with no arguments scans the full project and plans all features
+3. **Interactive** — if no arguments AND project scope is unclear (e.g., empty project, no README, no clear product direction), asks the user what to plan
+
+**Announce at start:**
+- If arguments provided: "Using ddd-roadmap to plan: [user's scope description]."
+- If full project: "Using ddd-roadmap to generate a full project roadmap."
+- If asking user: "Using ddd-roadmap — what scope would you like to plan?"
 
 ## Execution Flow
 
@@ -14,6 +24,14 @@ digraph roadmap_flow {
   rankdir=TB;
   node [shape=box, style=rounded];
 
+  input [label="0. Input Detection"];
+  has_args [label="Arguments provided?" shape=diamond];
+  use_scope [label="Use arguments as\nroadmap scope"];
+  detect_project [label="Scan project for\ncontext signals"];
+  has_context [label="Clear project direction?" shape=diamond];
+  full_project [label="Full-project mode"];
+  ask_user [label="Ask user:\nWhat to plan?"];
+  confirm [label="User confirms scope"];
   scan [label="1. Project Scan"];
   align [label="2. Goal Alignment"];
   decompose [label="3. Feature Decomposition"];
@@ -22,11 +40,69 @@ digraph roadmap_flow {
   review [label="6. User Review"];
   commit [label="7. Commit"];
 
-  scan -> align -> decompose -> prioritize -> generate -> review;
+  input -> has_args;
+  has_args -> use_scope [label="yes"];
+  has_args -> detect_project [label="no"];
+  detect_project -> has_context;
+  has_context -> full_project [label="yes"];
+  has_context -> ask_user [label="no"];
+  use_scope -> confirm;
+  full_project -> confirm;
+  ask_user -> confirm;
+  confirm -> scan -> align -> decompose -> prioritize -> generate -> review;
   review -> generate [label="revisions"];
   review -> commit [label="approved"];
 }
 ```
+
+---
+
+## Step 0 — Input Detection
+
+Determine the roadmap scope based on input mode.
+
+### Mode A: Scoped Roadmap
+
+The user provided arguments (e.g., `/ddd-roadmap billing system with Stripe integration`).
+
+1. Parse the user's description into a clear scope definition
+2. Set `mode = "scoped"` — Steps 1-5 will focus only on this scope
+3. Present for confirmation:
+
+```
+Roadmap scope (user-defined):
+
+**Scope**: [user's description, clarified if needed]
+**Focus area**: [which DDD layers/modules this likely involves]
+
+Generate a phased roadmap for this scope?
+```
+
+Wait for user confirmation. User may refine the scope.
+
+### Mode B: Full-Project Roadmap
+
+No arguments provided. Quickly check for project context signals:
+- README or CLAUDE.md exists with product description
+- Source code directories exist with meaningful structure
+- Package manifest (package.json, go.mod, Cargo.toml, etc.) exists
+
+If clear project direction is detectable → set `mode = "full-project"`, proceed to Step 1.
+
+### Mode C: Interactive
+
+No arguments provided and project scope is unclear (empty project, no README, no clear product direction).
+
+```
+No clear project scope detected. What would you like to plan?
+
+Examples:
+- "A SaaS billing platform with subscription management"
+- "Add a notification system to the existing project"
+- "Plan the full project based on the existing code"
+```
+
+Once the user provides a description, treat as **Mode A** (set `mode = "scoped"`) and confirm.
 
 ---
 
@@ -39,6 +115,8 @@ Detect and document:
 3. **Module inventory**: for each layer, list modules with file count and LOC
 4. **Existing state**: what's already built, what's partially complete, what's missing
 5. **Existing docs**: README, CLAUDE.md, architecture docs, any prior roadmap
+
+**Scoped mode (`mode = "scoped"`):** Focus scan on modules and layers relevant to the given scope. Still detect tech stack and DDD structure for the full project, but module inventory and existing state analysis can be narrowed to the scope area.
 
 ### Language & Output Detection
 
@@ -58,13 +136,15 @@ Ask clarifying questions **one at a time** to understand:
 4. **Priority** — What must ship first? What can wait?
 5. **Architecture goals** — Any DDD patterns to enforce or adopt? (Bounded contexts, event sourcing, CQRS, etc.)
 
+**Scoped mode (`mode = "scoped"`):** The user has already provided scope context. Skip questions that are already answered by the scope description. Focus on clarifying ambiguities within the scope rather than broad product vision. If the scope is specific enough (e.g., "add Stripe billing with subscription management"), you may need fewer or no clarifying questions.
+
 Prefer multiple-choice questions when possible.
 
 ---
 
 ## Step 3 — Feature Decomposition
 
-Break the product into feature areas, then decompose each into actionable items:
+Break the product (or scoped feature area) into feature areas, then decompose each into actionable items:
 
 ```
 Product
@@ -117,6 +197,7 @@ Organize items into phases by priority:
 
 Save to `docs/roadmap/` directory:
 
+**Full-project mode:**
 ```
 docs/roadmap/
 ├── README.md              # Overview + phase table + current state + architecture decisions
@@ -125,6 +206,8 @@ docs/roadmap/
 ├── P2-growth.md           # Phase 2 details
 └── P3-enterprise.md       # Phase 3 details
 ```
+
+**Scoped mode:** If a roadmap already exists, **merge** the new scoped items into existing phase documents rather than overwriting. If no roadmap exists, generate the same structure but scoped to the feature area. Use fewer phases if the scope is small (e.g., a single feature may only need P0 and P1).
 
 User preferences for location override this default.
 
@@ -236,7 +319,15 @@ After approval, commit the roadmap files:
 
 ```bash
 git add docs/roadmap/
+
+# Full-project mode:
 git commit -m "docs: add project roadmap (P0-P3)"
+
+# Scoped mode (new roadmap):
+git commit -m "docs: add [scope] roadmap (P0-P[N])"
+
+# Scoped mode (merged into existing):
+git commit -m "docs: add [scope] items to project roadmap"
 ```
 
 ---
