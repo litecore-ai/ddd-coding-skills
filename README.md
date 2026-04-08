@@ -13,23 +13,28 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
  (plan)         (implement)      (audit)
 ```
 
-**ddd-roadmap** analyzes your project and generates a structured, phased roadmap with actionable checkbox items.
+**ddd-roadmap** analyzes your project and generates a structured, phased roadmap with actionable checkbox items. Supports scoped roadmaps (`/ddd-roadmap billing system`) or full-project planning.
 
-**ddd-develop** picks the next unchecked roadmap item, generates an implementation plan, executes it with TDD via subagents, runs an audit, fixes all findings, and commits. Self-contained — no external skill dependencies.
+**ddd-develop** picks the next unchecked roadmap item, generates an implementation plan, executes it with TDD via subagents, runs an audit, fixes all findings, and commits. Also supports ad-hoc requirements (`/ddd-develop add user authentication`). Self-contained — no external skill dependencies.
 
-**ddd-audit** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability.
+**ddd-audit** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability. Supports scoped audits (`/ddd-audit src/domain/`) or full-project audits.
 
 ## Skills
 
 | Skill | Purpose | Trigger |
 |-------|---------|---------|
-| **ddd-roadmap** | Generate phased development roadmap | "generate roadmap", "plan development phases" |
-| **ddd-develop** | Implement next roadmap item (full pipeline) | "continue development", "next roadmap item" |
-| **ddd-audit** | 8-dimension DDD architecture audit | "audit this project", "DDD review" |
+| **ddd-roadmap** | Generate phased development roadmap | `/ddd-roadmap`, `/ddd-roadmap <scope>` |
+| **ddd-develop** | Implement next roadmap item or ad-hoc requirement | `/ddd-develop`, `/ddd-develop <requirement>` |
+| **ddd-audit** | 8-dimension DDD architecture audit | `/ddd-audit`, `/ddd-audit <scope>` |
 
 ### ddd-roadmap
 
 Scans project structure, aligns on product goals through conversation, decomposes features into actionable items, and organizes them into prioritized phases (P0-P3).
+
+Three input modes:
+- `/ddd-roadmap <scope>` — scoped roadmap for a specific feature area
+- `/ddd-roadmap` — full-project roadmap (when project has clear direction)
+- `/ddd-roadmap` — interactive (asks what to plan when scope is unclear)
 
 Output: standardized checkbox-format roadmap in `docs/roadmap/`.
 
@@ -37,18 +42,30 @@ Output: standardized checkbox-format roadmap in `docs/roadmap/`.
 
 Self-contained development workflow with 6 phases:
 
-1. **LOCATE** — Scan roadmap, find next unchecked item
+1. **LOCATE** — Find development target (args / roadmap / ask user)
 2. **PLAN** — Generate bite-sized implementation plan with TDD steps
 3. **IMPLEMENT** — Subagent-per-task execution with spec + quality review loops
 4. **AUDIT** — Incremental DDD code review, fix ALL findings (all severity levels)
 5. **VERIFY** — Lint, type check, full test suite with evidence
-6. **COMPLETE** — Update roadmap, commit, push (with user confirmation)
+6. **COMPLETE** — Update roadmap (if applicable), commit, push (with user confirmation)
+
+Three input modes:
+- `/ddd-develop <requirement>` — develop an ad-hoc requirement (not in roadmap)
+- `/ddd-develop` — pick next unchecked roadmap item
+- `/ddd-develop` — interactive (asks what to develop when no roadmap items remain)
 
 Built-in: TDD (RED-GREEN-REFACTOR), implementation planning, subagent orchestration (implementer + spec reviewer + quality reviewer), and verification-before-completion.
 
 ### ddd-audit
 
-8-dimension audit matrix with parallel subagent execution:
+8-dimension audit matrix with parallel subagent execution.
+
+Three input modes:
+- `/ddd-audit <scope>` — scoped audit of specific modules, layers, or files
+- `/ddd-audit` — full-project audit
+- `/ddd-audit` — interactive (asks what to audit when scope is unclear)
+
+Dimensions:
 
 | Dimension | Focus |
 |-----------|-------|
@@ -147,41 +164,38 @@ Or describe what you want directly:
 You: /ddd-roadmap I want to build a multi-tenant SaaS platform with user management, billing, and analytics
 ```
 
-### Implement the Next Roadmap Item
+### Implement Features
+
+From roadmap (picks next unchecked item automatically):
 
 ```
 You: /ddd-develop
-
-# The skill will automatically:
-# 1. Find the next unchecked item in your roadmap
-# 2. Generate an implementation plan
-# 3. Execute via TDD (RED → GREEN → REFACTOR) with subagents
-# 4. Run a DDD audit and fix all findings
-# 5. Verify (lint, type check, tests)
-# 6. Update the roadmap and commit (with your confirmation)
+You: /ddd-develop   # next item
+You: /ddd-develop   # next item
 ```
 
-Run it repeatedly to work through your roadmap item by item:
+Or develop an ad-hoc requirement (not in roadmap):
 
 ```
-You: /ddd-develop   # implements item 1
-You: /ddd-develop   # implements item 2
-You: /ddd-develop   # implements item 3
-...
+You: /ddd-develop add JWT authentication with refresh token rotation
 ```
 
 ### Audit Your Project
 
+Full project audit:
+
 ```
 You: /ddd-audit
-
-# Runs a full 8-dimension audit:
-# D1 Design, D2 Architecture, D3 Quality, D4 Security,
-# D5 Testing, D6 Integration, D7 Performance, D8 Observability
-# Output: scored report + fix roadmap in docs/audit/
 ```
 
-Audit only recent changes (incremental mode):
+Scoped audit (specific module or layer):
+
+```
+You: /ddd-audit src/domain/billing
+You: /ddd-audit security review of auth module
+```
+
+Incremental mode (only recent changes):
 
 ```
 You: /ddd-audit --diff HEAD~3
