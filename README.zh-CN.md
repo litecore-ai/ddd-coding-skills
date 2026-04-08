@@ -120,6 +120,31 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
 ```
 
+## 更新
+
+### 插件市场
+
+```bash
+# 先更新市场缓存
+claude plugin marketplace update ddd-coding-skills
+
+# 再更新插件
+claude plugin update ddd-coding-skills@ddd-coding-skills
+```
+
+更新后需要重启 Claude Code 才会生效。
+
+### 手动安装
+
+拉取最新代码并重新复制技能文件：
+
+```bash
+cd /tmp/ddd-coding-skills && git pull
+cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
+cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
+cp -r skills/ddd-audit ~/.claude/skills/ddd-audit
+```
+
 ## 使用示例
 
 ### 生成开发路线图

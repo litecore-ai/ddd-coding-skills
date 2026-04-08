@@ -102,6 +102,31 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
 ```
 
+## Updating
+
+### Plugin Marketplace
+
+```bash
+# Update the marketplace cache first
+claude plugin marketplace update ddd-coding-skills
+
+# Then update the plugin
+claude plugin update ddd-coding-skills@ddd-coding-skills
+```
+
+Restart Claude Code after updating for changes to take effect.
+
+### Manual Installation
+
+Pull the latest changes and re-copy the skill files:
+
+```bash
+cd /tmp/ddd-coding-skills && git pull
+cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
+cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
+cp -r skills/ddd-audit ~/.claude/skills/ddd-audit
+```
+
 ## Usage Examples
 
 ### Generate a Development Roadmap
