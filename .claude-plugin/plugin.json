@@ -1,0 +1,20 @@
+{
+  "name": "ddd-coding-skill",
+  "description": "DDD development skill suite: roadmap generation, TDD implementation, and 8-dimension code review",
+  "version": "1.0.0",
+  "author": {
+    "name": "Litecore AI",
+    "url": "https://github.com/litecore-ai"
+  },
+  "homepage": "https://github.com/litecore-ai/ddd-coding-skill",
+  "repository": "https://github.com/litecore-ai/ddd-coding-skill",
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "ddd",
+    "domain-driven-design",
+    "tdd",
+    "code-review",
+    "roadmap"
+  ]
+}

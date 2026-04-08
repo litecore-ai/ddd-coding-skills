@@ -1,0 +1,544 @@
+---
+name: ddd-code-review
+description: Use when auditing a DDD-architecture project for quality, security, and architectural compliance - triggers on "audit this project", "DDD review", pre-production readiness check, architecture compliance review. Works with any language/framework.
+---
+
+# DDD Code Review
+
+Full-pipeline DDD architecture audit. Scans project, generates audit plan, executes phase-by-phase review with subagents, produces final report and fix roadmap.
+
+**All artifacts** are saved to `docs/audit/YYYY-MM-DD-NNN/` (NNN = zero-padded sequence within the same date).
+
+## 8-Dimension Audit Matrix
+
+| # | Dimension | Focus |
+|---|-----------|-------|
+| D1 | **Design** | Functional completeness, optimal approach, interface clarity, over/under-engineering |
+| D2 | **Architecture** | DDD layer compliance, dependency direction, single responsibility, bounded context |
+| D3 | **Quality** | Dead code, duplication, complexity, function size (<50 LOC), file size (<800 LOC), naming |
+| D4 | **Security** | Vulnerabilities, edge cases, error handling, sensitive data, input validation |
+| D5 | **Testing** | Unit/integration/E2E coverage, test quality, boundary testing, mock validity |
+| D6 | **Integration** | Cross-module contracts, data flow, wiring correctness |
+| D7 | **Performance** | N+1 queries, caching, memory leaks, algorithmic complexity, resource cleanup |
+| D8 | **Observability** | Structured logging, metrics, tracing, alerting, health checks |
+
+## Severity Levels
+
+| Level | Definition | Action |
+|-------|-----------|--------|
+| **CRITICAL** | Security vulnerability, data loss, safety risk | **BLOCK** — must fix before release |
+| **HIGH** | Bug, significant design flaw, missing tests | **WARN** — fix before deployment |
+| **MEDIUM** | Maintainability, code smell, suboptimal implementation | **INFO** — schedule post-launch |
+| **LOW** | Style, minor optimization | **NOTE** — optional |
+
+## Execution Flow
+
+```dot
+digraph audit_flow {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  scan [label="1. Project Scan"];
+  plan [label="2. Generate Audit Plan"];
+  baseline [label="3. Phase 0: Baseline"];
+  layers [label="4. Phases 1-5: Layer Audits\n(parallel subagents)"];
+  integration [label="5. Phase 6: Integration"];
+  docs [label="6. Phase 7: Documentation"];
+  report [label="7. Final Report"];
+  roadmap [label="8. Fix Roadmap"];
+
+  scan -> plan -> baseline -> layers -> integration -> docs -> report -> roadmap;
+}
+```
+
+---
+
+## Step 1 — Project Scan
+
+Detect and document:
+
+1. **Tech stack**: language, framework, build tool, test framework, linter
+2. **DDD layers**: map directories to Domain / Infrastructure / Application / Presentation / Cross-Cutting
+3. **Module inventory**: for each layer, list modules with file count and LOC
+4. **Dependency graph**: verify direction (Domain ← App ← Infra / Presentation)
+
+### Language Auto-Detection
+
+Detect from file extensions + package manager files (package.json, pom.xml, go.mod, Cargo.toml, etc.).
+
+Adapt checklist items to stack:
+- **TypeScript**: strict mode, ESLint, `!`/`as`/`any` usage
+- **Java/Kotlin**: Spring conventions, package structure, annotations
+- **Go**: interface compliance, error handling, package boundaries
+- **Rust**: ownership, unsafe blocks, trait implementations
+- **Python**: type hints, ABC, dependency injection
+
+### Output Language Auto-Detection
+
+Detect from README, comments, commit messages. Output in detected language. If bilingual, use bilingual format.
+
+---
+
+## Step 2 — Generate Audit Plan
+
+Create `audit-plan.md`:
+
+```
+# [Project Name] DDD Audit Plan
+
+> **Project**: [name]
+> **Date**: [YYYY-MM-DD]
+> **Tech Stack**: [language, framework]
+> **Scope**: [LOC, files, tests]
+> **Organization**: Layer × Module — [N] Phases
+
+## Audit Methodology
+[8-dimension matrix + severity levels]
+
+## Phase 0 — Baseline
+[lint, type check, test coverage, dead code, dependency audit]
+
+## Phase [1-5] — [Layer Name]
+### N.M [Module Name] — `path/to/module/`
+**Files**: [list with LOC]
+#### D[1-8] [Dimension]
+- [ ] [specific, actionable checklist item referencing actual files/functions]
+
+## Phase 6 — System Integration
+[cross-layer contract checks]
+
+## Phase 7 — Documentation & Compliance
+[doc accuracy, API docs, architecture docs]
+```
+
+### Checklist Generation Rules
+
+1. **Read each file** to understand purpose before writing checklist items
+2. **Apply relevant dimensions** — not all 8 apply to every module
+3. **Write specific items** — reference actual function names and patterns found
+4. **Mark high-risk areas** with `[CRITICAL]` tag
+
+**Dimension emphasis by layer:**
+
+| Layer | Primary Dimensions |
+|-------|--------------------|
+| Domain | D1 (business correctness), D2 (purity / no IO), D5 (coverage) |
+| Infrastructure | D4 (security), D7 (performance), D8 (observability) |
+| Application | D1 (workflow completeness), D4 (error handling), D6 (integration) |
+| Presentation | D4 (input validation / auth), D7 (response time), D8 (request logging) |
+| Cross-Cutting | D6 (contracts), D7 (overhead), D8 (observability coverage) |
+
+---
+
+## Step 3-6 — Execute Audit
+
+### Subagent Strategy
+
+```
+Phase 0 (baseline) — single agent
+  ↓
+Phase 1 (domain) ──┐
+Phase 2 (infra) ───┤ parallel
+Phase 3 (app) ─────┤
+Phase 4 (present.) ┤
+Phase 5 (crosscut) ┘
+  ↓
+Phase 6 (integration) — needs 1-5 results
+Phase 7 (docs) — parallel with 6
+```
+
+Each subagent receives: its phase section from the audit plan + dimension matrix + severity definitions.
+
+### Phase Report Format
+
+Each `phase-N-[layer].md`:
+
+```
+# Phase N — [Layer] Audit Report
+
+> **Scope**: [files]
+> **Status**: COMPLETE
+
+## Summary
+| Module | CRIT | HIGH | MED | LOW | Total |
+
+## Findings
+
+### [MODULE-SEV-SEQ] — [Short Title]
+- **Severity**: CRITICAL | HIGH | MEDIUM | LOW
+- **Dimension**: D[N] [Name]
+- **File**: `path/file.ext:line`
+- **Description**: [2-5 sentences]
+- **Impact**: [what breaks]
+- **Fix**: [brief solution]
+- **Effort**: S (<30min) | M (1-3hr) | L (4-8hr)
+```
+
+**Issue ID convention**: `[MODULE]-[CRIT|HIGH|MED|LOW]-[SEQ]`
+
+---
+
+## Step 7 — Final Report
+
+Generate `audit-report.md`:
+
+```
+# [Project] DDD Audit Report — Final
+
+> **Project / Date / Auditor / Scope**
+
+## Executive Summary
+[Category × status table]
+
+## Issue Statistics
+[Phase × severity matrix]
+[Dimension × severity matrix]
+
+## Top CRITICAL Issues
+[Table: ID, file, issue]
+
+## Systemic Patterns
+[Recurring anti-patterns across modules]
+
+## Strengths
+[What the project does well]
+
+## Verdict
+[READY / NOT READY + conditions]
+```
+
+---
+
+## Step 8 — Fix Roadmap
+
+Generate `fix-roadmap.md`:
+
+```
+# Fix Roadmap
+
+> **Based on**: [N] findings
+> **Organization**: Waves by severity, parallel tracks within waves
+
+## Wave 1 — CRITICAL ([N] items, [est] days)
+### Track [A-Z]: [Theme]
+| # | ID | Fix | Effort | File |
+
+## Wave 2 — HIGH
+## Wave 3 — MEDIUM
+## Wave 4 — LOW
+
+## Effort Estimation
+| Wave | Items | S | M | L | Est. Days |
+
+## Execution Order
+[Timeline with dependencies]
+
+## Post-Fix Verification
+[Automated checks per wave]
+```
+
+---
+
+## DDD Architecture Checks
+
+### Dependency Direction
+
+```
+✅ Domain ← Application ← Infrastructure
+                        ← Presentation
+✗  Domain → Infrastructure  (IO leak)
+✗  Domain → Application     (circular)
+✗  Presentation → Infrastructure  (layer bypass)
+```
+
+### Domain Layer Purity
+
+- No IO (file, network, DB) in domain
+- No framework dependencies in domain
+- Domain events over direct cross-aggregate calls
+- Value objects are immutable
+- Entities have identity, value objects have equality by value
+
+### Bounded Context Boundaries
+
+- Each context has its own ubiquitous language
+- Anti-corruption layers at context boundaries
+- No shared mutable state between contexts
+
+### Repository Pattern
+
+- Interfaces in domain, implementations in infrastructure
+- One repository per aggregate root
+- No query logic leaking into domain
+
+---
+
+## Common DDD Anti-Patterns
+
+| Anti-Pattern | Symptom | Default Severity |
+|-------------|---------|-----------------|
+| Anemic Domain | Entities with only getters/setters, all logic in services | HIGH |
+| Smart UI | Business logic in controllers/handlers | HIGH |
+| God Aggregate | Single aggregate handling too many concerns | MEDIUM |
+| Leaky Abstraction | Infrastructure details in domain types | CRITICAL |
+| Missing Bounded Context | Conflating different domain concepts | HIGH |
+| Shared Kernel Abuse | Excessive sharing between contexts | MEDIUM |
+| Repository as DAO | Repository with SQL-level query methods | MEDIUM |
+| Event Sourcing Cargo Cult | ES without actual need for audit trail | LOW |
+
+---
+
+## Incremental Audit (Diff Mode)
+
+When a previous audit exists, support `--diff` mode that only reviews changed files since the last audit.
+
+### When to Use
+
+- CI/CD pipeline integration — audit only the PR diff
+- Follow-up audits after partial fixes
+- Triggered by: "re-audit", "audit changes since last time", "incremental audit"
+
+### How It Works
+
+1. **Locate previous audit**: find latest `docs/audit/YYYY-MM-DD-NNN/audit-report.md`
+2. **Determine change scope**: `git diff --name-only <last-audit-commit>..HEAD` (or use timestamp from previous report)
+3. **Map changed files to phases**: group by DDD layer
+4. **Re-run only affected phases**: skip unchanged layers entirely
+5. **Carry forward unchanged findings**: copy previous findings for untouched modules
+6. **Generate delta report**: show new / resolved / unchanged findings
+
+### Delta Report Format
+
+Add `audit-delta.md` to output:
+
+```
+# Audit Delta Report
+
+> **Compared to**: [previous audit date/path]
+> **Files changed**: [N]
+> **Phases re-audited**: [list]
+
+## New Findings
+[findings not in previous audit]
+
+## Resolved Findings
+[previous findings no longer present]
+
+## Unchanged Findings
+[carried forward count by severity]
+
+## Score Comparison
+[dimension scores: previous → current]
+```
+
+---
+
+## Audit Configuration
+
+Projects can customize audit behavior via `.audit-config.yml` at project root.
+
+### Configuration Schema
+
+```yaml
+# .audit-config.yml
+
+# Dimension weights and toggles
+dimensions:
+  D1_design:      { enabled: true,  weight: 1.0 }
+  D2_architecture: { enabled: true,  weight: 1.5 }  # DDD projects weight this higher
+  D3_quality:     { enabled: true,  weight: 1.0 }
+  D4_security:    { enabled: true,  weight: 2.0 }  # security-critical project
+  D5_testing:     { enabled: true,  weight: 1.0 }
+  D6_integration: { enabled: true,  weight: 1.0 }
+  D7_performance: { enabled: false, weight: 0.0 }  # disable for internal tools
+  D8_observability: { enabled: true, weight: 0.5 }
+
+# DDD layer mapping (override auto-detection)
+layers:
+  domain:        ["src/domain", "src/core"]
+  infrastructure: ["src/infra", "src/adapters"]
+  application:   ["src/app", "src/usecases"]
+  presentation:  ["src/web", "src/api", "src/cli"]
+  crosscutting:  ["src/shared", "src/common"]
+
+# Thresholds
+thresholds:
+  max_function_loc: 50
+  max_file_loc: 800
+  min_test_coverage: 80    # percent
+  max_nesting_depth: 4
+
+# Exclude paths from audit
+exclude:
+  - "src/generated/**"
+  - "**/*.test.*"
+  - "scripts/**"
+
+# Output language override (auto | zh | en | bilingual)
+language: auto
+```
+
+### Behavior
+
+- If `.audit-config.yml` exists, load it in Step 1 (Project Scan)
+- Disabled dimensions are skipped entirely (no checklist items generated)
+- Custom layer mappings override auto-detection
+- Weights affect the scoring formula (see below)
+- If no config exists, use defaults (all dimensions enabled, weight 1.0, auto-detect layers)
+
+---
+
+## Audit Scoring
+
+Provide a quantitative score per dimension and overall, enabling cross-audit progress tracking.
+
+### Scoring Formula
+
+For each dimension D:
+
+```
+raw_score(D) = 1 - (2×CRIT + 1.5×HIGH + 1×MED + 0.5×LOW) / total_checklist_items(D)
+score(D) = clamp(raw_score(D), 0, 1) × 100
+```
+
+Overall weighted score:
+
+```
+overall = Σ(score(D) × weight(D)) / Σ(weight(D))
+```
+
+### Score Table in Final Report
+
+Add to `audit-report.md`:
+
+```
+## Audit Score
+
+| Dimension | Items | CRIT | HIGH | MED | LOW | Score | Δ vs Previous |
+|-----------|-------|------|------|-----|-----|-------|---------------|
+| D1 Design | 45 | 1 | 3 | 8 | 5 | 72% | +8% |
+| D2 Architecture | 38 | 0 | 2 | 5 | 3 | 81% | +12% |
+| ... | | | | | | | |
+| **Overall (weighted)** | | | | | | **76%** | **+9%** |
+
+### Score History
+| Date | Overall | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 |
+|------|---------|----|----|----|----|----|----|----|----|
+| 2026-03-15 | 67% | 64% | 69% | ... |
+| 2026-04-08 | 76% | 72% | 81% | ... |
+```
+
+### Score Interpretation
+
+| Range | Label | Meaning |
+|-------|-------|---------|
+| 90-100% | Excellent | Production-ready, minor polish only |
+| 75-89% | Good | Deployable with known issues tracked |
+| 60-74% | Fair | Needs targeted fixes before production |
+| 40-59% | Poor | Significant rework needed |
+| 0-39% | Critical | Major architectural or security concerns |
+
+---
+
+## CI/CD Integration
+
+The fix roadmap can generate trackable artifacts for project management systems.
+
+### GitHub Issues Generation
+
+After generating `fix-roadmap.md`, optionally create GitHub issues:
+
+```bash
+# Generate issues from roadmap (one issue per CRITICAL/HIGH finding)
+# Each issue includes: title, body (description + impact + fix), labels, milestone
+
+gh issue create \
+  --title "[AUDIT] [ID] — [Short Title]" \
+  --body "$(cat <<'EOF'
+**Severity**: [LEVEL]
+**Dimension**: D[N] [Name]
+**File**: `path/file.ext:line`
+
+## Description
+[from finding]
+
+## Impact
+[from finding]
+
+## Suggested Fix
+[from finding]
+
+## Effort
+[S/M/L]
+
+---
+_Generated from DDD audit on [date]_
+EOF
+)" \
+  --label "audit,[severity]" \
+  --milestone "[Wave N]"
+```
+
+### Issue Generation Rules
+
+| Severity | Auto-create Issue? | Label | Milestone |
+|----------|-------------------|-------|-----------|
+| CRITICAL | Yes | `audit,critical,blocker` | Wave 1 |
+| HIGH | Yes | `audit,high` | Wave 2 |
+| MEDIUM | Optional (ask user) | `audit,medium` | Wave 3 |
+| LOW | No (tracked in roadmap only) | — | — |
+
+### Tracking Board
+
+Optionally generate a GitHub Project board or milestone summary:
+
+```
+## Tracking Summary
+
+- **Wave 1 milestone**: [N] issues, [link]
+- **Wave 2 milestone**: [N] issues, [link]
+- **Dashboard**: [project board link]
+```
+
+### Workflow Integration
+
+```dot
+digraph ci_flow {
+  rankdir=LR;
+  node [shape=box, style=rounded];
+
+  audit [label="Run Audit"];
+  report [label="Generate Report"];
+  issues [label="Create Issues\n(CRIT + HIGH)"];
+  board [label="Update Board"];
+  pr [label="Link to PR"];
+
+  audit -> report -> issues -> board;
+  issues -> pr [label="if in PR context"];
+}
+```
+
+When running in PR context:
+1. Run incremental audit (diff mode) against base branch
+2. Post summary comment on the PR
+3. Create issues only for new findings
+4. Block merge if CRITICAL findings exist (via CI check)
+
+---
+
+## Output File Inventory
+
+| File | Generated In | Content |
+|------|-------------|---------|
+| `audit-plan.md` | Step 2 | Full audit methodology + per-module checklists |
+| `phase-0-baseline.md` | Step 3 | Automated tool results + baseline metrics |
+| `phase-1-domain.md` | Step 4 | Domain layer findings |
+| `phase-2-infra.md` | Step 4 | Infrastructure layer findings |
+| `phase-3-app.md` | Step 4 | Application layer findings |
+| `phase-4-presentation.md` | Step 4 | Presentation layer findings |
+| `phase-5-crosscut.md` | Step 4 | Cross-cutting concerns findings |
+| `phase-6-integration.md` | Step 5 | System integration findings |
+| `phase-7-docs.md` | Step 6 | Documentation & compliance findings |
+| `audit-report.md` | Step 7 | Executive summary + statistics + score |
+| `fix-roadmap.md` | Step 8 | Prioritized remediation plan |
+| `audit-delta.md` | Diff mode | Delta comparison with previous audit |
