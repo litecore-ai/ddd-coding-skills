@@ -1,5 +1,7 @@
 # DDD Coding Skill
 
+English | [中文](README.zh-CN.md)
+
 A complete Domain-Driven Design development workflow for coding agents. Three composable skills that cover the full lifecycle: planning, implementing, and auditing.
 
 ## How It Works
@@ -7,7 +9,7 @@ A complete Domain-Driven Design development workflow for coding agents. Three co
 The three skills form a pipeline:
 
 ```
-ddd-roadmap  →  ddd-develop  →  ddd-code-review
+ddd-roadmap  →  ddd-develop  →  ddd-audit
  (plan)         (implement)      (audit)
 ```
 
@@ -15,7 +17,7 @@ ddd-roadmap  →  ddd-develop  →  ddd-code-review
 
 **ddd-develop** picks the next unchecked roadmap item, generates an implementation plan, executes it with TDD via subagents, runs an audit, fixes all findings, and commits. Self-contained — no external skill dependencies.
 
-**ddd-code-review** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability.
+**ddd-audit** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability.
 
 ## Skills
 
@@ -23,7 +25,7 @@ ddd-roadmap  →  ddd-develop  →  ddd-code-review
 |-------|---------|---------|
 | **ddd-roadmap** | Generate phased development roadmap | "generate roadmap", "plan development phases" |
 | **ddd-develop** | Implement next roadmap item (full pipeline) | "continue development", "next roadmap item" |
-| **ddd-code-review** | 8-dimension DDD architecture audit | "audit this project", "DDD review" |
+| **ddd-audit** | 8-dimension DDD architecture audit | "audit this project", "DDD review" |
 
 ### ddd-roadmap
 
@@ -44,7 +46,7 @@ Self-contained development workflow with 6 phases:
 
 Built-in: TDD (RED-GREEN-REFACTOR), implementation planning, subagent orchestration (implementer + spec reviewer + quality reviewer), and verification-before-completion.
 
-### ddd-code-review
+### ddd-audit
 
 8-dimension audit matrix with parallel subagent execution:
 
@@ -101,7 +103,7 @@ ddd-coding-skill/
 │   │   └── SKILL.md         # Roadmap generation
 │   ├── ddd-develop/
 │   │   └── SKILL.md         # Development workflow
-│   └── ddd-code-review/
+│   └── ddd-audit/
 │       └── SKILL.md         # 8-dimension audit
 ├── LICENSE                  # MIT
 ├── package.json
