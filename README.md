@@ -65,26 +65,118 @@ Supports incremental (diff) mode, configurable via `.audit-config.yml`, and gene
 
 ## Installation
 
-### Claude Code (Plugin Marketplace)
+### Option 1: Plugin Marketplace (Recommended)
+
+Add the repository as a marketplace source, then install:
 
 ```bash
-/install-plugin litecore-ai/ddd-coding-skills
+claude plugin marketplace add litecore-ai/ddd-coding-skills
+claude plugin install ddd-coding-skills
 ```
 
-### Manual Installation
+### Option 2: `--plugin-dir` Flag
 
-Clone into your Claude Code plugins directory:
+Clone the repository and load it per-session:
 
 ```bash
-cd ~/.claude/plugins
-git clone https://github.com/litecore-ai/ddd-coding-skills.git
+git clone https://github.com/litecore-ai/ddd-coding-skills.git ~/.local/share/claude/plugins/ddd-coding-skills
+claude --plugin-dir ~/.local/share/claude/plugins/ddd-coding-skills
 ```
 
-Or add as a personal skill:
+### Option 3: Manual Skill Installation
+
+Copy individual skills into your personal or project skills directory:
 
 ```bash
-cd ~/.claude/skills
-git clone https://github.com/litecore-ai/ddd-coding-skills.git
+# Clone the repository
+git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-skills
+
+# Install as personal skills (available in all projects)
+cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
+cp -r /tmp/ddd-coding-skills/skills/ddd-develop ~/.claude/skills/ddd-develop
+cp -r /tmp/ddd-coding-skills/skills/ddd-audit ~/.claude/skills/ddd-audit
+
+# Or install as project-specific skills (version-controlled with your project)
+cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap .claude/skills/ddd-roadmap
+cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
+cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
+```
+
+## Usage Examples
+
+### Generate a Development Roadmap
+
+```
+You: /ddd-roadmap
+
+# The skill will:
+# 1. Scan your project structure and tech stack
+# 2. Ask about your product goals and priorities
+# 3. Decompose features into actionable items
+# 4. Generate a phased roadmap (P0-P3) in docs/roadmap/
+```
+
+Or describe what you want directly:
+
+```
+You: /ddd-roadmap I want to build a multi-tenant SaaS platform with user management, billing, and analytics
+```
+
+### Implement the Next Roadmap Item
+
+```
+You: /ddd-develop
+
+# The skill will automatically:
+# 1. Find the next unchecked item in your roadmap
+# 2. Generate an implementation plan
+# 3. Execute via TDD (RED → GREEN → REFACTOR) with subagents
+# 4. Run a DDD audit and fix all findings
+# 5. Verify (lint, type check, tests)
+# 6. Update the roadmap and commit (with your confirmation)
+```
+
+Run it repeatedly to work through your roadmap item by item:
+
+```
+You: /ddd-develop   # implements item 1
+You: /ddd-develop   # implements item 2
+You: /ddd-develop   # implements item 3
+...
+```
+
+### Audit Your Project
+
+```
+You: /ddd-audit
+
+# Runs a full 8-dimension audit:
+# D1 Design, D2 Architecture, D3 Quality, D4 Security,
+# D5 Testing, D6 Integration, D7 Performance, D8 Observability
+# Output: scored report + fix roadmap in docs/audit/
+```
+
+Audit only recent changes (incremental mode):
+
+```
+You: /ddd-audit --diff HEAD~3
+```
+
+### Full Workflow Example
+
+A typical end-to-end workflow:
+
+```
+# Step 1: Plan your project
+You: /ddd-roadmap
+
+# Step 2: Implement features one by one
+You: /ddd-develop
+You: /ddd-develop
+You: /ddd-develop
+
+# Step 3: Run a final audit before release
+You: /ddd-audit
 ```
 
 ## Requirements

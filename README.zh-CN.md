@@ -83,26 +83,118 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 ## 安装
 
-### Claude Code（插件市场）
+### 方式一：插件市场（推荐）
+
+将仓库添加为市场源，然后安装：
 
 ```bash
-/install-plugin litecore-ai/ddd-coding-skills
+claude plugin marketplace add litecore-ai/ddd-coding-skills
+claude plugin install ddd-coding-skills
 ```
 
-### 手动安装
+### 方式二：`--plugin-dir` 参数
 
-克隆到 Claude Code 插件目录：
+克隆仓库后按会话加载：
 
 ```bash
-cd ~/.claude/plugins
-git clone https://github.com/litecore-ai/ddd-coding-skills.git
+git clone https://github.com/litecore-ai/ddd-coding-skills.git ~/.local/share/claude/plugins/ddd-coding-skills
+claude --plugin-dir ~/.local/share/claude/plugins/ddd-coding-skills
 ```
 
-或添加为个人技能：
+### 方式三：手动安装技能
+
+将单个技能复制到个人或项目技能目录：
 
 ```bash
-cd ~/.claude/skills
-git clone https://github.com/litecore-ai/ddd-coding-skills.git
+# 克隆仓库
+git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-skills
+
+# 安装为个人技能（所有项目可用）
+cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
+cp -r /tmp/ddd-coding-skills/skills/ddd-develop ~/.claude/skills/ddd-develop
+cp -r /tmp/ddd-coding-skills/skills/ddd-audit ~/.claude/skills/ddd-audit
+
+# 或安装为项目级技能（随项目版本控制）
+cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap .claude/skills/ddd-roadmap
+cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
+cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
+```
+
+## 使用示例
+
+### 生成开发路线图
+
+```
+You: /ddd-roadmap
+
+# 技能将会：
+# 1. 扫描项目结构和技术栈
+# 2. 通过对话了解你的产品目标和优先级
+# 3. 将功能分解为可执行的条目
+# 4. 生成分阶段路线图（P0-P3）到 docs/roadmap/
+```
+
+也可以直接描述需求：
+
+```
+You: /ddd-roadmap 我要构建一个多租户 SaaS 平台，包含用户管理、计费和数据分析功能
+```
+
+### 实现下一个路线图条目
+
+```
+You: /ddd-develop
+
+# 技能将自动：
+# 1. 在路线图中找到下一个未完成的条目
+# 2. 生成实现计划
+# 3. 通过 TDD（RED → GREEN → REFACTOR）子智能体执行
+# 4. 运行 DDD 审计并修复所有问题
+# 5. 验证（lint、类型检查、测试）
+# 6. 更新路线图并提交（需你确认）
+```
+
+反复运行即可逐项推进路线图：
+
+```
+You: /ddd-develop   # 实现条目 1
+You: /ddd-develop   # 实现条目 2
+You: /ddd-develop   # 实现条目 3
+...
+```
+
+### 审计项目
+
+```
+You: /ddd-audit
+
+# 运行完整的 8 维度审计：
+# D1 设计、D2 架构、D3 质量、D4 安全、
+# D5 测试、D6 集成、D7 性能、D8 可观测性
+# 输出：带评分的报告 + 修复路线图，保存到 docs/audit/
+```
+
+仅审计最近的变更（增量模式）：
+
+```
+You: /ddd-audit --diff HEAD~3
+```
+
+### 完整工作流示例
+
+典型的端到端工作流：
+
+```
+# 第一步：规划项目
+You: /ddd-roadmap
+
+# 第二步：逐个实现功能
+You: /ddd-develop
+You: /ddd-develop
+You: /ddd-develop
+
+# 第三步：发布前做最终审计
+You: /ddd-audit
 ```
 
 ## 要求
