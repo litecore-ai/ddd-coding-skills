@@ -1,11 +1,21 @@
 ---
 name: ddd-audit
-description: Use when auditing a DDD-architecture project for quality, security, and architectural compliance - triggers on "audit this project", "DDD review", pre-production readiness check, architecture compliance review. Works with any language/framework.
+description: Use when auditing a DDD-architecture project for quality, security, and architectural compliance - triggers on "audit this project", "DDD review", "ddd-audit", "/ddd-audit <scope>", pre-production readiness check, architecture compliance review. Supports full-project audits, scoped audits for specific modules/layers, and interactive mode. Works with any language/framework.
 ---
 
 # DDD Code Review
 
 Full-pipeline DDD architecture audit. Scans project, generates audit plan, executes phase-by-phase review with subagents, produces final report and fix roadmap.
+
+Supports three input modes:
+1. **Scoped audit** — `/ddd-audit <scope>` audits only the specified module, layer, or file set
+2. **Full-project audit** — `/ddd-audit` with no arguments audits the entire project
+3. **Interactive** — if no arguments AND project scope is unclear (e.g., no meaningful code, ambiguous structure), asks the user what to audit
+
+**Announce at start:**
+- If arguments provided: "Using ddd-audit to audit: [user's scope description]."
+- If full project: "Using ddd-audit to run a full project audit."
+- If asking user: "Using ddd-audit — what scope would you like to audit?"
 
 **All artifacts** are saved to `docs/audit/YYYY-MM-DD-NNN/` (NNN = zero-padded sequence within the same date).
 
@@ -38,6 +48,14 @@ digraph audit_flow {
   rankdir=TB;
   node [shape=box, style=rounded];
 
+  input [label="0. Input Detection"];
+  has_args [label="Arguments provided?" shape=diamond];
+  use_scope [label="Use arguments as\naudit scope"];
+  detect_project [label="Scan project for\ncode signals"];
+  has_code [label="Meaningful code exists?" shape=diamond];
+  full_project [label="Full-project mode"];
+  ask_user [label="Ask user:\nWhat to audit?"];
+  confirm [label="User confirms scope"];
   scan [label="1. Project Scan"];
   plan [label="2. Generate Audit Plan"];
   baseline [label="3. Phase 0: Baseline"];
@@ -47,9 +65,69 @@ digraph audit_flow {
   report [label="7. Final Report"];
   roadmap [label="8. Fix Roadmap"];
 
-  scan -> plan -> baseline -> layers -> integration -> docs -> report -> roadmap;
+  input -> has_args;
+  has_args -> use_scope [label="yes"];
+  has_args -> detect_project [label="no"];
+  detect_project -> has_code;
+  has_code -> full_project [label="yes"];
+  has_code -> ask_user [label="no"];
+  use_scope -> confirm;
+  full_project -> confirm;
+  ask_user -> confirm;
+  confirm -> scan -> plan -> baseline -> layers -> integration -> docs -> report -> roadmap;
 }
 ```
+
+---
+
+## Step 0 — Input Detection
+
+Determine the audit scope based on input mode.
+
+### Mode A: Scoped Audit
+
+The user provided arguments (e.g., `/ddd-audit src/domain/billing` or `/ddd-audit security review of auth module`).
+
+1. Parse the user's description into a clear audit scope
+2. Set `mode = "scoped"` — Steps 1-6 will focus only on the specified area
+3. Present for confirmation:
+
+```
+Audit scope (user-defined):
+
+**Scope**: [user's description, clarified if needed]
+**Covers**: [which DDD layers/modules/files this maps to]
+**Dimensions**: [which of D1-D8 are most relevant for this scope]
+
+Proceed with scoped audit?
+```
+
+Wait for user confirmation. User may refine the scope.
+
+### Mode B: Full-Project Audit
+
+No arguments provided. Quickly check for code signals:
+- Source code directories exist with meaningful files
+- Package manifest exists
+- Non-trivial LOC (not just boilerplate/scaffolding)
+
+If meaningful code is detectable → set `mode = "full-project"`, proceed to Step 1.
+
+### Mode C: Interactive
+
+No arguments provided and no meaningful code to audit (empty project, only scaffolding, ambiguous structure).
+
+```
+No clear audit target detected. What would you like to audit?
+
+Examples:
+- "Audit the billing module for security issues"
+- "Review the domain layer architecture"
+- "Full audit of all code written so far"
+- A file path or directory: "src/domain/"
+```
+
+Once the user provides a description, treat as **Mode A** (set `mode = "scoped"`) and confirm.
 
 ---
 
@@ -61,6 +139,8 @@ Detect and document:
 2. **DDD layers**: map directories to Domain / Infrastructure / Application / Presentation / Cross-Cutting
 3. **Module inventory**: for each layer, list modules with file count and LOC
 4. **Dependency graph**: verify direction (Domain ← App ← Infra / Presentation)
+
+**Scoped mode (`mode = "scoped"`):** Still detect tech stack and DDD layer mapping for the full project (needed for context), but narrow module inventory and dependency graph analysis to the scoped area. If the scope targets a single layer, only inventory modules within that layer. If targeting specific files, map them to their DDD layer for dimension emphasis.
 
 ### Language Auto-Detection
 
@@ -89,7 +169,7 @@ Create `audit-plan.md`:
 > **Project**: [name]
 > **Date**: [YYYY-MM-DD]
 > **Tech Stack**: [language, framework]
-> **Scope**: [LOC, files, tests]
+> **Scope**: [LOC, files, tests] — [Full project | Scoped: <description>]
 > **Organization**: Layer × Module — [N] Phases
 
 ## Audit Methodology
@@ -134,6 +214,7 @@ Create `audit-plan.md`:
 
 ### Subagent Strategy
 
+**Full-project mode:**
 ```
 Phase 0 (baseline) — single agent
   ↓
@@ -146,6 +227,8 @@ Phase 5 (crosscut) ┘
 Phase 6 (integration) — needs 1-5 results
 Phase 7 (docs) — parallel with 6
 ```
+
+**Scoped mode:** Skip phases for layers outside the scope. If scope targets a single layer (e.g., "audit the domain layer"), only run Phase 0 (baseline for scoped files) + that layer's phase + Phase 6 (integration, narrowed to the scope's cross-layer boundaries). If scope targets specific files within one module, a single-phase audit may suffice.
 
 Each subagent receives: its phase section from the audit plan + dimension matrix + severity definitions.
 
