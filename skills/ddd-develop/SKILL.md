@@ -1,13 +1,21 @@
 ---
 name: ddd-develop
-description: Use when developing features from a DDD project roadmap - triggers on "continue development", "next roadmap item", "ddd-develop", "按 roadmap 开发". Self-contained workflow with TDD, implementation planning, subagent execution, audit, and verification built in.
+description: Use when developing features from a DDD project roadmap or ad-hoc requirements - triggers on "continue development", "next roadmap item", "ddd-develop", "按 roadmap 开发", or "/ddd-develop <feature description>". Self-contained workflow with TDD, implementation planning, subagent execution, audit, and verification built in. Supports both roadmap-driven and freeform development.
 ---
 
 # DDD Develop
 
-Self-contained development workflow: locate next roadmap item, plan, implement with TDD via subagents, audit, verify, and commit. No external skill dependencies.
+Self-contained development workflow: locate development target, plan, implement with TDD via subagents, audit, verify, and commit. No external skill dependencies.
 
-**Announce at start:** "Using ddd-develop to implement the next roadmap feature."
+Supports three input modes:
+1. **Explicit requirement** — `/ddd-develop <description>` runs the full workflow on the given requirement
+2. **Roadmap-driven** — `/ddd-develop` with no arguments scans the roadmap for the next unchecked item
+3. **Interactive** — if no arguments AND no unchecked roadmap items (or no roadmap exists), asks the user what to develop
+
+**Announce at start:**
+- If arguments provided: "Using ddd-develop to implement: [user's description]."
+- If roadmap item found: "Using ddd-develop to implement the next roadmap feature."
+- If asking user: "Using ddd-develop — no pending roadmap items found. What would you like to develop?"
 
 ## Execution Flow
 
@@ -16,7 +24,13 @@ digraph ddd_develop {
   rankdir=TB;
   node [shape=box, style=rounded];
 
-  locate [label="Phase 1: LOCATE\nScan roadmap, find next item"];
+  input [label="Phase 1: LOCATE\nDetect input mode"];
+  has_args [label="Arguments provided?" shape=diamond];
+  use_args [label="Use arguments as\ndevelopment target"];
+  scan_roadmap [label="Scan roadmap\nfor next unchecked item"];
+  has_item [label="Unchecked item found?" shape=diamond];
+  use_item [label="Present roadmap item"];
+  ask_user [label="Ask user:\nWhat to develop?"];
   confirm [label="User confirms target"];
   plan [label="Phase 2: PLAN\nGenerate implementation plan"];
   implement [label="Phase 3: IMPLEMENT\nSubagent TDD execution"];
@@ -24,9 +38,18 @@ digraph ddd_develop {
   pass [label="All issues resolved?"];
   fix [label="Fix audit findings"];
   verify [label="Phase 5: VERIFY\nLint + tests + evidence"];
-  complete [label="Phase 6: COMPLETE\nUpdate roadmap + commit"];
+  complete [label="Phase 6: COMPLETE\nUpdate roadmap (if applicable) + commit"];
 
-  locate -> confirm -> plan -> implement -> audit -> pass;
+  input -> has_args;
+  has_args -> use_args [label="yes"];
+  has_args -> scan_roadmap [label="no"];
+  scan_roadmap -> has_item;
+  has_item -> use_item [label="yes"];
+  has_item -> ask_user [label="no"];
+  use_args -> confirm;
+  use_item -> confirm;
+  ask_user -> confirm;
+  confirm -> plan -> implement -> audit -> pass;
   pass -> fix [label="no"];
   fix -> audit [label="re-audit"];
   pass -> verify [label="yes"];
@@ -38,16 +61,50 @@ digraph ddd_develop {
 
 ## Phase 1: LOCATE
 
-Scan roadmap to find the next development target.
+Determine the development target based on input mode.
 
-### Roadmap Scanning
+### Step 1: Detect Input Mode
+
+Check whether the user provided arguments after the command:
+
+- **Arguments provided** (e.g., `/ddd-develop implement user login with JWT`) → Go to **Mode A: Explicit Requirement**
+- **No arguments** → Go to **Mode B: Roadmap Scan**
+
+### Mode A: Explicit Requirement
+
+The user specified what to develop. Use their description as the development target directly.
+
+1. Parse the user's description into a clear feature requirement
+2. Read project context (CLAUDE.md, existing code, DDD layer structure) to understand how this requirement fits
+3. Set `source = "ad-hoc"` (used in Phase 6 to skip roadmap updates)
+
+**Present to User:**
+
+```
+Development target (ad-hoc):
+
+**Requirement**: [user's description, clarified if needed]
+**Fits in**: [which DDD layer/module this likely belongs to, based on project context]
+
+Proceed with this requirement?
+```
+
+Wait for user confirmation. User may refine the requirement.
+
+### Mode B: Roadmap Scan
+
+No arguments provided — scan roadmap for the next unchecked item.
+
+#### Roadmap Scanning
 
 1. Look for roadmap files in order: `docs/roadmap/`, `docs/`, project root
 2. Read phase documents in order (P0 → P1 → P2 → P3, or v0.x ascending)
 3. Find the first unchecked item: `- [ ]`
 4. Extract the feature context: which phase, feature area, sub-feature, and the specific item
 
-### Completion Detection
+**If no roadmap exists or all items are checked** → Go to **Mode C: Interactive**
+
+#### Completion Detection
 
 Before presenting the item to the user, check whether it has **already been implemented** despite its checkbox being unchecked. This catches cases where a previous run was interrupted before updating the roadmap.
 
@@ -87,9 +144,11 @@ Options:
 
 **If partially complete:** Report which tasks are done and which remain, then ask the user whether to resume from the incomplete task or start over.
 
-**If no evidence of completion:** Proceed normally.
+**If all roadmap items are already complete after scanning** → Go to **Mode C: Interactive**
 
-### Present to User
+**If no evidence of completion:** Proceed normally with `source = "roadmap"`.
+
+#### Present to User (Roadmap Mode)
 
 ```
 Next roadmap item:
@@ -103,11 +162,23 @@ Proceed with this item?
 
 Wait for user confirmation. User may redirect to a different item.
 
+### Mode C: Interactive
+
+No arguments provided and no unchecked roadmap items found (or no roadmap exists). Ask the user what to develop.
+
+```
+No pending roadmap items found. What would you like to develop?
+
+You can describe a feature, bug fix, refactoring task, or any other development work.
+```
+
+Once the user provides a description, treat it the same as **Mode A** (set `source = "ad-hoc"`) and present for confirmation.
+
 ---
 
 ## Phase 2: PLAN
 
-Generate a detailed implementation plan for the confirmed roadmap item.
+Generate a detailed implementation plan for the confirmed development target (roadmap item or ad-hoc requirement).
 
 ### Planning Process
 
@@ -126,7 +197,7 @@ Save to `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`:
 **Goal:** [One sentence]
 **Architecture:** [2-3 sentences about approach]
 **Tech Stack:** [Key technologies]
-**Roadmap Item:** [Phase / Feature Area / Item reference]
+**Source:** [Roadmap: Phase / Feature Area / Item reference] or [Ad-hoc: user requirement summary]
 
 ---
 
@@ -176,7 +247,7 @@ Expected: PASS
 ### Plan Self-Review
 
 After writing, check:
-1. **Spec coverage**: Does every requirement from the roadmap item have a task?
+1. **Spec coverage**: Does every requirement from the development target (roadmap item or ad-hoc requirement) have a task?
 2. **Placeholder scan**: Any "TBD", "TODO", "fill in", vague steps?
 3. **Type consistency**: Do names in later tasks match definitions in earlier tasks?
 
@@ -470,8 +541,11 @@ Run ALL of these and show output:
 
 ## Phase 6: COMPLETE
 
-### 6.1 Update Roadmap
+### 6.1 Update Roadmap (roadmap source only)
 
+**Skip this step if `source = "ad-hoc"`.** Ad-hoc requirements have no roadmap entry to update.
+
+For roadmap-sourced items:
 1. Read the roadmap phase document
 2. Change the completed item from `- [ ]` to `- [x]`
 3. If the sub-feature is fully complete, note it in the phase status
@@ -493,11 +567,18 @@ Only update other documents when the implemented feature directly affects them:
 git add [specific files]
 
 # Commit with conventional format
+# For roadmap items:
 git commit -m "feat: [description of what was implemented]
 
 - [summary of changes]
 - [test coverage note]
 - Roadmap: [phase/feature reference] marked complete"
+
+# For ad-hoc requirements:
+git commit -m "feat: [description of what was implemented]
+
+- [summary of changes]
+- [test coverage note]"
 ```
 
 ### 6.4 Push (User Confirmation Required)
@@ -537,22 +618,23 @@ When scanning, check for `- [ ]` first, fall back to lines without ✅ in emoji-
 
 | Phase | What | Key Output |
 |-------|------|------------|
-| 1. LOCATE | Find next roadmap item | Confirmed development target |
+| 1. LOCATE | Find development target (args / roadmap / ask user) | Confirmed development target + source type |
 | 2. PLAN | Generate implementation plan | Plan doc with TDD tasks |
 | 3. IMPLEMENT | Subagent TDD execution | Working code + tests + commits |
 | 4. AUDIT | ddd-audit (incremental) | Zero findings |
 | 5. VERIFY | Lint + tests + build | Evidence of all passing |
-| 6. COMPLETE | Update roadmap + commit + push | Updated roadmap, clean commit |
+| 6. COMPLETE | Update roadmap (if applicable) + commit + push | Updated roadmap (roadmap source) or clean commit (ad-hoc) |
 
 ## Integration
 
 **Consumes:**
-- Roadmap files generated by **ddd-roadmap**
+- Roadmap files generated by **ddd-roadmap** (when in roadmap mode)
+- User-provided feature descriptions (when in ad-hoc mode)
 
 **Invokes:**
 - **ddd-audit** in Phase 4 (incremental audit mode)
 
 **Produces:**
 - Implementation code with tests
-- Updated roadmap with completed items
+- Updated roadmap with completed items (roadmap mode only)
 - Audit-clean commits
