@@ -71,7 +71,7 @@ Add the repository as a marketplace source, then install:
 
 ```bash
 claude plugin marketplace add litecore-ai/ddd-coding-skills
-claude plugin install ddd-coding-skills
+claude plugin install ddd-coding-skills@ddd-coding-skills
 ```
 
 ### Option 2: `--plugin-dir` Flag
@@ -189,6 +189,7 @@ You: /ddd-audit
 ```
 ddd-coding-skills/
 ├── .claude-plugin/
+│   ├── marketplace.json     # Marketplace manifest
 │   └── plugin.json          # Plugin manifest
 ├── skills/
 │   ├── ddd-roadmap/

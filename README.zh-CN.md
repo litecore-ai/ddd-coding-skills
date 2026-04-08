@@ -89,7 +89,7 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 ```bash
 claude plugin marketplace add litecore-ai/ddd-coding-skills
-claude plugin install ddd-coding-skills
+claude plugin install ddd-coding-skills@ddd-coding-skills
 ```
 
 ### 方式二：`--plugin-dir` 参数
@@ -207,6 +207,7 @@ You: /ddd-audit
 ```
 ddd-coding-skills/
 ├── .claude-plugin/
+│   ├── marketplace.json     # 市场清单
 │   └── plugin.json          # 插件清单
 ├── skills/
 │   ├── ddd-roadmap/
