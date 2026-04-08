@@ -91,30 +91,25 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 ## 安装
 
-### 方式一：插件市场（推荐）
+### Claude Code
 
-将仓库添加为市场源，然后安装：
+#### 方式 A：插件市场（推荐）
 
 ```bash
 claude plugin marketplace add litecore-ai/ddd-coding-skills
 claude plugin install ddd-coding-skills@ddd-coding-skills
 ```
 
-### 方式二：`--plugin-dir` 参数
-
-克隆仓库后按会话加载：
+#### 方式 B：`--plugin-dir` 参数
 
 ```bash
 git clone https://github.com/litecore-ai/ddd-coding-skills.git ~/.local/share/claude/plugins/ddd-coding-skills
 claude --plugin-dir ~/.local/share/claude/plugins/ddd-coding-skills
 ```
 
-### 方式三：手动安装技能
-
-将单个技能复制到个人或项目技能目录：
+#### 方式 C：手动安装技能
 
 ```bash
-# 克隆仓库
 git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-skills
 
 # 安装为个人技能（所有项目可用）
@@ -128,23 +123,39 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
 ```
 
-## 更新
+### Codex CLI
 
-### 插件市场
+克隆仓库并创建符号链接，通过原生技能发现机制加载：
 
 ```bash
-# 先更新市场缓存
-claude plugin marketplace update ddd-coding-skills
+git clone https://github.com/litecore-ai/ddd-coding-skills.git ~/.codex/ddd-coding-skills
+mkdir -p ~/.agents/skills
+ln -s ~/.codex/ddd-coding-skills/skills ~/.agents/skills/ddd-coding-skills
+```
 
-# 再更新插件
+在 `~/.codex/config.toml` 中启用多智能体支持（ddd-develop 的子智能体编排需要此功能）：
+
+```toml
+[features]
+multi_agent = true
+```
+
+重启 Codex 以发现技能。
+
+> **Windows 用户：** 使用 junction 替代符号链接 — 详见 [.codex/INSTALL.md](.codex/INSTALL.md)。
+
+## 更新
+
+### Claude Code — 插件市场
+
+```bash
+claude plugin marketplace update ddd-coding-skills
 claude plugin update ddd-coding-skills@ddd-coding-skills
 ```
 
 更新后需要重启 Claude Code 才会生效。
 
-### 手动安装
-
-拉取最新代码并重新复制技能文件：
+### Claude Code — 手动安装
 
 ```bash
 cd /tmp/ddd-coding-skills && git pull
@@ -152,6 +163,14 @@ cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r skills/ddd-audit ~/.claude/skills/ddd-audit
 ```
+
+### Codex CLI
+
+```bash
+cd ~/.codex/ddd-coding-skills && git pull
+```
+
+技能通过符号链接即时更新。
 
 ## 使用示例
 
@@ -229,7 +248,7 @@ You: /ddd-audit
 
 ## 要求
 
-- 支持子智能体的编码智能体（Claude Code、Codex 等）
+- 支持子智能体的编码智能体 — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 或 [Codex CLI](https://github.com/openai/codex)
 - 遵循（或正在采用）DDD 架构模式的项目
 
 ## 项目结构
@@ -237,8 +256,9 @@ You: /ddd-audit
 ```
 ddd-coding-skills/
 ├── .claude-plugin/
-│   ├── marketplace.json     # 市场清单
-│   └── plugin.json          # 插件清单
+│   └── plugin.json          # Claude Code 插件清单
+├── .codex/
+│   └── INSTALL.md           # Codex CLI 安装指南
 ├── skills/
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # 路线图生成

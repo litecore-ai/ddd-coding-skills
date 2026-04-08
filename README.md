@@ -82,30 +82,25 @@ Supports incremental (diff) mode, configurable via `.audit-config.yml`, and gene
 
 ## Installation
 
-### Option 1: Plugin Marketplace (Recommended)
+### Claude Code
 
-Add the repository as a marketplace source, then install:
+#### Option A: Plugin Marketplace (Recommended)
 
 ```bash
 claude plugin marketplace add litecore-ai/ddd-coding-skills
 claude plugin install ddd-coding-skills@ddd-coding-skills
 ```
 
-### Option 2: `--plugin-dir` Flag
-
-Clone the repository and load it per-session:
+#### Option B: `--plugin-dir` Flag
 
 ```bash
 git clone https://github.com/litecore-ai/ddd-coding-skills.git ~/.local/share/claude/plugins/ddd-coding-skills
 claude --plugin-dir ~/.local/share/claude/plugins/ddd-coding-skills
 ```
 
-### Option 3: Manual Skill Installation
-
-Copy individual skills into your personal or project skills directory:
+#### Option C: Manual Skill Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-skills
 
 # Install as personal skills (available in all projects)
@@ -119,23 +114,39 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
 ```
 
-## Updating
+### Codex CLI
 
-### Plugin Marketplace
+Clone and symlink for native skill discovery:
 
 ```bash
-# Update the marketplace cache first
-claude plugin marketplace update ddd-coding-skills
+git clone https://github.com/litecore-ai/ddd-coding-skills.git ~/.codex/ddd-coding-skills
+mkdir -p ~/.agents/skills
+ln -s ~/.codex/ddd-coding-skills/skills ~/.agents/skills/ddd-coding-skills
+```
 
-# Then update the plugin
+Enable multi-agent support (required for ddd-develop subagent orchestration) in `~/.codex/config.toml`:
+
+```toml
+[features]
+multi_agent = true
+```
+
+Restart Codex to discover the skills.
+
+> **Windows:** Use a junction instead of a symlink — see [.codex/INSTALL.md](.codex/INSTALL.md) for details.
+
+## Updating
+
+### Claude Code — Plugin Marketplace
+
+```bash
+claude plugin marketplace update ddd-coding-skills
 claude plugin update ddd-coding-skills@ddd-coding-skills
 ```
 
-Restart Claude Code after updating for changes to take effect.
+Restart Claude Code after updating.
 
-### Manual Installation
-
-Pull the latest changes and re-copy the skill files:
+### Claude Code — Manual Installation
 
 ```bash
 cd /tmp/ddd-coding-skills && git pull
@@ -143,6 +154,14 @@ cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r skills/ddd-audit ~/.claude/skills/ddd-audit
 ```
+
+### Codex CLI
+
+```bash
+cd ~/.codex/ddd-coding-skills && git pull
+```
+
+Skills update instantly through the symlink.
 
 ## Usage Examples
 
@@ -220,7 +239,7 @@ You: /ddd-audit
 
 ## Requirements
 
-- A coding agent with subagent support (Claude Code, Codex, etc.)
+- A coding agent with subagent support — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex CLI](https://github.com/openai/codex)
 - A project following (or adopting) DDD architecture patterns
 
 ## Project Structure
@@ -228,8 +247,9 @@ You: /ddd-audit
 ```
 ddd-coding-skills/
 ├── .claude-plugin/
-│   ├── marketplace.json     # Marketplace manifest
-│   └── plugin.json          # Plugin manifest
+│   └── plugin.json          # Claude Code plugin manifest
+├── .codex/
+│   └── INSTALL.md           # Codex CLI installation guide
 ├── skills/
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # Roadmap generation
