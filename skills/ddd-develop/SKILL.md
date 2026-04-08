@@ -47,6 +47,48 @@ Scan roadmap to find the next development target.
 3. Find the first unchecked item: `- [ ]`
 4. Extract the feature context: which phase, feature area, sub-feature, and the specific item
 
+### Completion Detection
+
+Before presenting the item to the user, check whether it has **already been implemented** despite its checkbox being unchecked. This catches cases where a previous run was interrupted before updating the roadmap.
+
+**Check in order (stop at first conclusive signal):**
+
+1. **Plan file exists?** — Search `docs/superpowers/plans/` for a plan matching this item
+   - If found, read the plan and check task checkboxes:
+     - All tasks `- [x]` → likely complete
+     - Mix of `- [x]` and `- [ ]` → partially complete
+     - All `- [ ]` → not started (but still check git)
+2. **Git history** — Search recent commits for keywords from the item description:
+   - `git log --oneline --grep="<feature keyword>" --since="30 days ago"`
+   - Commits exist with matching feat/fix messages → likely implemented
+3. **Code exists** — If the plan lists files to create, check whether those files already exist with non-trivial content
+
+**If evidence shows the item is already complete:**
+
+```
+Roadmap item appears already implemented:
+
+**Phase**: P0 Foundation
+**Feature**: Subscription Credit Grant + Schema Cleanup
+**Item**: Grant subscription credits on invoice.paid webhook...
+
+**Evidence:**
+- Plan: docs/superpowers/plans/2026-04-07-subscription-credit-grant.md (6/6 tasks checked)
+- Commits: abc1234 "feat: implement subscription credit grant" (2026-04-07)
+- Files: src/billing/grantCredits.ts exists
+
+**Recommended action:** Mark this item as complete and move to the next unchecked item.
+
+Options:
+1. Mark complete and skip to next item (recommended)
+2. Re-implement anyway
+3. Choose a different item
+```
+
+**If partially complete:** Report which tasks are done and which remain, then ask the user whether to resume from the incomplete task or start over.
+
+**If no evidence of completion:** Proceed normally.
+
 ### Present to User
 
 ```
