@@ -1,5 +1,5 @@
 ---
-name: ddd-code-review
+name: ddd-audit
 description: Use when auditing a DDD-architecture project for quality, security, and architectural compliance - triggers on "audit this project", "DDD review", pre-production readiness check, architecture compliance review. Works with any language/framework.
 ---
 

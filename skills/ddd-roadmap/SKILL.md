@@ -273,8 +273,8 @@ Link design docs from the roadmap README and relevant phase documents.
 
 **Produces artifacts consumed by:**
 - **ddd-develop** — Scans phase docs for `- [ ]` items to locate next development target
-- **ddd-code-review** — References roadmap for functional completeness verification
+- **ddd-audit** — References roadmap for functional completeness verification
 
 **Complementary skills:**
 - **ddd-develop** — Implements roadmap items one by one
-- **ddd-code-review** — Audits implementation quality
+- **ddd-audit** — Audits implementation quality
