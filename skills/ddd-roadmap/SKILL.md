@@ -32,8 +32,10 @@ digraph roadmap_flow {
   full_project [label="Full-project mode"];
   ask_user [label="Ask user:\nWhat to plan?"];
   confirm [label="User confirms scope"];
-  scan [label="1. Project Scan"];
-  align [label="2. Goal Alignment"];
+  scan [label="1. Project Scan\n(incl. product doc discovery)"];
+  has_docs [label="Product docs found?" shape=diamond];
+  align_validate [label="2a. Validate extracted\ncontext with user"];
+  align_ask [label="2b. Goal Alignment\n(full Q&A)"];
   decompose [label="3. Feature Decomposition"];
   prioritize [label="4. Phase Prioritization"];
   generate [label="5. Generate Roadmap"];
@@ -49,7 +51,12 @@ digraph roadmap_flow {
   use_scope -> confirm;
   full_project -> confirm;
   ask_user -> confirm;
-  confirm -> scan -> align -> decompose -> prioritize -> generate -> review;
+  confirm -> scan -> has_docs;
+  has_docs -> align_validate [label="yes"];
+  has_docs -> align_ask [label="no"];
+  align_validate -> decompose;
+  align_ask -> decompose;
+  decompose -> prioritize -> generate -> review;
   review -> generate [label="revisions"];
   review -> commit [label="approved"];
 }
@@ -84,6 +91,7 @@ Wait for user confirmation. User may refine the scope.
 
 No arguments provided. Quickly check for project context signals:
 - README or CLAUDE.md exists with product description
+- Product documentation exists (PRD, specs, requirements — see Step 1 discovery rules)
 - Source code directories exist with meaningful structure
 - Package manifest (package.json, go.mod, Cargo.toml, etc.) exists
 
@@ -115,6 +123,27 @@ Detect and document:
 3. **Module inventory**: for each layer, list modules with file count and LOC
 4. **Existing state**: what's already built, what's partially complete, what's missing
 5. **Existing docs**: README, CLAUDE.md, architecture docs, any prior roadmap
+6. **Product documentation**: scan for product docs that inform roadmap planning (see below)
+
+### Product Documentation Discovery
+
+Scan the project for product-related documents that provide requirements, vision, or specifications. These docs significantly improve roadmap quality by grounding plans in documented requirements rather than relying solely on conversational clarification.
+
+**Scan locations** (in priority order):
+1. Project root: `PRD.md`, `PRODUCT.md`, `REQUIREMENTS.md`, `SPEC.md`
+2. `docs/` directory: `docs/prd*`, `docs/product*`, `docs/requirements*`, `docs/spec*`, `docs/design*`
+3. `docs/specs/`, `docs/requirements/`, `docs/design/` subdirectories
+4. Any `.md` or `.txt` file whose name or H1 heading contains: PRD, product requirement, product spec, functional spec, user story, acceptance criteria, use case
+
+**What to extract from product docs:**
+- **Product vision & goals** — target users, value proposition, success metrics
+- **Functional requirements** — features, user stories, use cases
+- **Non-functional requirements** — performance, security, compliance, scalability
+- **Acceptance criteria** — definition of done for features
+- **Constraints & assumptions** — technical, business, or regulatory boundaries
+- **Priority signals** — any MoSCoW, P0/P1/P2, or explicit priority markers
+
+**Output:** List discovered product docs with a one-line summary of what each contains. If no product docs are found, note this — Step 2 will compensate with more detailed questions.
 
 **Scoped mode (`mode = "scoped"`):** Focus scan on modules and layers relevant to the given scope. Still detect tech stack and DDD structure for the full project, but module inventory and existing state analysis can be narrowed to the scope area.
 
@@ -128,6 +157,29 @@ Detect and document:
 
 ## Step 2 — Goal Alignment
 
+### When product documentation was found (Step 1)
+
+If product docs were discovered, **use them as the primary source of truth** rather than asking from scratch:
+
+1. **Summarize extracted context** — Present a brief summary of what the product docs tell us about vision, requirements, constraints, and priorities
+2. **Validate rather than ask** — Instead of open-ended questions, present the extracted understanding for user confirmation:
+   ```
+   Based on [doc name], I understand:
+   - **Product vision**: [extracted vision]
+   - **Target users**: [extracted users]
+   - **Key requirements**: [top 3-5 extracted requirements]
+   - **Constraints**: [extracted constraints]
+
+   Is this accurate? Anything to add, correct, or reprioritize?
+   ```
+3. **Fill gaps only** — Ask clarifying questions only for information NOT covered by the product docs. Common gaps:
+   - Timeline and team size (rarely in PRDs)
+   - DDD-specific architecture preferences
+   - Priority adjustments since the doc was written
+4. **Cross-reference with code** — Compare product doc requirements against Step 1's existing state analysis to identify what's already built vs. what's missing
+
+### When no product documentation was found
+
 Ask clarifying questions **one at a time** to understand:
 
 1. **Product vision** — What is the end product? Who are the users?
@@ -136,7 +188,9 @@ Ask clarifying questions **one at a time** to understand:
 4. **Priority** — What must ship first? What can wait?
 5. **Architecture goals** — Any DDD patterns to enforce or adopt? (Bounded contexts, event sourcing, CQRS, etc.)
 
-**Scoped mode (`mode = "scoped"`):** The user has already provided scope context. Skip questions that are already answered by the scope description. Focus on clarifying ambiguities within the scope rather than broad product vision. If the scope is specific enough (e.g., "add Stripe billing with subscription management"), you may need fewer or no clarifying questions.
+### Mode-specific behavior
+
+**Scoped mode (`mode = "scoped"`):** The user has already provided scope context. Skip questions that are already answered by the scope description or product docs. Focus on clarifying ambiguities within the scope rather than broad product vision. If the scope is specific enough (e.g., "add Stripe billing with subscription management"), you may need fewer or no clarifying questions.
 
 Prefer multiple-choice questions when possible.
 
