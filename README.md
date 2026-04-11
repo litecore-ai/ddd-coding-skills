@@ -29,7 +29,7 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 ### ddd-roadmap
 
-Scans project structure, aligns on product goals through conversation, decomposes features into actionable items, and organizes them into prioritized phases (P0-P3).
+Scans project structure, **auto-discovers product documentation** (PRD, specs, requirements) to extract vision and constraints, aligns on goals (validating extracted context when docs exist, or full Q&A when they don't), decomposes features into actionable items, and organizes them into prioritized phases (P0-P3).
 
 Three input modes:
 - `/ddd-roadmap <scope>` — scoped roadmap for a specific feature area
