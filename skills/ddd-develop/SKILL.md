@@ -115,10 +115,17 @@ Before presenting the item to the user, check whether it has **already been impl
      - All tasks `- [x]` → likely complete
      - Mix of `- [x]` and `- [ ]` → partially complete
      - All `- [ ]` → not started (but still check git)
-2. **Git history** — Search recent commits for keywords from the item description:
+2. **Iterative plan with frozen targets?** — If the plan contains a "Frozen Targets" section with a completion condition command:
+   - Run the completion condition command now
+   - If count == 0: migration complete → mark item done
+   - If count > 0 AND count < original: **resume mode** — report remaining count and continue from the first unchecked target in the frozen list
+   - If count == original: not started, proceed normally
+   
+   This check is authoritative for iterative migrations — it uses grep on the actual codebase, not task checkboxes which may be stale.
+3. **Git history** — Search recent commits for keywords from the item description:
    - `git log --oneline --grep="<feature keyword>" --since="30 days ago"`
    - Commits exist with matching feat/fix messages → likely implemented
-3. **Code exists** — If the plan lists files to create, check whether those files already exist with non-trivial content
+4. **Code exists** — If the plan lists files to create, check whether those files already exist with non-trivial content
 
 **If evidence shows the item is already complete:**
 
@@ -184,8 +191,70 @@ Generate a detailed implementation plan for the confirmed development target (ro
 
 1. **Read project context**: CLAUDE.md, existing code in relevant modules, test patterns, DDD layer structure
 2. **Map file structure**: which files to create/modify, one responsibility per file
-3. **Decompose into bite-sized tasks**: each task = one TDD cycle (2-5 minutes)
-4. **Write complete plan**: exact file paths, full code blocks, test commands with expected output
+3. **Scope & iteration analysis** (see below)
+4. **Decompose into bite-sized tasks**: each task = one TDD cycle (2-5 minutes)
+5. **Write complete plan**: exact file paths, full code blocks, test commands with expected output
+
+### Scope & Iteration Analysis
+
+Before decomposing tasks, check for two risks that change the plan structure.
+
+#### A. Blast Radius Assessment
+
+If the plan changes a shared function signature, interface, or type that other files depend on:
+
+1. Count dependents: `grep -rln 'functionName(' src/ | wc -l`
+2. If count > 5, the direct change will break the project for the entire migration duration
+
+**When blast radius is high, surface the tradeoff to the user:**
+
+```
+⚠ Blast radius: [function] is called in [N] files.
+
+Directly changing the signature will leave the project uncompilable
+until all [N] callers are updated — potentially across multiple sessions.
+
+Recommended alternatives:
+1. **Parallel function**: Create [functionV2] alongside the old. Migrate
+   callers incrementally. Delete old function when count reaches 0.
+2. **Adapter shim**: Rewrite old function internals to call new logic,
+   keep old signature as a thin wrapper. Migrate callers at leisure.
+
+Which approach?
+```
+
+Wait for user decision before proceeding. The plan's task structure depends on this choice:
+- **Parallel function** → Task for V2 implementation + tests, then iteration tasks for caller migration, old function stays untouched until final cleanup
+- **Adapter shim** → Task for new internals + shim wrapper, then iteration tasks for caller migration
+- **Direct change** → User explicitly accepts the blast radius; proceed but batch callers tightly
+
+#### B. Iteration-over-N Detection
+
+If the plan applies the same transformation to multiple discrete targets (call sites, files, endpoints, test cases):
+
+1. **Count**: run a reproducible command (grep/glob) and record the exact count
+2. **If count > 5**, this is an **iterative migration** — handle it specially:
+
+   a. **Enumerate all targets** — paste the grep/glob command AND its output into the plan as a frozen checklist:
+   ```markdown
+   ## Frozen Targets
+   
+   **Discovery command:** `grep -rln 'oldFunction(' src/ | grep -v __tests__`
+   **Count:** 36 files
+   **Completion condition:** `grep -rln 'oldFunction(' src/ | grep -v __tests__ | wc -l` equals 0
+   
+   - [ ] src/strategies/strategy1.ts
+   - [ ] src/strategies/strategy2.ts
+   ...
+   ```
+
+   b. **Batch targets** — group into batches of 3-10 similar files per task/commit, not one-file-per-commit and not all-files-in-one-task. Group by module or pattern similarity.
+
+   c. **Define mechanical completion condition** — a single shell command that returns 0 when the migration is done. This goes at the top of the plan, not buried in task checkboxes.
+
+   d. **Per-file checkboxes** — each file gets its own checkbox in the frozen list. A session that dies mid-batch can be resumed by checking which files are already migrated (re-run the discovery command).
+
+   e. **No "apply the equivalent transformation"** — each batch task must contain the exact code or a formalized codemod command. A fresh session with zero context must be able to execute any batch without inferring the pattern from a different task.
 
 ### Plan Document
 
@@ -208,6 +277,18 @@ Save to `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`:
 | `exact/path/to/file.ts` | Create | [purpose] |
 | `exact/path/to/existing.ts` | Modify | [what changes] |
 | `tests/path/to/test.ts` | Create | [what it tests] |
+
+---
+
+## Frozen Targets (if iterative migration)
+
+**Discovery command:** `[exact grep/glob command]`
+**Count:** [N] files
+**Completion condition:** `[command]` equals 0
+
+- [ ] `path/to/target1.ts`
+- [ ] `path/to/target2.ts`
+...
 
 ---
 
@@ -545,7 +626,21 @@ Run ALL of these and show output:
 
 **Skip this step if `source = "ad-hoc"`.** Ad-hoc requirements have no roadmap entry to update.
 
-For roadmap-sourced items:
+#### Iterative Migration Gate
+
+**If the plan has a Frozen Targets section**, run the completion condition command before flipping the roadmap item:
+
+- **Count == 0** → migration complete. Flip roadmap item to `- [x]`, proceed normally.
+- **Count > 0** → migration incomplete. Do NOT flip the roadmap item. Instead:
+  1. Update the frozen targets checklist — check off files completed this session
+  2. Write a progress note under the roadmap item: `(Progress: X/N migrated — see plan: docs/superpowers/plans/...)`
+  3. Commit the progress and exit cleanly
+
+This is a hard gate: **an iterative migration cannot be marked complete while the completion condition command returns > 0.** This prevents half-finished migrations from being lost.
+
+#### Standard Completion
+
+For non-iterative items (or when the iterative gate passes):
 1. Read the roadmap phase document
 2. Change the completed item from `- [ ]` to `- [x]`
 3. If the sub-feature is fully complete, note it in the phase status
@@ -618,8 +713,8 @@ When scanning, check for `- [ ]` first, fall back to lines without ✅ in emoji-
 
 | Phase | What | Key Output |
 |-------|------|------------|
-| 1. LOCATE | Find development target (args / roadmap / ask user) | Confirmed development target + source type |
-| 2. PLAN | Generate implementation plan | Plan doc with TDD tasks |
+| 1. LOCATE | Find development target (args / roadmap / ask user); resume iterative migrations via frozen targets | Confirmed development target + source type |
+| 2. PLAN | Scope analysis (blast radius + iteration detection) → implementation plan | Plan doc with TDD tasks; frozen targets + completion condition if iterative |
 | 3. IMPLEMENT | Subagent TDD execution | Working code + tests + commits |
 | 4. AUDIT | ddd-audit (incremental) | Zero findings |
 | 5. VERIFY | Lint + tests + build | Evidence of all passing |
