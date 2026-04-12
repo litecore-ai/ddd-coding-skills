@@ -2,19 +2,21 @@
 
 [English](README.md) | 中文
 
-面向编码智能体的完整领域驱动设计（DDD）开发工作流。四个可组合的技能覆盖完整生命周期：规划、实现、审计和自动化批量执行。
+面向编码智能体的完整领域驱动设计（DDD）开发工作流。五个可组合的技能覆盖完整生命周期：初始化、规划、实现、审计和自动化批量执行。
 
 ## 工作原理
 
-四个技能构成一条流水线：
+五个技能构成一条流水线：
 
 ```
-ddd-roadmap  →  ddd-develop  →  ddd-audit
-  (规划)          (实现)           (审计)
-                      ↑               ↑
-                  ddd-auto ───────────┘
-                 (自动化)
+ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
+ (初始化)      (规划)          (实现)           (审计)
+                                    ↑               ↑
+                                ddd-auto ───────────┘
+                               (自动化)
 ```
+
+**ddd-init** 为新项目初始化 DDD 架构结构，或为现有项目生成重构路线图。创建目录结构、标准化 `docs/` 布局，并将架构约束写入 `CLAUDE.md`。支持内置模板（`/ddd-init --template fastlayer`）或自定义参考架构（`/ddd-init --ref <路径>`）。
 
 **ddd-roadmap** 分析项目结构，通过对话对齐产品目标，将功能分解为可执行的条目，并按优先级组织为多个阶段（P0-P3）。支持范围化路线图（`/ddd-roadmap 计费系统`）或全项目规划。
 
@@ -28,10 +30,29 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 | 技能 | 用途 | 触发词 |
 |------|------|--------|
+| **ddd-init** | 初始化或重构项目为 DDD 架构 | `/ddd-init`、`/ddd-init --template fastlayer`、`/ddd-init --ref <路径>` |
 | **ddd-roadmap** | 生成分阶段开发路线图 | `/ddd-roadmap`、`/ddd-roadmap <范围>` |
 | **ddd-develop** | 实现路线图条目或即时需求 | `/ddd-develop`、`/ddd-develop <需求>` |
 | **ddd-audit** | 8 维度 DDD 架构审计 | `/ddd-audit`、`/ddd-audit <范围>` |
 | **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/cancel-ddd-auto` |
+
+### ddd-init
+
+初始化项目为 DDD 架构或将现有项目重构为 DDD 结构。自动检测项目状态（新项目/现有项目）和技术栈。
+
+两种模式：
+- **Scaffold**（新项目）— 创建 DDD 目录结构 + 标准化 `docs/` 布局 + CLAUDE.md 架构约束
+- **Refactor**（现有项目）— 创建目标 DDD 结构 + 生成与 `/ddd-auto` 兼容的迁移路线图
+
+选项：
+- `--template <名称>` — 内置模板。当前支持：`fastlayer`（TypeScript/Next.js）
+- `--ref <路径>` — 使用自定义参考项目的目录结构
+
+输出：
+- DDD 分层目录（含 `.gitkeep`）
+- 标准化 `docs/` 结构（roadmap、audit、architecture、specs、plans）
+- `CLAUDE.md` 架构章节（层级映射、模块模板、依赖规则、编码约定）
+- 重构路线图 `docs/roadmap/`（仅 Refactor 模式）
 
 ### ddd-roadmap
 
@@ -205,6 +226,38 @@ cd ~/.codex/ddd-coding-skills && git pull
 
 ## 使用示例
 
+### 初始化 DDD 架构
+
+新项目使用内置模板：
+
+```
+You: /ddd-init --template fastlayer
+
+# 技能将会：
+# 1. 创建 DDD 目录结构（server/handler、server/infras、server/modules）
+# 2. 创建标准化 docs/ 布局
+# 3. 将架构约束写入 CLAUDE.md
+```
+
+现有项目重构：
+
+```
+You: /ddd-init
+
+# 技能将会：
+# 1. 检测现有代码和技术栈
+# 2. 将文件分类到 DDD 各层
+# 3. 创建目标 DDD 目录
+# 4. 在 docs/roadmap/ 生成重构路线图
+# 5. 建议执行：/ddd-auto --roadmap docs/roadmap/ P0
+```
+
+使用自定义参考架构：
+
+```
+You: /ddd-init --ref ~/my-other-ddd-project
+```
+
 ### 生成开发路线图
 
 ```
@@ -325,6 +378,8 @@ ddd-coding-skills/
 │   ├── hooks.json           # Stop hook 注册
 │   └── stop-hook.sh         # ddd-auto 循环引擎
 ├── skills/
+│   ├── ddd-init/
+│   │   └── SKILL.md         # DDD 项目初始化
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # 路线图生成
 │   ├── ddd-develop/
