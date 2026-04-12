@@ -14,8 +14,10 @@ Automated roadmap execution: loop through `ddd-develop` for each item in a user-
 1. **Scoped** — `/ddd-auto P0.1.1 - P1.3.1, P2.1.1` executes specific items
 2. **Phase-level** — `/ddd-auto P0` or `/ddd-auto P0 - P1` executes entire phases
 3. **All** — `/ddd-auto` with no scope executes all incomplete roadmap items
+4. **Custom roadmap path** — `/ddd-auto --roadmap path/to/roadmap/` or `/ddd-auto --roadmap my-roadmap.md P0.1.1 - P1.3.1`
 
 **Options (parsed from arguments):**
+- `--roadmap <path>` — Path to a roadmap directory or single roadmap file. Overrides the default `docs/roadmap/` location. Accepts a directory (reads all `P[0-3]-*.md` files inside) or a single `.md` file.
 - `--policy <text|preset>` — Decision policy for autonomous choices (default: `pragmatic`)
 - `--max-iterations <N>` — Safety cap to prevent infinite loops (default: 50)
 
@@ -65,21 +67,28 @@ digraph ddd_auto {
 Parse the user's arguments to extract:
 
 1. **Scope identifiers**: `P0`, `P0.1`, `P0.1.1`, ranges (`P0.1.1 - P1.3.1`), mixed (`P0.1.1 - P1.3.1, P2.1.1`)
-2. **--policy**: Free text or preset name (`pragmatic`, `strict-ddd`, `fast`). Default: `pragmatic`
-3. **--max-iterations**: Integer, default 50
+2. **--roadmap**: Path to a roadmap directory or single file. Default: `docs/roadmap/`
+3. **--policy**: Free text or preset name (`pragmatic`, `strict-ddd`, `fast`). Default: `pragmatic`
+4. **--max-iterations**: Integer, default 50
 
 **Parsing rules:**
 - Scope tokens are `P` followed by digits and dots: `P[0-3]`, `P[0-3].[1-9]`, `P[0-3].[1-9].[1-9]`
 - Ranges use ` - ` (space-hyphen-space) between two scope tokens
 - Commas or spaces separate enumerated items
+- `--roadmap` consumes the next token as a file or directory path
 - `--policy` consumes the next token (quoted string or single word)
 - `--max-iterations` consumes the next integer token
 
 **If no scope provided:** scope = all phases (P0 through P3).
 
+**If no --roadmap provided:** use the default discovery path `docs/roadmap/`.
+
 ## Step 2: Read Roadmap & Expand Scope
 
-1. Read roadmap files: `docs/roadmap/P[0-3]-*.md`
+1. Determine roadmap source:
+   - If `--roadmap` points to a **directory**: read all `P[0-3]-*.md` files inside that directory
+   - If `--roadmap` points to a **single file**: read that file only (treat it as a single-phase roadmap)
+   - If `--roadmap` not provided: read `docs/roadmap/P[0-3]-*.md` (default)
 2. For each file, extract the phase/feature-area/sub-feature hierarchy by parsing markdown headings:
    - `# P[N]: ...` → phase
    - `## [N].M ...` → feature area
@@ -134,6 +143,7 @@ session_id: "[current CLAUDE_CODE_SESSION_ID — use $CLAUDE_CODE_SESSION_ID env
 iteration: 1
 max_iterations: [N from --max-iterations or 50]
 started_at: "[current UTC timestamp in ISO 8601]"
+roadmap_path: "[--roadmap value, or 'docs/roadmap/' if not specified]"
 scope:
   - "P0.1.1"
   - "P0.1.2"
