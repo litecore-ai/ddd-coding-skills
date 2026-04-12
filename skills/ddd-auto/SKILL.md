@@ -42,7 +42,7 @@ digraph ddd_auto {
   validate [label="Step 3: Filter completed items\nValidate scope is non-empty"];
   perm_check [label="Step 4a: Permission pre-check\nVerify settings.local.json"];
   confirm [label="Step 4b: Display plan\nAsk user confirmation"];
-  create_state [label="Step 5: Create state file\n.claude/ddd-auto.local.md"];
+  create_state [label="Step 5: Create state file\n.ddd-auto.local.md"];
   develop [label="Step 6: Execute /ddd-develop\nfor current scope item"];
   update [label="Step 7: Update state file\n(completed/skipped, advance current)"];
   check [label="More items?" shape=diamond];
@@ -217,7 +217,7 @@ Proceed?
 
 ## Step 5: Create State File
 
-After user confirms, create `.claude/ddd-auto.local.md`:
+After user confirms, create `.ddd-auto.local.md`:
 
 ```markdown
 ---
@@ -247,9 +247,9 @@ policy_preset: "[preset name if provided, otherwise empty]"
 
 ```
 
-**session_id:** Leave empty (`""`). The `$CLAUDE_CODE_SESSION_ID` environment variable is not accessible from Bash subprocesses, so do NOT run any Bash command to read it. The Stop hook's session isolation check gracefully skips when session_id is empty — this is safe because the state file (`.claude/ddd-auto.local.md`) is inherently single-session: only one ddd-auto loop can be active at a time, and `/ddd-auto-cancel` clears it.
+**session_id:** Leave empty (`""`). The `$CLAUDE_CODE_SESSION_ID` environment variable is not accessible from Bash subprocesses, so do NOT run any Bash command to read it. The Stop hook's session isolation check gracefully skips when session_id is empty — this is safe because the state file (`.ddd-auto.local.md`) is inherently single-session: only one ddd-auto loop can be active at a time, and `/ddd-auto-cancel` clears it.
 
-To create this file, use the Write tool to write the complete content to `.claude/ddd-auto.local.md`.
+To create this file, use the Write tool to write the complete content to `.ddd-auto.local.md`.
 
 ## Step 6: Execute /ddd-develop for Current Item
 
@@ -372,7 +372,7 @@ When ddd-develop reports BLOCKED for a scope item:
 ## Cancellation
 
 The user can run `/ddd-auto-cancel` at any time to:
-1. Delete `.claude/ddd-auto.local.md`
+1. Delete `.ddd-auto.local.md`
 2. The Stop hook finds no state file and allows the next exit
 
 ## Safety Mechanisms
@@ -382,7 +382,7 @@ The user can run `/ddd-auto-cancel` at any time to:
 | `max_iterations` (default 50) | Prevent infinite loops |
 | Session ID isolation | Only the originating session is trapped |
 | `/ddd-auto-cancel` | Immediate manual termination |
-| State file cleanup on `phase=done` | Stop hook deletes `.claude/ddd-auto.local.md` on exit |
+| State file cleanup on `phase=done` | Stop hook deletes `.ddd-auto.local.md` on exit |
 | Scope confirmation before start | User reviews expanded items before committing |
 | Decision logging in Progress Log | All autonomous choices are auditable |
 
@@ -401,6 +401,6 @@ The user can run `/ddd-auto-cancel` at any time to:
 
 **Produces:**
 - Updated roadmap with completed items (`- [x]`)
-- State file with full execution log (`.claude/ddd-auto.local.md`, cleaned up on completion)
+- State file with full execution log (`.ddd-auto.local.md`, cleaned up on completion)
 - Final execution report (displayed to user)
 - Audit report and fix roadmap (in `docs/audit/`)
