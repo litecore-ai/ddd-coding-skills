@@ -2,15 +2,18 @@
 
 [English](README.md) | 中文
 
-面向编码智能体的完整领域驱动设计（DDD）开发工作流。三个可组合的技能覆盖完整生命周期：规划、实现、审计。
+面向编码智能体的完整领域驱动设计（DDD）开发工作流。四个可组合的技能覆盖完整生命周期：规划、实现、审计和自动化批量执行。
 
 ## 工作原理
 
-三个技能构成一条流水线：
+四个技能构成一条流水线：
 
 ```
 ddd-roadmap  →  ddd-develop  →  ddd-audit
   (规划)          (实现)           (审计)
+                      ↑               ↑
+                  ddd-auto ───────────┘
+                 (自动化)
 ```
 
 **ddd-roadmap** 分析项目结构，通过对话对齐产品目标，将功能分解为可执行的条目，并按优先级组织为多个阶段（P0-P3）。支持范围化路线图（`/ddd-roadmap 计费系统`）或全项目规划。
@@ -19,6 +22,8 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 **ddd-audit** 基于 DDD 架构标准执行 8 维度审计：设计、架构、质量、安全、测试、集成、性能、可观测性。支持范围化审计（`/ddd-audit src/domain/`）或全项目审计。
 
+**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后运行全项目 `ddd-audit`。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
+
 ## 技能一览
 
 | 技能 | 用途 | 触发词 |
@@ -26,6 +31,7 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 | **ddd-roadmap** | 生成分阶段开发路线图 | `/ddd-roadmap`、`/ddd-roadmap <范围>` |
 | **ddd-develop** | 实现路线图条目或即时需求 | `/ddd-develop`、`/ddd-develop <需求>` |
 | **ddd-audit** | 8 维度 DDD 架构审计 | `/ddd-audit`、`/ddd-audit <范围>` |
+| **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/cancel-ddd-auto` |
 
 ### ddd-roadmap
 
@@ -88,6 +94,31 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 | LOW | 风格、小优化 | 备注 — 可选 |
 
 **特性**：支持增量（diff）模式、可通过 `.audit-config.yml` 配置、生成带评分的报告和修复路线图。
+
+### ddd-auto
+
+基于 Stop hook 的自动化路线图执行。指定范围后，系统自动通过 `ddd-develop` 逐个实现所有条目，最后运行全项目 `ddd-audit`。
+
+范围语法：
+- `/ddd-auto P0.1.1` — 单个条目
+- `/ddd-auto P0.1.1 - P1.3.1` — 范围
+- `/ddd-auto P0.1.1 - P1.3.1, P2.1.1` — 混合（范围 + 单项）
+- `/ddd-auto P0` — 整个阶段
+- `/ddd-auto` — 所有未完成的路线图条目
+
+选项：
+- `--policy <文本|预设>` — 自主决策策略。预设：`pragmatic`（默认，实用优先）、`strict-ddd`（严格 DDD）、`fast`（快速交付）
+- `--max-iterations <N>` — 安全上限（默认：50）
+
+随时可用 `/cancel-ddd-auto` 取消。
+
+特性：
+- 通过 Stop hook 实现可靠循环（无需手动重复调用）
+- 会话隔离（仅启动循环的会话受影响）
+- 决策策略（预设或自由文本，用于自主设计决策）
+- 进度追踪与完整执行日志
+- 遇到 BLOCKED 自动跳过
+- 最终执行报告含审计结果
 
 ## 安装
 
@@ -246,6 +277,33 @@ You: /ddd-develop
 You: /ddd-audit
 ```
 
+### 自动批量执行
+
+自动执行一个范围内的路线图条目：
+
+```
+You: /ddd-auto P0.1.1 - P1.3.1
+
+# 技能将会：
+# 1. 展开范围为 P0.1.1 到 P1.3.1 之间所有子功能
+# 2. 显示执行计划并请求确认
+# 3. 逐个通过 /ddd-develop 实现（TDD、审计、提交）
+# 4. 全部完成后运行全项目 /ddd-audit
+# 5. 生成最终执行报告
+```
+
+带决策策略：
+
+```
+You: /ddd-auto P0 --policy "偏向简单实现，复用已有库"
+```
+
+随时取消：
+
+```
+You: /cancel-ddd-auto
+```
+
 ## 要求
 
 - 支持子智能体的编码智能体 — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 或 [Codex CLI](https://github.com/openai/codex)
@@ -259,11 +317,19 @@ ddd-coding-skills/
 │   └── plugin.json          # Claude Code 插件清单
 ├── .codex/
 │   └── INSTALL.md           # Codex CLI 安装指南
+├── commands/
+│   ├── ddd-auto.md          # /ddd-auto 命令
+│   └── cancel-ddd-auto.md   # /cancel-ddd-auto 命令
+├── hooks/
+│   ├── hooks.json           # Stop hook 注册
+│   └── stop-hook.sh         # ddd-auto 循环引擎
 ├── skills/
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # 路线图生成
 │   ├── ddd-develop/
 │   │   └── SKILL.md         # 开发工作流
+│   ├── ddd-auto/
+│   │   └── SKILL.md         # 自动化路线图执行
 │   └── ddd-audit/
 │       └── SKILL.md         # 8 维度审计
 ├── LICENSE                  # MIT
