@@ -209,7 +209,7 @@ After user confirms, create `.claude/ddd-auto.local.md`:
 ```markdown
 ---
 active: true
-session_id: "[current CLAUDE_CODE_SESSION_ID — use $CLAUDE_CODE_SESSION_ID env var]"
+session_id: ""
 iteration: 1
 max_iterations: [N from --max-iterations or 50]
 started_at: "[current UTC timestamp in ISO 8601]"
@@ -234,7 +234,7 @@ policy_preset: "[preset name if provided, otherwise empty]"
 
 ```
 
-**CRITICAL:** Use `$CLAUDE_CODE_SESSION_ID` for the session_id field. This enables session isolation — the Stop hook only traps the session that started the loop.
+**session_id:** Leave empty (`""`). The `$CLAUDE_CODE_SESSION_ID` environment variable is not accessible from Bash subprocesses, so do NOT run any Bash command to read it. The Stop hook's session isolation check gracefully skips when session_id is empty — this is safe because the state file (`.claude/ddd-auto.local.md`) is inherently single-session: only one ddd-auto loop can be active at a time, and `/ddd-auto-cancel` clears it.
 
 To create this file, use the Write tool to write the complete content to `.claude/ddd-auto.local.md`.
 
