@@ -1,6 +1,6 @@
 {
   "name": "ddd-coding-skills",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "type": "module",
   "description": "DDD development skill suite for coding agents: roadmap generation, TDD implementation, and 8-dimension architecture audit",
   "keywords": [
@@ -13,7 +13,9 @@
     "best-practices",
     "workflows",
     "automation",
-    "loop"
+    "loop",
+    "init",
+    "scaffold"
   ],
   "license": "MIT",
   "repository": {

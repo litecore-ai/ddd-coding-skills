@@ -11,12 +11,12 @@
     {
       "name": "ddd-coding-skills",
       "source": "./",
-      "description": "DDD development skill suite: roadmap generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
-      "version": "1.6.0",
+      "description": "DDD development skill suite: project initialization, roadmap generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
+      "version": "1.7.0",
       "license": "MIT",
       "homepage": "https://github.com/litecore-ai/ddd-coding-skills",
       "repository": "https://github.com/litecore-ai/ddd-coding-skills",
-      "keywords": ["ddd", "domain-driven-design", "tdd", "audit", "roadmap", "automation", "loop"]
+      "keywords": ["ddd", "domain-driven-design", "tdd", "audit", "roadmap", "automation", "loop", "init", "scaffold"]
     }
   ]
 }

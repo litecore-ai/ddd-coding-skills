@@ -1,7 +1,7 @@
 {
   "name": "ddd-coding-skills",
-  "description": "DDD development skill suite: roadmap generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
-  "version": "1.6.0",
+  "description": "DDD development skill suite: project initialization, roadmap generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
+  "version": "1.7.0",
   "author": {
     "name": "Litecore AI",
     "url": "https://github.com/litecore-ai"
@@ -17,6 +17,8 @@
     "audit",
     "roadmap",
     "automation",
-    "loop"
+    "loop",
+    "init",
+    "scaffold"
   ]
 }
