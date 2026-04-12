@@ -49,9 +49,10 @@ digraph roadmap_flow {
   has_context -> full_project [label="yes"];
   has_context -> ask_user [label="no"];
   use_scope -> confirm;
-  full_project -> confirm;
+  full_project -> scan;
   ask_user -> confirm;
-  confirm -> scan -> has_docs;
+  confirm -> scan;
+  scan -> has_docs;
   has_docs -> align_validate [label="yes"];
   has_docs -> align_ask [label="no"];
   align_validate -> decompose;
@@ -416,10 +417,10 @@ Link design docs from the roadmap README and relevant phase documents.
 
 ## Integration
 
+**Consumes:**
+- DDD directory structure and CLAUDE.md produced by **ddd-init**
+
 **Produces artifacts consumed by:**
 - **ddd-develop** — Scans phase docs for `- [ ]` items to locate next development target
+- **ddd-auto** — Reads phase docs to expand scope and execute items in batch
 - **ddd-audit** — References roadmap for functional completeness verification
-
-**Complementary skills:**
-- **ddd-develop** — Implements roadmap items one by one
-- **ddd-audit** — Audits implementation quality

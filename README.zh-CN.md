@@ -34,7 +34,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 | **ddd-roadmap** | 生成分阶段开发路线图 | `/ddd-roadmap`、`/ddd-roadmap <范围>` |
 | **ddd-develop** | 实现路线图条目或即时需求 | `/ddd-develop`、`/ddd-develop <需求>` |
 | **ddd-audit** | 8 维度 DDD 架构审计 | `/ddd-audit`、`/ddd-audit <范围>` |
-| **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/cancel-ddd-auto` |
+| **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/ddd-auto-cancel` |
 
 ### ddd-init
 
@@ -131,7 +131,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 - `--policy <文本|预设>` — 自主决策策略。预设：`pragmatic`（默认，实用优先）、`strict-ddd`（严格 DDD）、`fast`（快速交付）
 - `--max-iterations <N>` — 安全上限（默认：50）
 
-随时可用 `/cancel-ddd-auto` 取消。
+随时可用 `/ddd-auto-cancel` 取消。
 
 特性：
 - 通过 Stop hook 实现可靠循环（无需手动重复调用）
@@ -362,7 +362,7 @@ You: /ddd-auto P0 --policy "偏向简单实现，复用已有库"
 随时取消：
 
 ```
-You: /cancel-ddd-auto
+You: /ddd-auto-cancel
 ```
 
 ## 要求
@@ -379,13 +379,12 @@ ddd-coding-skills/
 │   └── plugin.json          # Claude Code 插件清单
 ├── .codex/
 │   └── INSTALL.md           # Codex CLI 安装指南
-├── commands/
-│   ├── ddd-auto.md          # /ddd-auto 命令
-│   └── cancel-ddd-auto.md   # /cancel-ddd-auto 命令
 ├── hooks/
 │   ├── hooks.json           # Stop hook 注册
 │   └── stop-hook.sh         # ddd-auto 循环引擎
 ├── skills/
+│   ├── ddd-auto-cancel/
+│   │   └── SKILL.md         # 取消运行中的 ddd-auto 循环
 │   ├── ddd-init/
 │   │   └── SKILL.md         # DDD 项目初始化
 │   ├── ddd-roadmap/

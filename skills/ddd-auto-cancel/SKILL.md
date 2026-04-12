@@ -1,6 +1,6 @@
 ---
-description: "Cancel a running ddd-auto loop"
-allowed-tools: ["Bash(test -f .claude/ddd-auto.local.md:*)", "Bash(rm .claude/ddd-auto.local.md)", "Read(.claude/ddd-auto.local.md)"]
+name: ddd-auto-cancel
+description: Cancel a running ddd-auto loop
 ---
 
 # Cancel ddd-auto

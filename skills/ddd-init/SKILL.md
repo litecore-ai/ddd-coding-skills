@@ -15,7 +15,7 @@ Initialize a project with DDD architecture or generate a refactoring plan for an
 - `/ddd-init --template fastlayer` — use built-in fastlayer template (TypeScript / Next.js)
 - `/ddd-init --ref <path>` — use a custom reference project (scan its directory tree for DDD layer mapping)
 
-`--template` and `--ref` are mutually exclusive. `--ref` takes precedence if both provided.
+If both `--template` and `--ref` are provided, `--ref` takes precedence.
 
 ---
 
@@ -71,7 +71,7 @@ Scan the current project to determine mode:
 
 | Signal | Mode |
 |--------|------|
-| No source code directories (`src/`, `server/`, `app/`, `lib/`) or only scaffolding boilerplate (README, package.json, config files) | **Scaffold** — new project |
+| No source code directories (`src/`, `server/`, `lib/`) and no framework app directory (e.g., Next.js `app/`) — or only scaffolding boilerplate (README, package.json, config files) | **Scaffold** — new project |
 | Source code exists but no DDD layer directories (`domain/`, `modules/*/app/`, `repo/`, `bo/`) | **Refactor** — existing project |
 | DDD layer directories already exist (`domain/`, `modules/*/app/`, `repo/`) | **Already DDD** — inform user, offer `/ddd-audit` instead |
 
@@ -148,8 +148,7 @@ Docs directories:
   docs/roadmap/
   docs/audit/
   docs/architecture/
-  docs/superpowers/specs/
-  docs/superpowers/plans/
+  docs/plans/
 
 Architecture constraints will be written to CLAUDE.md.
 
@@ -164,9 +163,9 @@ Create all directories with `.gitkeep` files. Use Bash:
 
 ```bash
 mkdir -p server/handler server/infras/orm/schema server/infras/auth server/infras/utils server/modules
-mkdir -p docs/roadmap docs/audit docs/architecture docs/superpowers/specs docs/superpowers/plans
+mkdir -p docs/roadmap docs/audit docs/architecture docs/plans
 touch server/handler/.gitkeep server/infras/orm/schema/.gitkeep server/infras/auth/.gitkeep server/infras/utils/.gitkeep server/modules/.gitkeep
-touch docs/roadmap/.gitkeep docs/audit/.gitkeep docs/architecture/.gitkeep docs/superpowers/specs/.gitkeep docs/superpowers/plans/.gitkeep
+touch docs/roadmap/.gitkeep docs/audit/.gitkeep docs/architecture/.gitkeep docs/plans/.gitkeep
 ```
 
 Adapt directory paths based on the template/reference architecture used.
@@ -247,7 +246,7 @@ Infrastructure ← ACL, Repository  # Shared infra consumed by outer layers
 ### Step 7: Commit
 
 ```bash
-git add -A
+git add [list all created directories, .gitkeep files, and CLAUDE.md explicitly]
 git commit -m "feat: initialize DDD architecture structure
 
 - Created DDD layer directories ([template] template)
@@ -357,7 +356,7 @@ Same as scaffold mode.
 ### Step 9: Commit
 
 ```bash
-git add -A
+git add [list all created directories, .gitkeep files, CLAUDE.md, and docs/roadmap/ explicitly]
 git commit -m "feat: add DDD architecture structure and refactoring roadmap
 
 - Created target DDD layer directories ([template] template)
@@ -439,9 +438,7 @@ docs/
 ├── roadmap/                    # ddd-roadmap output
 ├── audit/                      # ddd-audit output
 ├── architecture/               # Architecture documentation
-└── superpowers/
-    ├── specs/                  # Design specifications
-    └── plans/                  # Implementation plans
+└── plans/                      # Implementation plans
 ```
 
 ---

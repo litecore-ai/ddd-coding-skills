@@ -9,7 +9,7 @@ STATE_FILE=".claude/ddd-auto.local.md"
 
 # 0. Require jq for JSON handling
 if ! command -v jq &>/dev/null; then
-  echo "ddd-auto: jq is required but not found. Install jq to use ddd-auto." >&2
+  echo "ddd-auto: jq not found — Stop hook skipped, loop will not continue. Install jq to use ddd-auto." >&2
   exit 0
 fi
 
@@ -21,13 +21,14 @@ fi
 # 2. Parse YAML frontmatter (first block between --- delimiters only)
 FRONTMATTER=$(awk '/^---$/{if(++c==2) exit; next} c==1' "$STATE_FILE")
 
-active=$(echo "$FRONTMATTER" | grep '^active:' | sed 's/active: *//' | head -1 || true)
-session_id=$(echo "$FRONTMATTER" | grep '^session_id:' | sed 's/session_id: *//' | sed 's/^"\(.*\)"$/\1/' | head -1 || true)
-iteration=$(echo "$FRONTMATTER" | grep '^iteration:' | sed 's/iteration: *//' | head -1 || true)
-max_iterations=$(echo "$FRONTMATTER" | grep '^max_iterations:' | sed 's/max_iterations: *//' | head -1 || true)
-phase=$(echo "$FRONTMATTER" | grep '^phase:' | sed 's/phase: *//' | sed 's/^"\(.*\)"$/\1/' | head -1 || true)
-policy=$(echo "$FRONTMATTER" | grep '^policy:' | sed 's/policy: *//' | sed 's/^"\(.*\)"$/\1/' | head -1 || true)
-policy_preset=$(echo "$FRONTMATTER" | grep '^policy_preset:' | sed 's/policy_preset: *//' | sed 's/^"\(.*\)"$/\1/' | head -1 || true)
+trim() { sed 's/^[[:space:]]*//;s/[[:space:]]*$//' ; }
+active=$(echo "$FRONTMATTER" | grep '^active:' | sed 's/active: *//' | head -1 | trim || true)
+session_id=$(echo "$FRONTMATTER" | grep '^session_id:' | sed 's/session_id: *//' | sed 's/^"\(.*\)"$/\1/' | head -1 | trim || true)
+iteration=$(echo "$FRONTMATTER" | grep '^iteration:' | sed 's/iteration: *//' | head -1 | trim || true)
+max_iterations=$(echo "$FRONTMATTER" | grep '^max_iterations:' | sed 's/max_iterations: *//' | head -1 | trim || true)
+phase=$(echo "$FRONTMATTER" | grep '^phase:' | sed 's/phase: *//' | sed 's/^"\(.*\)"$/\1/' | head -1 | trim || true)
+policy=$(echo "$FRONTMATTER" | grep '^policy:' | sed 's/policy: *//' | sed 's/^"\(.*\)"$/\1/' | head -1 | trim || true)
+policy_preset=$(echo "$FRONTMATTER" | grep '^policy_preset:' | sed 's/policy_preset: *//' | sed 's/^"\(.*\)"$/\1/' | head -1 | trim || true)
 
 # 3. Read hook input from stdin (JSON with session_id, transcript_path)
 HOOK_INPUT=$(cat)
@@ -77,15 +78,20 @@ elif [[ -n "$policy_preset" ]]; then
   POLICY_HINT="Decision policy preset: $policy_preset."
 fi
 
-# 10. Increment iteration in state file
+# 10. Increment iteration in state file (frontmatter only)
 NEXT_ITERATION=$((iteration + 1))
 TEMP_FILE="${STATE_FILE}.tmp.$$"
-sed "s/^iteration: .*/iteration: $NEXT_ITERATION/" "$STATE_FILE" > "$TEMP_FILE"
+trap 'rm -f "$TEMP_FILE"' EXIT
+awk -v new_val="$NEXT_ITERATION" '
+  /^---$/ { delim++; print; next }
+  delim == 1 && /^iteration:/ { print "iteration: " new_val; next }
+  { print }
+' "$STATE_FILE" > "$TEMP_FILE"
 mv "$TEMP_FILE" "$STATE_FILE"
 
 # 11. Phase develop → block exit, inject develop prompt
 if [[ "$phase" == "develop" ]]; then
-  SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION/$max_iterations | phase: develop | /cancel-ddd-auto to stop"
+  SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION/$max_iterations | phase: develop | /ddd-auto-cancel to stop"
 
   jq -n \
     --arg reason "Continue ddd-auto: Read .claude/ddd-auto.local.md to find the 'current' scope item. Execute /ddd-develop for that specific roadmap item. $POLICY_HINT After ddd-develop completes, update the state file: add completed item to 'completed' list (or 'skipped' if BLOCKED), advance 'current' to next incomplete scope item. If no scope items remain incomplete, set phase to 'audit'. Do NOT ask the user for confirmation — proceed automatically." \
@@ -96,7 +102,7 @@ fi
 
 # 12. Phase audit → block exit, inject audit prompt
 if [[ "$phase" == "audit" ]]; then
-  SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION | phase: audit | /cancel-ddd-auto to stop"
+  SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION | phase: audit | /ddd-auto-cancel to stop"
 
   jq -n \
     --arg reason "Continue ddd-auto: Execute /ddd-audit (full project audit). After audit completes, update .claude/ddd-auto.local.md: set phase to 'done'. Then generate the final ddd-auto execution report summarizing all completed items, skipped items, key decisions, and audit results." \

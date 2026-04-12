@@ -3,7 +3,7 @@ name: ddd-audit
 description: Use when auditing a DDD-architecture project for quality, security, and architectural compliance - triggers on "audit this project", "DDD review", "ddd-audit", "/ddd-audit <scope>", pre-production readiness check, architecture compliance review. Supports full-project audits, scoped audits for specific modules/layers, and interactive mode. Works with any language/framework.
 ---
 
-# DDD Code Review
+# DDD Audit
 
 Full-pipeline DDD architecture audit. Scans project, generates audit plan, executes phase-by-phase review with subagents, produces final report and fix roadmap.
 
@@ -138,7 +138,7 @@ Detect and document:
 1. **Tech stack**: language, framework, build tool, test framework, linter
 2. **DDD layers**: map directories to Domain / Infrastructure / Application / Presentation / Cross-Cutting
 3. **Module inventory**: for each layer, list modules with file count and LOC
-4. **Dependency graph**: verify direction (Domain ← App ← Infra / Presentation)
+4. **Dependency graph**: verify direction (Domain ← App ← Infra, Domain ← App ← Presentation)
 
 **Scoped mode (`mode = "scoped"`):** Still detect tech stack and DDD layer mapping for the full project (needed for context), but narrow module inventory and dependency graph analysis to the scoped area. If the scope targets a single layer, only inventory modules within that layer. If targeting specific files, map them to their DDD layer for dimension emphasis.
 
@@ -373,13 +373,13 @@ Generate `fix-roadmap.md`:
 
 ## Incremental Audit (Diff Mode)
 
-When a previous audit exists, support `--diff` mode that only reviews changed files since the last audit.
+When a previous audit exists, support diff mode that only reviews changed files since the last audit. Triggered by natural language — not a CLI flag.
 
 ### When to Use
 
 - CI/CD pipeline integration — audit only the PR diff
 - Follow-up audits after partial fixes
-- Triggered by: "re-audit", "audit changes since last time", "incremental audit"
+- Triggered by: "re-audit", "audit changes since last time", "incremental audit", "audit only changed files"
 
 ### How It Works
 
@@ -615,13 +615,13 @@ When running in PR context:
 |------|-------------|---------|
 | `audit-plan.md` | Step 2 | Full audit methodology + per-module checklists |
 | `phase-0-baseline.md` | Step 3 | Automated tool results + baseline metrics |
-| `phase-1-domain.md` | Step 4 | Domain layer findings |
-| `phase-2-infra.md` | Step 4 | Infrastructure layer findings |
-| `phase-3-app.md` | Step 4 | Application layer findings |
-| `phase-4-presentation.md` | Step 4 | Presentation layer findings |
-| `phase-5-crosscut.md` | Step 4 | Cross-cutting concerns findings |
-| `phase-6-integration.md` | Step 5 | System integration findings |
-| `phase-7-docs.md` | Step 6 | Documentation & compliance findings |
+| `phase-1-domain.md` | Step 3-6 | Domain layer findings |
+| `phase-2-infra.md` | Step 3-6 | Infrastructure layer findings |
+| `phase-3-app.md` | Step 3-6 | Application layer findings |
+| `phase-4-presentation.md` | Step 3-6 | Presentation layer findings |
+| `phase-5-crosscut.md` | Step 3-6 | Cross-cutting concerns findings |
+| `phase-6-integration.md` | Step 3-6 | System integration findings |
+| `phase-7-docs.md` | Step 3-6 | Documentation & compliance findings |
 | `audit-report.md` | Step 7 | Executive summary + statistics + score |
 | `fix-roadmap.md` | Step 8 | Prioritized remediation plan |
 | `audit-delta.md` | Diff mode | Delta comparison with previous audit |

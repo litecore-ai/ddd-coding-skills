@@ -34,7 +34,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 | **ddd-roadmap** | Generate phased development roadmap | `/ddd-roadmap`, `/ddd-roadmap <scope>` |
 | **ddd-develop** | Implement next roadmap item or ad-hoc requirement | `/ddd-develop`, `/ddd-develop <requirement>` |
 | **ddd-audit** | 8-dimension DDD architecture audit | `/ddd-audit`, `/ddd-audit <scope>` |
-| **ddd-auto** | Automated batch roadmap execution + audit | `/ddd-auto`, `/ddd-auto <scope>`, `/cancel-ddd-auto` |
+| **ddd-auto** | Automated batch roadmap execution + audit | `/ddd-auto`, `/ddd-auto <scope>`, `/ddd-auto-cancel` |
 
 ### ddd-init
 
@@ -122,7 +122,7 @@ Options:
 - `--policy <text|preset>` — Decision policy for autonomous choices. Presets: `pragmatic` (default), `strict-ddd`, `fast`
 - `--max-iterations <N>` — Safety cap (default: 50)
 
-Cancel anytime with `/cancel-ddd-auto`.
+Cancel anytime with `/ddd-auto-cancel`.
 
 Features:
 - Reliable loop via Stop hook (no manual re-invocation needed)
@@ -353,7 +353,7 @@ You: /ddd-auto P0 --policy "prefer simple implementations, reuse existing librar
 Cancel anytime:
 
 ```
-You: /cancel-ddd-auto
+You: /ddd-auto-cancel
 ```
 
 ## Requirements
@@ -370,13 +370,12 @@ ddd-coding-skills/
 │   └── plugin.json          # Claude Code plugin manifest
 ├── .codex/
 │   └── INSTALL.md           # Codex CLI installation guide
-├── commands/
-│   ├── ddd-auto.md          # /ddd-auto slash command
-│   └── cancel-ddd-auto.md   # /cancel-ddd-auto slash command
 ├── hooks/
 │   ├── hooks.json           # Stop hook registration
 │   └── stop-hook.sh         # Loop engine for ddd-auto
 ├── skills/
+│   ├── ddd-auto-cancel/
+│   │   └── SKILL.md         # Cancel running ddd-auto loop
 │   ├── ddd-init/
 │   │   └── SKILL.md         # DDD project initialization
 │   ├── ddd-roadmap/

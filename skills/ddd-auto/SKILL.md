@@ -69,7 +69,7 @@ Parse the user's arguments to extract:
 
 1. **Scope identifiers**: `P0`, `P0.1`, `P0.1.1`, ranges (`P0.1.1 - P1.3.1`), mixed (`P0.1.1 - P1.3.1, P2.1.1`)
 2. **--roadmap**: Path to a roadmap directory or single file. Default: `docs/roadmap/`
-3. **--policy**: Free text or preset name (`pragmatic`, `strict-ddd`, `fast`). Default: `pragmatic`
+3. **--policy**: Free text or preset name (`pragmatic`, `strict-ddd`, `fast`). Default: `pragmatic`. If the value matches a preset name exactly, set `policy_preset`; otherwise set `policy` (free text)
 4. **--max-iterations**: Integer, default 50
 
 **Parsing rules:**
@@ -276,7 +276,7 @@ Execute `/ddd-audit` (full project, no scope restriction). Let ddd-audit run its
 After ddd-audit completes, generate the ddd-auto execution report and update the state file.
 
 ### Update State File:
-Set `phase` to `"done"` in the YAML frontmatter. The Stop hook will allow exit on the next attempt.
+Set `phase` to `"done"` in the YAML frontmatter. On the next exit attempt, the Stop hook will detect `phase=done`, delete the state file, and allow exit.
 
 ### Generate Report:
 
@@ -332,7 +332,7 @@ When ddd-develop reports BLOCKED for a scope item:
 
 ## Cancellation
 
-The user can run `/cancel-ddd-auto` at any time to:
+The user can run `/ddd-auto-cancel` at any time to:
 1. Delete `.claude/ddd-auto.local.md`
 2. The Stop hook finds no state file and allows the next exit
 
@@ -342,8 +342,8 @@ The user can run `/cancel-ddd-auto` at any time to:
 |-----------|---------|
 | `max_iterations` (default 50) | Prevent infinite loops |
 | Session ID isolation | Only the originating session is trapped |
-| `/cancel-ddd-auto` | Immediate manual termination |
-| State file cleanup on `phase=done` | No leftover state after loop ends |
+| `/ddd-auto-cancel` | Immediate manual termination |
+| State file cleanup on `phase=done` | Stop hook deletes `.claude/ddd-auto.local.md` on exit |
 | Scope confirmation before start | User reviews expanded items before committing |
 | Decision logging in Progress Log | All autonomous choices are auditable |
 

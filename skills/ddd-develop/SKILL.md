@@ -110,12 +110,13 @@ Before presenting the item to the user, check whether it has **already been impl
 
 **Check in order (stop at first conclusive signal):**
 
-1. **Plan file exists?** — Search `docs/superpowers/plans/` for a plan matching this item
+1. **Plan file exists?** — Search `docs/plans/` (and `docs/superpowers/plans/` for legacy compatibility) for a plan matching this item
    - If found, read the plan and check task checkboxes:
      - All tasks `- [x]` → likely complete
      - Mix of `- [x]` and `- [ ]` → partially complete
      - All `- [ ]` → not started (but still check git)
 2. **Iterative plan with frozen targets?** — If the plan contains a "Frozen Targets" section with a completion condition command:
+   - Verify the command is read-only (grep, wc, find, ls — never rm, mv, or write operations) before running
    - Run the completion condition command now
    - If count == 0: migration complete → mark item done
    - If count > 0 AND count < original: **resume mode** — report remaining count and continue from the first unchecked target in the frozen list
@@ -137,7 +138,7 @@ Roadmap item appears already implemented:
 **Item**: Grant subscription credits on invoice.paid webhook...
 
 **Evidence:**
-- Plan: docs/superpowers/plans/2026-04-07-subscription-credit-grant.md (6/6 tasks checked)
+- Plan: docs/plans/2026-04-07-subscription-credit-grant.md (6/6 tasks checked)
 - Commits: abc1234 "feat: implement subscription credit grant" (2026-04-07)
 - Files: src/billing/grantCredits.ts exists
 
@@ -247,7 +248,7 @@ If the plan applies the same transformation to multiple discrete targets (call s
 
 ### Plan Document
 
-Save to `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`:
+Save to `docs/plans/YYYY-MM-DD-<feature-name>.md`:
 
 ```markdown
 # [Feature Name] Implementation Plan
@@ -536,7 +537,7 @@ After all plan tasks complete, run a full incremental audit.
 Run ddd-audit in **incremental/diff mode**:
 - Scope: only files changed since Phase 3 started
 - Use `git diff` to determine change set
-- Apply the 8-dimension audit matrix against changed files
+- Apply the 8-dimension audit matrix (see ddd-audit skill: D1-Design, D2-Architecture, D3-Quality, D4-Security, D5-Testing, D6-Integration, D7-Performance, D8-Observability) against changed files
 
 ### Audit-Fix Loop
 
@@ -622,7 +623,7 @@ Run ALL of these and show output:
 - **Count == 0** → migration complete. Flip roadmap item to `- [x]`, proceed normally.
 - **Count > 0** → migration incomplete. Do NOT flip the roadmap item. Instead:
   1. Update the frozen targets checklist — check off files completed this session
-  2. Write a progress note under the roadmap item: `(Progress: X/N migrated — see plan: docs/superpowers/plans/...)`
+  2. Write a progress note under the roadmap item: `(Progress: X/N migrated — see plan: docs/plans/...)`
   3. Commit the progress and exit cleanly
 
 This is a hard gate: **an iterative migration cannot be marked complete while the completion condition command returns > 0.** This prevents half-finished migrations from being lost.
