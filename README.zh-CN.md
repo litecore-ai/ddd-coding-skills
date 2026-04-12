@@ -165,15 +165,21 @@ claude --plugin-dir ~/.local/share/claude/plugins/ddd-coding-skills
 git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-skills
 
 # 安装为个人技能（所有项目可用）
+cp -r /tmp/ddd-coding-skills/skills/ddd-init ~/.claude/skills/ddd-init
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit ~/.claude/skills/ddd-audit
+cp -r /tmp/ddd-coding-skills/skills/ddd-auto ~/.claude/skills/ddd-auto
 
 # 或安装为项目级技能（随项目版本控制）
+cp -r /tmp/ddd-coding-skills/skills/ddd-init .claude/skills/ddd-init
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap .claude/skills/ddd-roadmap
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
+cp -r /tmp/ddd-coding-skills/skills/ddd-auto .claude/skills/ddd-auto
 ```
+
+> **注意：** 手动安装不包含 `ddd-auto` 所需的 Stop hook。如需完整的 `ddd-auto` 支持（可靠循环），请使用方式 A 或 B，或额外将 `hooks/` 和 `commands/` 目录复制到 `.claude/` 配置中。
 
 ### Codex CLI
 
@@ -211,9 +217,11 @@ claude plugin update ddd-coding-skills@ddd-coding-skills
 
 ```bash
 cd /tmp/ddd-coding-skills && git pull
+cp -r skills/ddd-init ~/.claude/skills/ddd-init
 cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r skills/ddd-audit ~/.claude/skills/ddd-audit
+cp -r skills/ddd-auto ~/.claude/skills/ddd-auto
 ```
 
 ### Codex CLI

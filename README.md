@@ -156,15 +156,21 @@ claude --plugin-dir ~/.local/share/claude/plugins/ddd-coding-skills
 git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-skills
 
 # Install as personal skills (available in all projects)
+cp -r /tmp/ddd-coding-skills/skills/ddd-init ~/.claude/skills/ddd-init
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit ~/.claude/skills/ddd-audit
+cp -r /tmp/ddd-coding-skills/skills/ddd-auto ~/.claude/skills/ddd-auto
 
 # Or install as project-specific skills (version-controlled with your project)
+cp -r /tmp/ddd-coding-skills/skills/ddd-init .claude/skills/ddd-init
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap .claude/skills/ddd-roadmap
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
+cp -r /tmp/ddd-coding-skills/skills/ddd-auto .claude/skills/ddd-auto
 ```
+
+> **Note:** Manual skill installation does not include the Stop hook required by `ddd-auto`. For full `ddd-auto` support (reliable looping), use Option A or B instead, or additionally copy the `hooks/` and `commands/` directories to your `.claude/` config.
 
 ### Codex CLI
 
@@ -202,9 +208,11 @@ Restart Claude Code after updating.
 
 ```bash
 cd /tmp/ddd-coding-skills && git pull
+cp -r skills/ddd-init ~/.claude/skills/ddd-init
 cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r skills/ddd-audit ~/.claude/skills/ddd-audit
+cp -r skills/ddd-auto ~/.claude/skills/ddd-auto
 ```
 
 ### Codex CLI
