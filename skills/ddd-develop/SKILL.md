@@ -313,6 +313,7 @@ Expected: PASS
 - **No "similar to Task N"**: Repeat the code — tasks may execute out of context
 - **No vague steps**: "Add error handling" is not a step; show the error handling code
 - **Exact file paths always**
+- **No brace expansion or globs in shell commands**: `mkdir -p a/b a/c` not `mkdir -p a/{b,c}`. Claude Code blocks brace expansion and `[...]` patterns in write operations. For paths containing brackets (e.g. Next.js `[slug]`, `[...all]`), use the Write tool to create files directly instead of mkdir.
 - **DRY, YAGNI, TDD, frequent commits**
 
 ### Plan Self-Review
@@ -404,6 +405,12 @@ If you have questions about requirements, approach, dependencies, or anything un
 3. Write minimal code — no YAGNI, no over-engineering
 4. Commit after each TDD cycle
 5. Self-review before reporting
+
+## Shell Safety
+- NEVER use brace expansion `{a,b,c}` in mkdir or any shell command — Claude Code blocks it
+- NEVER use glob patterns `[...]` in write operations — Claude Code blocks it
+- Create directories one at a time: `mkdir -p path/to/dir1 && mkdir -p path/to/dir2`
+- For Next.js catch-all routes like `[...all]`, use the Write tool to create files directly (it auto-creates parent dirs)
 
 ## Code Organization
 - Follow the file structure defined in the plan

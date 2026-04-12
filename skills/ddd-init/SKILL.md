@@ -159,7 +159,9 @@ Wait for user confirmation.
 
 ### Step 5: Create Directories
 
-Create all directories with `.gitkeep` files. Use Bash:
+Create all directories with `.gitkeep` files.
+
+**Shell safety:** NEVER use brace expansion `{a,b,c}` or glob patterns `[...]` in mkdir or any shell command — Claude Code blocks these as security risks. List each path explicitly.
 
 ```bash
 mkdir -p server/handler server/infras/orm/schema server/infras/auth server/infras/utils server/modules
@@ -168,7 +170,7 @@ touch server/handler/.gitkeep server/infras/orm/schema/.gitkeep server/infras/au
 touch docs/roadmap/.gitkeep docs/audit/.gitkeep docs/architecture/.gitkeep docs/plans/.gitkeep
 ```
 
-Adapt directory paths based on the template/reference architecture used.
+Adapt directory paths based on the template/reference architecture used. When creating module subdirectories, list every path individually — do NOT combine with brace expansion.
 
 ### Step 6: Write CLAUDE.md
 
