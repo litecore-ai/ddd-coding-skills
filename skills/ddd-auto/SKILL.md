@@ -177,6 +177,15 @@ If no changes were needed:
 
 **Note:** `.claude/settings.local.json` is gitignored by convention (it's local to the developer's machine). This auto-configuration does not affect other developers or CI.
 
+**One-time confirmation:** Claude Code protects its own settings files, so modifying `settings.local.json` will trigger a single permission prompt. Before injecting, inform the user:
+
+```
+ℹ️  About to auto-configure permissions in .claude/settings.local.json.
+   Claude Code will ask for confirmation once — please select option 2:
+   "Yes, and allow Claude to edit its own settings for this session"
+   to avoid further prompts during this ddd-auto run.
+```
+
 ### 4b: Display Plan & Confirm
 
 Present the execution plan to the user:

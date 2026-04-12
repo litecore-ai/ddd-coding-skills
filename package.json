@@ -1,6 +1,6 @@
 {
   "name": "ddd-coding-skills",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "type": "module",
   "description": "DDD development skill suite for coding agents: roadmap generation, TDD implementation, and 8-dimension architecture audit",
   "keywords": [
