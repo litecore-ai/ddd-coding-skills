@@ -2,15 +2,18 @@
 
 English | [中文](README.zh-CN.md)
 
-A complete Domain-Driven Design development workflow for coding agents. Three composable skills that cover the full lifecycle: planning, implementing, and auditing.
+A complete Domain-Driven Design development workflow for coding agents. Four composable skills that cover the full lifecycle: planning, implementing, auditing, and automated batch execution.
 
 ## How It Works
 
-The three skills form a pipeline:
+The four skills form a pipeline:
 
 ```
 ddd-roadmap  →  ddd-develop  →  ddd-audit
  (plan)         (implement)      (audit)
+                     ↑               ↑
+                 ddd-auto ───────────┘
+                (automate)
 ```
 
 **ddd-roadmap** analyzes your project and generates a structured, phased roadmap with actionable checkbox items. Supports scoped roadmaps (`/ddd-roadmap billing system`) or full-project planning.
@@ -19,6 +22,8 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 **ddd-audit** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability. Supports scoped audits (`/ddd-audit src/domain/`) or full-project audits.
 
+**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a full-project `ddd-audit`. Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Uses a Stop hook for reliable looping with configurable decision policies.
+
 ## Skills
 
 | Skill | Purpose | Trigger |
@@ -26,6 +31,7 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 | **ddd-roadmap** | Generate phased development roadmap | `/ddd-roadmap`, `/ddd-roadmap <scope>` |
 | **ddd-develop** | Implement next roadmap item or ad-hoc requirement | `/ddd-develop`, `/ddd-develop <requirement>` |
 | **ddd-audit** | 8-dimension DDD architecture audit | `/ddd-audit`, `/ddd-audit <scope>` |
+| **ddd-auto** | Automated batch roadmap execution + audit | `/ddd-auto`, `/ddd-auto <scope>`, `/cancel-ddd-auto` |
 
 ### ddd-roadmap
 
@@ -79,6 +85,31 @@ Dimensions:
 | D8 Observability | Logging, metrics, tracing |
 
 Supports incremental (diff) mode, configurable via `.audit-config.yml`, and generates scored reports with fix roadmaps.
+
+### ddd-auto
+
+Automated roadmap execution with a Stop hook loop. Specify a scope, and the system executes all items via `ddd-develop`, then runs a full-project `ddd-audit`.
+
+Scope syntax:
+- `/ddd-auto P0.1.1` — single item
+- `/ddd-auto P0.1.1 - P1.3.1` — range of items
+- `/ddd-auto P0.1.1 - P1.3.1, P2.1.1` — mixed range + individual
+- `/ddd-auto P0` — entire phase
+- `/ddd-auto` — all incomplete roadmap items
+
+Options:
+- `--policy <text|preset>` — Decision policy for autonomous choices. Presets: `pragmatic` (default), `strict-ddd`, `fast`
+- `--max-iterations <N>` — Safety cap (default: 50)
+
+Cancel anytime with `/cancel-ddd-auto`.
+
+Features:
+- Reliable loop via Stop hook (no manual re-invocation needed)
+- Session isolation (only the session that started the loop is affected)
+- Decision policy (presets or free text for autonomous design choices)
+- Progress tracking with full execution log
+- Automatic skip on BLOCKED items
+- Final execution report with audit results
 
 ## Installation
 
@@ -237,6 +268,33 @@ You: /ddd-develop
 You: /ddd-audit
 ```
 
+### Automated Batch Execution
+
+Execute a range of roadmap items automatically:
+
+```
+You: /ddd-auto P0.1.1 - P1.3.1
+
+# The skill will:
+# 1. Expand the scope to all sub-features from P0.1.1 through P1.3.1
+# 2. Show the execution plan and ask for confirmation
+# 3. Loop through each item via /ddd-develop (TDD, audit, commit)
+# 4. Run a full-project /ddd-audit after all items complete
+# 5. Generate a final execution report
+```
+
+With a decision policy:
+
+```
+You: /ddd-auto P0 --policy "prefer simple implementations, reuse existing libraries"
+```
+
+Cancel anytime:
+
+```
+You: /cancel-ddd-auto
+```
+
 ## Requirements
 
 - A coding agent with subagent support — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex CLI](https://github.com/openai/codex)
@@ -250,11 +308,19 @@ ddd-coding-skills/
 │   └── plugin.json          # Claude Code plugin manifest
 ├── .codex/
 │   └── INSTALL.md           # Codex CLI installation guide
+├── commands/
+│   ├── ddd-auto.md          # /ddd-auto slash command
+│   └── cancel-ddd-auto.md   # /cancel-ddd-auto slash command
+├── hooks/
+│   ├── hooks.json           # Stop hook registration
+│   └── stop-hook.sh         # Loop engine for ddd-auto
 ├── skills/
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # Roadmap generation
 │   ├── ddd-develop/
 │   │   └── SKILL.md         # Development workflow
+│   ├── ddd-auto/
+│   │   └── SKILL.md         # Automated roadmap execution
 │   └── ddd-audit/
 │       └── SKILL.md         # 8-dimension audit
 ├── LICENSE                  # MIT
