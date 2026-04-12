@@ -39,7 +39,8 @@ digraph ddd_auto {
   parse [label="Step 1: Parse scope\n& options from arguments"];
   read_roadmap [label="Step 2: Read roadmap files\nExpand scope to item list"];
   validate [label="Step 3: Filter completed items\nValidate scope is non-empty"];
-  confirm [label="Step 4: Display plan\nAsk user confirmation"];
+  perm_check [label="Step 4a: Permission pre-check\nVerify settings.local.json"];
+  confirm [label="Step 4b: Display plan\nAsk user confirmation"];
   create_state [label="Step 5: Create state file\n.claude/ddd-auto.local.md"];
   develop [label="Step 6: Execute /ddd-develop\nfor current scope item"];
   update [label="Step 7: Update state file\n(completed/skipped, advance current)"];
@@ -47,7 +48,7 @@ digraph ddd_auto {
   audit [label="Step 8: Set phase=audit\nExecute /ddd-audit"];
   report [label="Step 9: Set phase=done\nGenerate final report"];
 
-  parse -> read_roadmap -> validate -> confirm -> create_state -> develop;
+  parse -> read_roadmap -> validate -> perm_check -> confirm -> create_state -> develop;
   develop -> update -> check;
   check -> develop [label="yes (Stop hook\nre-injects)"];
   check -> audit [label="no"];
@@ -107,7 +108,58 @@ Parse the user's arguments to extract:
 3. If no incomplete items remain, inform the user: "All items in scope [scope] are already complete." and exit
 4. Build the final ordered list of sub-feature IDs to execute
 
-## Step 4: Display Plan & Confirm
+## Step 4: Permission Pre-Check & Display Plan
+
+### 4a: Permission Pre-Check
+
+Before presenting the plan, check if the project has adequate permissions configured for unattended execution. Read `.claude/settings.local.json` (if it exists) and check whether `permissions.allow` includes common Bash patterns needed for development (`mkdir`, `npm`/`pnpm`/`bun`, `cp`, `mv`, etc.).
+
+**If permissions are missing or insufficient**, display a warning:
+
+```
+⚠️  Permission pre-check: This project may not have enough pre-approved
+permissions for unattended ddd-auto execution. Without them, Claude Code
+will pause for approval on common operations (mkdir, npm/pnpm, cp, etc.),
+blocking the automated loop.
+
+Recommended: add a `.claude/settings.local.json` with:
+
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(chmod:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(pnpm:*)",
+      "Bash(bun:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git status:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)"
+    ]
+  }
+}
+
+Adjust to match your project's toolchain (add yarn, cargo, go, etc. as needed).
+```
+
+Then ask:
+- **Continue anyway** — proceed, accept that some prompts may appear
+- **Configure now** — create/update `.claude/settings.local.json` with the recommended permissions, then proceed
+- **Abort** — cancel ddd-auto
+
+If the user chooses "Configure now", write the recommended permissions to `.claude/settings.local.json` (merging with existing content if the file already exists), then continue to Step 4b.
+
+### 4b: Display Plan & Confirm
 
 Present the execution plan to the user:
 
