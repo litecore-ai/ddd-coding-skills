@@ -2,19 +2,21 @@
 
 English | [中文](README.zh-CN.md)
 
-A complete Domain-Driven Design development workflow for coding agents. Four composable skills that cover the full lifecycle: planning, implementing, auditing, and automated batch execution.
+A complete Domain-Driven Design development workflow for coding agents. Five composable skills that cover the full lifecycle: initialization, planning, implementing, auditing, and automated batch execution.
 
 ## How It Works
 
-The four skills form a pipeline:
+The five skills form a pipeline:
 
 ```
-ddd-roadmap  →  ddd-develop  →  ddd-audit
- (plan)         (implement)      (audit)
-                     ↑               ↑
-                 ddd-auto ───────────┘
-                (automate)
+ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
+ (init)       (plan)          (implement)      (audit)
+                                   ↑               ↑
+                               ddd-auto ───────────┘
+                              (automate)
 ```
+
+**ddd-init** initializes a new project with DDD architecture or generates a refactoring roadmap for existing projects. Creates the directory structure, standardized `docs/` layout, and writes architecture constraints to `CLAUDE.md`. Supports built-in templates (`/ddd-init --template fastlayer`) or custom reference architectures (`/ddd-init --ref <path>`).
 
 **ddd-roadmap** analyzes your project and generates a structured, phased roadmap with actionable checkbox items. Supports scoped roadmaps (`/ddd-roadmap billing system`) or full-project planning.
 
@@ -28,10 +30,29 @@ ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 | Skill | Purpose | Trigger |
 |-------|---------|---------|
+| **ddd-init** | Initialize or refactor project to DDD architecture | `/ddd-init`, `/ddd-init --template fastlayer`, `/ddd-init --ref <path>` |
 | **ddd-roadmap** | Generate phased development roadmap | `/ddd-roadmap`, `/ddd-roadmap <scope>` |
 | **ddd-develop** | Implement next roadmap item or ad-hoc requirement | `/ddd-develop`, `/ddd-develop <requirement>` |
 | **ddd-audit** | 8-dimension DDD architecture audit | `/ddd-audit`, `/ddd-audit <scope>` |
 | **ddd-auto** | Automated batch roadmap execution + audit | `/ddd-auto`, `/ddd-auto <scope>`, `/cancel-ddd-auto` |
+
+### ddd-init
+
+Initialize or refactor a project into DDD architecture. Automatically detects project state (new vs. existing) and tech stack.
+
+Two modes:
+- **Scaffold** (new project) — creates DDD directory structure + standardized `docs/` layout + CLAUDE.md architecture constraints
+- **Refactor** (existing project) — creates target DDD structure + generates a migration roadmap compatible with `/ddd-auto`
+
+Options:
+- `--template <name>` — Built-in template. Currently: `fastlayer` (TypeScript/Next.js)
+- `--ref <path>` — Use a custom reference project's directory structure
+
+Output:
+- DDD layer directories with `.gitkeep`
+- Standardized `docs/` structure (roadmap, audit, architecture, specs, plans)
+- `CLAUDE.md` architecture section (layer mapping, module template, dependency rules, conventions)
+- Refactoring roadmap in `docs/roadmap/` (refactor mode only)
 
 ### ddd-roadmap
 
@@ -196,6 +217,38 @@ Skills update instantly through the symlink.
 
 ## Usage Examples
 
+### Initialize DDD Architecture
+
+New project with built-in template:
+
+```
+You: /ddd-init --template fastlayer
+
+# The skill will:
+# 1. Create DDD directory structure (server/handler, server/infras, server/modules)
+# 2. Create standardized docs/ layout
+# 3. Write architecture constraints to CLAUDE.md
+```
+
+Existing project refactoring:
+
+```
+You: /ddd-init
+
+# The skill will:
+# 1. Detect existing code and tech stack
+# 2. Classify files into DDD layers
+# 3. Create target DDD directories
+# 4. Generate a refactoring roadmap in docs/roadmap/
+# 5. Suggest: /ddd-auto --roadmap docs/roadmap/ P0
+```
+
+With a custom reference architecture:
+
+```
+You: /ddd-init --ref ~/my-other-ddd-project
+```
+
 ### Generate a Development Roadmap
 
 ```
@@ -316,6 +369,8 @@ ddd-coding-skills/
 │   ├── hooks.json           # Stop hook registration
 │   └── stop-hook.sh         # Loop engine for ddd-auto
 ├── skills/
+│   ├── ddd-init/
+│   │   └── SKILL.md         # DDD project initialization
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # Roadmap generation
 │   ├── ddd-develop/
