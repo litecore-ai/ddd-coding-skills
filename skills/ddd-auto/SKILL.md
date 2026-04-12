@@ -289,18 +289,26 @@ After ddd-develop completes (or reports BLOCKED):
 
 **Use the Edit tool** to update the state file. Edit the YAML frontmatter fields and append to the Progress Log section.
 
-## Step 8: Full-Project Audit
+## Step 8: Scoped Audit
 
 When phase transitions to `audit`, the Stop hook will inject a prompt to run `/ddd-audit`.
 
-Execute `/ddd-audit` (full project, no scope restriction). Let ddd-audit run its complete pipeline:
-1. Project scan
-2. Generate audit plan
-3. Execute phases (baseline → layers → integration → docs)
+Execute `/ddd-audit` scoped to the **completed items only** — not the entire project. Each ddd-develop cycle already audits its own item; this final audit focuses on **cross-module integration** between the items developed in this run.
+
+Construct the audit scope from the `completed` list in the state file. For example, if completed items are `P1.2.1, P1.2.2, P1.3.1`, invoke:
+
+```
+/ddd-audit Audit the code changed by roadmap items [completed list]. Focus on cross-module integration, shared dependencies, and consistency between these items. Skip areas not touched by this run.
+```
+
+Let ddd-audit run its pipeline on the scoped area:
+1. Scan files changed by the completed items (use `git diff` against the pre-run baseline)
+2. Generate scoped audit plan
+3. Execute phases (baseline → layers → integration → docs) for affected code only
 4. Generate final report with scores
 5. Generate fix roadmap
 
-**Do NOT fix findings in this audit** — this is a final assessment, not the incremental audit-fix loop that ddd-develop does internally. The purpose is to evaluate the overall project state after all development items.
+**Do NOT fix findings in this audit** — this is a final assessment, not the incremental audit-fix loop that ddd-develop does internally. The purpose is to verify integration quality across the items developed in this run.
 
 ## Step 9: Generate Final Report & Set Phase to Done
 
