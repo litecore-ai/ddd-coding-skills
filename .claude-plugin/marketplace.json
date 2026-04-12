@@ -1,7 +1,7 @@
 {
   "name": "ddd-coding-skills",
   "metadata": {
-    "description": "DDD development skill suite for coding agents: roadmap, TDD implementation, and architecture audit"
+    "description": "DDD development skill suite for coding agents: roadmap, TDD implementation, architecture audit, and automated roadmap execution"
   },
   "owner": {
     "name": "Litecore AI",
@@ -11,12 +11,12 @@
     {
       "name": "ddd-coding-skills",
       "source": "./",
-      "description": "DDD development skill suite: roadmap generation, TDD implementation, and 8-dimension architecture audit",
-      "version": "1.5.0",
+      "description": "DDD development skill suite: roadmap generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
+      "version": "1.6.0",
       "license": "MIT",
       "homepage": "https://github.com/litecore-ai/ddd-coding-skills",
       "repository": "https://github.com/litecore-ai/ddd-coding-skills",
-      "keywords": ["ddd", "domain-driven-design", "tdd", "audit", "roadmap"]
+      "keywords": ["ddd", "domain-driven-design", "tdd", "audit", "roadmap", "automation", "loop"]
     }
   ]
 }
