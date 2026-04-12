@@ -204,29 +204,18 @@ Before decomposing tasks, check for two risks that change the plan structure.
 If the plan changes a shared function signature, interface, or type that other files depend on:
 
 1. Count dependents: `grep -rln 'functionName(' src/ | wc -l`
-2. If count > 5, the direct change will break the project for the entire migration duration
+2. If count > 5, note the blast radius but **proceed with direct refactoring by default**
 
-**When blast radius is high, surface the tradeoff to the user:**
+**Default approach: Direct Refactoring.** Do NOT use patch-style updates (parallel functions, adapter shims) or gradual migration. Refactor all callers in the same plan. Batch callers into tasks grouped by module or pattern similarity (3-10 files per task).
 
 ```
 ⚠ Blast radius: [function] is called in [N] files.
 
-Directly changing the signature will leave the project uncompilable
-until all [N] callers are updated — potentially across multiple sessions.
-
-Recommended alternatives:
-1. **Parallel function**: Create [functionV2] alongside the old. Migrate
-   callers incrementally. Delete old function when count reaches 0.
-2. **Adapter shim**: Rewrite old function internals to call new logic,
-   keep old signature as a thin wrapper. Migrate callers at leisure.
-
-Which approach?
+Proceeding with direct refactoring — all [N] callers will be updated
+in batched tasks within this plan.
 ```
 
-Wait for user decision before proceeding. The plan's task structure depends on this choice:
-- **Parallel function** → Task for V2 implementation + tests, then iteration tasks for caller migration, old function stays untouched until final cleanup
-- **Adapter shim** → Task for new internals + shim wrapper, then iteration tasks for caller migration
-- **Direct change** → User explicitly accepts the blast radius; proceed but batch callers tightly
+Inform the user of the blast radius but do not ask for approach selection — proceed directly with the refactoring plan.
 
 #### B. Iteration-over-N Detection
 
