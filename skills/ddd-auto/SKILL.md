@@ -110,54 +110,72 @@ Parse the user's arguments to extract:
 
 ## Step 4: Permission Pre-Check & Display Plan
 
-### 4a: Permission Pre-Check
+### 4a: Permission Auto-Configuration
 
-Before presenting the plan, check if the project has adequate permissions configured for unattended execution. Read `.claude/settings.local.json` (if it exists) and check whether `permissions.allow` includes common Bash patterns needed for development (`mkdir`, `npm`/`pnpm`/`bun`, `cp`, `mv`, etc.).
+Before presenting the plan, ensure the project has adequate permissions for unattended execution. Read `.claude/settings.local.json` (if it exists) and check whether `permissions.allow` includes the required tool and Bash patterns.
 
-**If permissions are missing or insufficient**, display a warning:
+**Required permissions** (the baseline set for ddd-auto):
+
+```json
+[
+  "Write",
+  "Edit",
+  "WebSearch",
+  "WebFetch",
+  "Bash(mkdir:*)",
+  "Bash(cp:*)",
+  "Bash(mv:*)",
+  "Bash(rm:*)",
+  "Bash(chmod:*)",
+  "Bash(ls:*)",
+  "Bash(cat:*)",
+  "Bash(echo:*)",
+  "Bash(find:*)",
+  "Bash(sed:*)",
+  "Bash(touch:*)",
+  "Bash(bash:*)",
+  "Bash(npm:*)",
+  "Bash(npx:*)",
+  "Bash(pnpm:*)",
+  "Bash(bun:*)",
+  "Bash(yarn:*)",
+  "Bash(node:*)",
+  "Bash(python3:*)",
+  "Bash(git add:*)",
+  "Bash(git commit:*)",
+  "Bash(git diff:*)",
+  "Bash(git log:*)",
+  "Bash(git status:*)",
+  "Bash(git checkout:*)",
+  "Bash(git branch:*)",
+  "Bash(git stash:*)",
+  "Bash(jq:*)"
+]
+```
+
+**Auto-injection logic:**
+
+1. If `.claude/settings.local.json` does not exist → create it with `{ "permissions": { "allow": [...] } }` containing the full required list
+2. If the file exists → read it, compute which required permissions are missing from `permissions.allow`, and **merge** only the missing ones (append to the existing array, preserve everything already there)
+3. If all required permissions are already present → do nothing
+
+**After injection (if any permissions were added)**, display a summary:
 
 ```
-⚠️  Permission pre-check: This project may not have enough pre-approved
-permissions for unattended ddd-auto execution. Without them, Claude Code
-will pause for approval on common operations (mkdir, npm/pnpm, cp, etc.),
-blocking the automated loop.
-
-Recommended: add a `.claude/settings.local.json` with:
-
-{
-  "permissions": {
-    "allow": [
-      "Bash(mkdir:*)",
-      "Bash(cp:*)",
-      "Bash(mv:*)",
-      "Bash(rm:*)",
-      "Bash(chmod:*)",
-      "Bash(ls:*)",
-      "Bash(cat:*)",
-      "Bash(npm:*)",
-      "Bash(npx:*)",
-      "Bash(pnpm:*)",
-      "Bash(bun:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git diff:*)",
-      "Bash(git log:*)",
-      "Bash(git status:*)",
-      "Bash(git checkout:*)",
-      "Bash(git branch:*)"
-    ]
-  }
-}
-
-Adjust to match your project's toolchain (add yarn, cargo, go, etc. as needed).
+✅ Permission auto-configured (.claude/settings.local.json)
+   Added [N] missing permissions: Write, Edit, Bash(mkdir:*), ...
+   Total permissions now: [M]
 ```
 
-Then ask:
-- **Continue anyway** — proceed, accept that some prompts may appear
-- **Configure now** — create/update `.claude/settings.local.json` with the recommended permissions, then proceed
-- **Abort** — cancel ddd-auto
+If no changes were needed:
 
-If the user chooses "Configure now", write the recommended permissions to `.claude/settings.local.json` (merging with existing content if the file already exists), then continue to Step 4b.
+```
+✅ Permissions adequate — [M] rules configured in .claude/settings.local.json
+```
+
+**Toolchain detection (optional enhancement):** If the project contains `Cargo.toml`, also add `Bash(cargo:*)`. If it contains `go.mod`, add `Bash(go:*)`. If it contains `Makefile`, add `Bash(make:*)`. This is best-effort; missing toolchain permissions will only cause a prompt, not a failure.
+
+**Note:** `.claude/settings.local.json` is gitignored by convention (it's local to the developer's machine). This auto-configuration does not affect other developers or CI.
 
 ### 4b: Display Plan & Confirm
 
