@@ -20,6 +20,7 @@ Automated roadmap execution: loop through `ddd-develop` for each item in a user-
 - `--roadmap <path>` — Path to a roadmap directory or single roadmap file. Overrides the default `docs/roadmap/` location. Accepts a directory (reads all `P[0-3]-*.md` files inside) or a single `.md` file.
 - `--policy <text|preset>` — Decision policy for autonomous choices (default: `pragmatic`)
 - `--max-iterations <N>` — Safety cap to prevent infinite loops (default: 50)
+- `--yes` — Skip the execution plan confirmation and start immediately
 
 ## Preset Decision Policies
 
@@ -71,6 +72,7 @@ Parse the user's arguments to extract:
 2. **--roadmap**: Path to a roadmap directory or single file. Default: `docs/roadmap/`
 3. **--policy**: Free text or preset name (`pragmatic`, `strict-ddd`, `fast`). Default: `pragmatic`. If the value matches a preset name exactly, set `policy_preset`; otherwise set `policy` (free text)
 4. **--max-iterations**: Integer, default 50
+5. **--yes**: Boolean flag, default false. Skip execution plan confirmation
 
 **Parsing rules:**
 - Scope tokens are `P` followed by digits and dots: `P[0-3]`, `P[0-3].[1-9]`, `P[0-3].[1-9].[1-9]`
@@ -209,7 +211,9 @@ After all items complete, a full-project /ddd-audit will run.
 Proceed?
 ```
 
-Wait for user confirmation. If the user says no or wants changes, adjust scope and re-present.
+**If `--yes` was passed**, skip the confirmation and proceed directly to Step 5.
+
+**Otherwise**, wait for user confirmation. If the user says no or wants changes, adjust scope and re-present.
 
 ## Step 5: Create State File
 
