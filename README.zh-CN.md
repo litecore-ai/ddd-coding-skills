@@ -308,6 +308,7 @@ You: /cancel-ddd-auto
 
 - 支持子智能体的编码智能体 — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 或 [Codex CLI](https://github.com/openai/codex)
 - 遵循（或正在采用）DDD 架构模式的项目
+- 系统已安装 `jq`（ddd-auto 的 Stop hook 需要用于 JSON 处理）
 
 ## 项目结构
 

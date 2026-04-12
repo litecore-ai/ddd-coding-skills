@@ -7,13 +7,19 @@ set -euo pipefail
 
 STATE_FILE=".claude/ddd-auto.local.md"
 
+# 0. Require jq for JSON handling
+if ! command -v jq &>/dev/null; then
+  echo "ddd-auto: jq is required but not found. Install jq to use ddd-auto." >&2
+  exit 0
+fi
+
 # 1. No state file → allow exit
 if [[ ! -f "$STATE_FILE" ]]; then
   exit 0
 fi
 
-# 2. Parse YAML frontmatter (between --- delimiters) into scalar fields
-FRONTMATTER=$(sed -n '/^---$/,/^---$/{ /^---$/d; p; }' "$STATE_FILE")
+# 2. Parse YAML frontmatter (first block between --- delimiters only)
+FRONTMATTER=$(awk '/^---$/{if(++c==2) exit; next} c==1' "$STATE_FILE")
 
 active=$(echo "$FRONTMATTER" | grep '^active:' | sed 's/active: *//' | head -1 || true)
 session_id=$(echo "$FRONTMATTER" | grep '^session_id:' | sed 's/session_id: *//' | sed 's/^"\(.*\)"$/\1/' | head -1 || true)
@@ -25,7 +31,7 @@ policy_preset=$(echo "$FRONTMATTER" | grep '^policy_preset:' | sed 's/policy_pre
 
 # 3. Read hook input from stdin (JSON with session_id, transcript_path)
 HOOK_INPUT=$(cat)
-HOOK_SESSION=$(echo "$HOOK_INPUT" | jq -r '.session_id // ""')
+HOOK_SESSION=$(echo "$HOOK_INPUT" | jq -r '.session_id // ""' 2>/dev/null || echo "")
 
 # 4. Not active → allow exit
 if [[ "$active" != "true" ]]; then

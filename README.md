@@ -299,6 +299,7 @@ You: /cancel-ddd-auto
 
 - A coding agent with subagent support — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex CLI](https://github.com/openai/codex)
 - A project following (or adopting) DDD architecture patterns
+- `jq` installed on the system (required by ddd-auto's Stop hook for JSON handling)
 
 ## Project Structure
 
