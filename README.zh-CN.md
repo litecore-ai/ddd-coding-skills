@@ -361,9 +361,10 @@ You: /ddd-auto P0.1.1 - P1.3.1
 You: /ddd-auto P0 --policy "偏向简单实现，复用已有库"
 ```
 
-随时取消：
+随时按 Escape 中断循环，然后清理状态：
 
 ```
+You: [按 Escape 停止循环]
 You: /ddd-auto-cleanup
 ```
 
@@ -386,7 +387,7 @@ ddd-coding-skills/
 │   └── stop-hook.sh         # ddd-auto 循环引擎
 ├── skills/
 │   ├── ddd-auto-cleanup/
-│   │   └── SKILL.md         # 取消运行中的 ddd-auto 循环
+│   │   └── SKILL.md         # 中断 ddd-auto 后清理状态
 │   ├── ddd-init/
 │   │   └── SKILL.md         # DDD 项目初始化
 │   ├── ddd-roadmap/

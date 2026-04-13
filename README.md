@@ -352,9 +352,10 @@ With a decision policy:
 You: /ddd-auto P0 --policy "prefer simple implementations, reuse existing libraries"
 ```
 
-Cancel anytime:
+Interrupt anytime by pressing Escape, then clean up:
 
 ```
+You: [press Escape to stop the loop]
 You: /ddd-auto-cleanup
 ```
 
@@ -377,7 +378,7 @@ ddd-coding-skills/
 │   └── stop-hook.sh         # Loop engine for ddd-auto
 ├── skills/
 │   ├── ddd-auto-cleanup/
-│   │   └── SKILL.md         # Cancel running ddd-auto loop
+│   │   └── SKILL.md         # Clean up after interrupting ddd-auto
 │   ├── ddd-init/
 │   │   └── SKILL.md         # DDD project initialization
 │   ├── ddd-roadmap/
