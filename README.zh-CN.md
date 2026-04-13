@@ -24,7 +24,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 **ddd-audit** 基于 DDD 架构标准执行 8 维度审计：设计、架构、质量、安全、测试、集成、性能、可观测性。支持范围化审计（`/ddd-audit src/domain/`）或全项目审计。
 
-**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后运行全项目 `ddd-audit`。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
+**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后对已完成条目运行范围化 `ddd-audit`。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
 
 ## 技能一览
 
@@ -118,7 +118,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 ### ddd-auto
 
-基于 Stop hook 的自动化路线图执行。指定范围后，系统自动通过 `ddd-develop` 逐个实现所有条目，最后运行全项目 `ddd-audit`。
+基于 Stop hook 的自动化路线图执行。指定范围后，系统自动通过 `ddd-develop` 逐个实现所有条目，最后对已完成条目运行范围化 `ddd-audit`。
 
 范围语法：
 - `/ddd-auto P0.1.1` — 单个条目
@@ -128,6 +128,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 - `/ddd-auto` — 所有未完成的路线图条目
 
 选项：
+- `--yes` — 跳过确认直接开始（仍会显示执行计划）
 - `--policy <文本|预设>` — 自主决策策略。预设：`pragmatic`（默认，实用优先）、`strict-ddd`（严格 DDD）、`fast`（快速交付）
 - `--max-iterations <N>` — 安全上限（默认：50）
 
@@ -139,6 +140,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 - 决策策略（预设或自由文本，用于自主设计决策）
 - 进度追踪与完整执行日志
 - 遇到 BLOCKED 自动跳过
+- 范围化最终审计（仅审计已完成条目，减少大型项目的 token 消耗）
 - 最终执行报告含审计结果
 
 ## 安装
@@ -349,7 +351,7 @@ You: /ddd-auto P0.1.1 - P1.3.1
 # 1. 展开范围为 P0.1.1 到 P1.3.1 之间所有子功能
 # 2. 显示执行计划并请求确认
 # 3. 逐个通过 /ddd-develop 实现（TDD、审计、提交）
-# 4. 全部完成后运行全项目 /ddd-audit
+# 4. 对已完成条目运行范围化 /ddd-audit
 # 5. 生成最终执行报告
 ```
 

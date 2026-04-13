@@ -24,7 +24,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 **ddd-audit** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability. Supports scoped audits (`/ddd-audit src/domain/`) or full-project audits.
 
-**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a full-project `ddd-audit`. Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Uses a Stop hook for reliable looping with configurable decision policies.
+**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a scoped `ddd-audit` on completed items. Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Uses a Stop hook for reliable looping with configurable decision policies.
 
 ## Skills
 
@@ -109,7 +109,7 @@ Supports incremental (diff) mode, configurable via `.audit-config.yml`, and gene
 
 ### ddd-auto
 
-Automated roadmap execution with a Stop hook loop. Specify a scope, and the system executes all items via `ddd-develop`, then runs a full-project `ddd-audit`.
+Automated roadmap execution with a Stop hook loop. Specify a scope, and the system executes all items via `ddd-develop`, then runs a scoped `ddd-audit` on completed items.
 
 Scope syntax:
 - `/ddd-auto P0.1.1` — single item
@@ -119,6 +119,7 @@ Scope syntax:
 - `/ddd-auto` — all incomplete roadmap items
 
 Options:
+- `--yes` — Skip confirmation and start immediately (execution plan still displayed)
 - `--policy <text|preset>` — Decision policy for autonomous choices. Presets: `pragmatic` (default), `strict-ddd`, `fast`
 - `--max-iterations <N>` — Safety cap (default: 50)
 
@@ -130,6 +131,7 @@ Features:
 - Decision policy (presets or free text for autonomous design choices)
 - Progress tracking with full execution log
 - Automatic skip on BLOCKED items
+- Scoped final audit (completed items only, reducing token usage for large projects)
 - Final execution report with audit results
 
 ## Installation
@@ -340,7 +342,7 @@ You: /ddd-auto P0.1.1 - P1.3.1
 # 1. Expand the scope to all sub-features from P0.1.1 through P1.3.1
 # 2. Show the execution plan and ask for confirmation
 # 3. Loop through each item via /ddd-develop (TDD, audit, commit)
-# 4. Run a full-project /ddd-audit after all items complete
+# 4. Run a scoped /ddd-audit on completed items
 # 5. Generate a final execution report
 ```
 
