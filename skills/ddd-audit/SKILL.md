@@ -1,6 +1,14 @@
 ---
 name: ddd-audit
 description: Use when auditing a DDD-architecture project for quality, security, and architectural compliance - triggers on "audit this project", "DDD review", "ddd-audit", "/ddd-audit <scope>", pre-production readiness check, architecture compliance review. Supports full-project audits, scoped audits for specific modules/layers, and interactive mode. Works with any language/framework.
+allowed-tools:
+  - Bash(git:*)
+  - Bash(gh:*)
+  - Edit
+  - Write
+  - Read
+  - Glob
+  - Grep
 ---
 
 # DDD Audit
@@ -531,13 +539,10 @@ The fix roadmap can generate trackable artifacts for project management systems.
 
 After generating `fix-roadmap.md`, optionally create GitHub issues:
 
-```bash
-# Generate issues from roadmap (one issue per CRITICAL/HIGH finding)
-# Each issue includes: title, body (description + impact + fix), labels, milestone
+**Two-step approach** (avoids heredoc/subshell which triggers permission prompts):
 
-gh issue create \
-  --title "[AUDIT] [ID] — [Short Title]" \
-  --body "$(cat <<'EOF'
+1. Use the **Write tool** to create a temp body file (`/tmp/audit-issue-body.md`):
+```markdown
 **Severity**: [LEVEL]
 **Dimension**: D[N] [Name]
 **File**: `path/file.ext:line`
@@ -556,10 +561,11 @@ gh issue create \
 
 ---
 _Generated from DDD audit on [date]_
-EOF
-)" \
-  --label "audit,[severity]" \
-  --milestone "[Wave N]"
+```
+
+2. Then run a **single** `gh` command (no pipes, no subshells):
+```bash
+gh issue create --title "[AUDIT] [ID] — [Short Title]" --body-file /tmp/audit-issue-body.md --label "audit,[severity]" --milestone "[Wave N]"
 ```
 
 ### Issue Generation Rules

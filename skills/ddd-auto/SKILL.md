@@ -1,6 +1,39 @@
 ---
 name: ddd-auto
 description: Use when auto-executing multiple roadmap items in sequence - triggers on "auto develop", "batch develop", "ddd-auto", "/ddd-auto", "run roadmap items P0 to P1", or "/ddd-auto <scope>". Automatically loops through ddd-develop for each item in scope, then runs ddd-audit. Requires Stop hook for loop reliability.
+allowed-tools:
+  - Bash(mkdir:*)
+  - Bash(touch:*)
+  - Bash(cp:*)
+  - Bash(mv:*)
+  - Bash(rm:*)
+  - Bash(chmod:*)
+  - Bash(ls:*)
+  - Bash(cat:*)
+  - Bash(echo:*)
+  - Bash(sed:*)
+  - Bash(find:*)
+  - Bash(test:*)
+  - Bash(bash:*)
+  - Bash(git:*)
+  - Bash(npm:*)
+  - Bash(npx:*)
+  - Bash(pnpm:*)
+  - Bash(yarn:*)
+  - Bash(bun:*)
+  - Bash(node:*)
+  - Bash(cargo:*)
+  - Bash(go:*)
+  - Bash(make:*)
+  - Bash(python3:*)
+  - Bash(jq:*)
+  - Edit
+  - Write
+  - Read
+  - Glob
+  - Grep
+  - WebSearch
+  - WebFetch
 ---
 
 # DDD Auto
@@ -114,9 +147,11 @@ Parse the user's arguments to extract:
 
 ### 4a: Permission Auto-Configuration
 
-Before presenting the plan, ensure the project has adequate permissions for unattended execution. Read `.claude/settings.local.json` (if it exists) and check whether `permissions.allow` includes the required tool and Bash patterns.
+> **Primary permissions come from `allowed-tools` in this skill's frontmatter** — most tools and Bash commands are pre-approved when this skill is invoked. The settings.local.json injection below is a **defense-in-depth fallback** for edge cases (e.g., dynamically-generated commands that don't match frontmatter patterns).
 
-**Required permissions** (the baseline set for ddd-auto):
+Read `.claude/settings.local.json` (if it exists) and check whether `permissions.allow` includes the required Bash patterns.
+
+**Required permissions** (fallback set — complements frontmatter):
 
 ```json
 [
@@ -143,15 +178,9 @@ Before presenting the plan, ensure the project has adequate permissions for unat
   "Bash(yarn:*)",
   "Bash(node:*)",
   "Bash(python3:*)",
-  "Bash(git add:*)",
-  "Bash(git commit:*)",
-  "Bash(git diff:*)",
-  "Bash(git log:*)",
-  "Bash(git status:*)",
-  "Bash(git checkout:*)",
-  "Bash(git branch:*)",
-  "Bash(git stash:*)",
-  "Bash(jq:*)"
+  "Bash(git:*)",
+  "Bash(jq:*)",
+  "Bash(test:*)"
 ]
 ```
 
@@ -165,28 +194,18 @@ Before presenting the plan, ensure the project has adequate permissions for unat
 
 ```
 ✅ Permission auto-configured (.claude/settings.local.json)
-   Added [N] missing permissions: Write, Edit, Bash(mkdir:*), ...
-   Total permissions now: [M]
+   Added [N] missing permissions for unattended execution.
 ```
 
 If no changes were needed:
 
 ```
-✅ Permissions adequate — [M] rules configured in .claude/settings.local.json
+✅ Permissions adequate
 ```
 
-**Toolchain detection (optional enhancement):** If the project contains `Cargo.toml`, also add `Bash(cargo:*)`. If it contains `go.mod`, add `Bash(go:*)`. If it contains `Makefile`, add `Bash(make:*)`. This is best-effort; missing toolchain permissions will only cause a prompt, not a failure.
+**Toolchain detection (optional enhancement):** If the project contains `Cargo.toml`, also add `Bash(cargo:*)`. If it contains `go.mod`, add `Bash(go:*)`. If it contains `Makefile`, add `Bash(make:*)`.
 
-**Note:** `.claude/settings.local.json` is gitignored by convention (it's local to the developer's machine). This auto-configuration does not affect other developers or CI.
-
-**One-time confirmation:** Claude Code protects its own settings files, so modifying `settings.local.json` will trigger a single permission prompt. Before injecting, inform the user:
-
-```
-ℹ️  About to auto-configure permissions in .claude/settings.local.json.
-   Claude Code will ask for confirmation once — please select option 2:
-   "Yes, and allow Claude to edit its own settings for this session"
-   to avoid further prompts during this ddd-auto run.
-```
+**Note:** `.claude/settings.local.json` is gitignored by convention (local to the developer's machine).
 
 ### 4b: Display Plan & Confirm
 

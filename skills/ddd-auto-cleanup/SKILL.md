@@ -1,13 +1,17 @@
 ---
 name: ddd-auto-cleanup
 description: Clean up after interrupting a ddd-auto loop — removes state file and reports progress summary. Use after pressing Escape to stop ddd-auto.
+allowed-tools:
+  - Bash(test:*)
+  - Bash(rm:*)
+  - Read
 ---
 
 # ddd-auto cleanup
 
 Clean up ddd-auto state and report progress after the loop has been interrupted.
 
-1. Check if `.ddd-auto.local.md` exists using Bash: `test -f .ddd-auto.local.md && echo "EXISTS" || echo "NOT_FOUND"`
+1. Check if `.ddd-auto.local.md` exists using the **Glob tool** (pattern: `.ddd-auto.local.md`)
 
 2. **If NOT_FOUND**: Say "No ddd-auto state file found. Nothing to clean up."
 

@@ -1,6 +1,28 @@
 ---
 name: ddd-develop
 description: Use when developing features from a DDD project roadmap or ad-hoc requirements - triggers on "continue development", "next roadmap item", "ddd-develop", "按 roadmap 开发", or "/ddd-develop <feature description>". Self-contained workflow with TDD, implementation planning, subagent execution, audit, and verification built in. Supports both roadmap-driven and freeform development.
+allowed-tools:
+  - Bash(mkdir:*)
+  - Bash(touch:*)
+  - Bash(cp:*)
+  - Bash(mv:*)
+  - Bash(rm:*)
+  - Bash(git:*)
+  - Bash(npm:*)
+  - Bash(npx:*)
+  - Bash(pnpm:*)
+  - Bash(yarn:*)
+  - Bash(bun:*)
+  - Bash(node:*)
+  - Bash(cargo:*)
+  - Bash(go:*)
+  - Bash(make:*)
+  - Bash(python3:*)
+  - Edit
+  - Write
+  - Read
+  - Glob
+  - Grep
 ---
 
 # DDD Develop
@@ -116,8 +138,7 @@ Before presenting the item to the user, check whether it has **already been impl
      - Mix of `- [x]` and `- [ ]` → partially complete
      - All `- [ ]` → not started (but still check git)
 2. **Iterative plan with frozen targets?** — If the plan contains a "Frozen Targets" section with a completion condition command:
-   - Verify the command is read-only (grep, wc, find, ls — never rm, mv, or write operations) before running
-   - Run the completion condition command now
+   - Run the completion condition using the **Grep tool** (`output_mode: "count"`) — NEVER use bash grep/wc/find
    - If count == 0: migration complete → mark item done
    - If count > 0 AND count < original: **resume mode** — report remaining count and continue from the first unchecked target in the frozen list
    - If count == original: not started, proceed normally
@@ -204,7 +225,7 @@ Before decomposing tasks, check for two risks that change the plan structure.
 
 If the plan changes a shared function signature, interface, or type that other files depend on:
 
-1. Count dependents: `grep -rln 'functionName(' src/ | wc -l`
+1. Count dependents: use the **Grep tool** with `output_mode: "count"`, pattern `functionName(`, path `src/`
 2. If count > 5, note the blast radius but **proceed with direct refactoring by default**
 
 **Default approach: Direct Refactoring.** Do NOT use patch-style updates (parallel functions, adapter shims) or gradual migration. Refactor all callers in the same plan. Batch callers into tasks grouped by module or pattern similarity (3-10 files per task).
@@ -222,16 +243,16 @@ Inform the user of the blast radius but do not ask for approach selection — pr
 
 If the plan applies the same transformation to multiple discrete targets (call sites, files, endpoints, test cases):
 
-1. **Count**: run a reproducible command (grep/glob) and record the exact count
+1. **Count**: use the **Grep tool** (`output_mode: "count"`) and record the exact count
 2. **If count > 5**, this is an **iterative migration** — handle it specially:
 
-   a. **Enumerate all targets** — paste the grep/glob command AND its output into the plan as a frozen checklist:
+   a. **Enumerate all targets** — use the **Grep tool** (`output_mode: "files_with_matches"`) and paste its output into the plan as a frozen checklist:
    ```markdown
    ## Frozen Targets
    
-   **Discovery command:** `grep -rln 'oldFunction(' src/ | grep -v __tests__`
+   **Discovery:** Grep tool — pattern `oldFunction(`, path `src/`, exclude `__tests__`
    **Count:** 36 files
-   **Completion condition:** `grep -rln 'oldFunction(' src/ | grep -v __tests__ | wc -l` equals 0
+   **Completion condition:** same Grep count equals 0
    
    - [ ] src/strategies/strategy1.ts
    - [ ] src/strategies/strategy2.ts
@@ -406,11 +427,14 @@ If you have questions about requirements, approach, dependencies, or anything un
 4. Commit after each TDD cycle
 5. Self-review before reporting
 
-## Shell Safety
-- NEVER use brace expansion `{a,b,c}` in mkdir or any shell command — Claude Code blocks it
-- NEVER use glob patterns `[...]` in write operations — Claude Code blocks it
-- Create directories one at a time: `mkdir -p path/to/dir1 && mkdir -p path/to/dir2`
-- For Next.js catch-all routes like `[...all]`, use the Write tool to create files directly (it auto-creates parent dirs)
+## Shell Safety — Avoiding Permission Prompts
+- NEVER use brace expansion `{a,b,c}` in any shell command
+- NEVER use glob patterns `[...]` in write operations
+- NEVER use `for` loops, pipes (`|`), or subshells (`$(...)`) in Bash commands — these trigger permission prompts
+- NEVER use bash `grep`, `find`, `cat`, `wc` — use the **Grep**, **Glob**, **Read** tools instead
+- Create directories with separate Bash calls: `mkdir -p path/to/dir1` then `mkdir -p path/to/dir2` (no `&&`)
+- For Next.js catch-all routes like `[...all]`, use Write tool directly
+- **Each Bash call must be a single, simple command** — one executable, no shell operators
 
 ## Code Organization
 - Follow the file structure defined in the plan

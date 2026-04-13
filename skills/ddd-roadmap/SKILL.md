@@ -1,6 +1,13 @@
 ---
 name: ddd-roadmap
 description: Use when planning a DDD project's development roadmap, generating phased feature plans, or when user says "generate roadmap", "plan development phases", "create roadmap", or "/ddd-roadmap <scope description>". Supports full-project roadmaps, scoped roadmaps for specific features, and interactive mode. Produces structured checkbox-format roadmap compatible with ddd-develop consumption.
+allowed-tools:
+  - Bash(git:*)
+  - Edit
+  - Write
+  - Read
+  - Glob
+  - Grep
 ---
 
 # DDD Roadmap Generator
