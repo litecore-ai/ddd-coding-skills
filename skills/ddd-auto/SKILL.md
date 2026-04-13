@@ -247,7 +247,7 @@ policy_preset: "[preset name if provided, otherwise empty]"
 
 ```
 
-**session_id:** Leave empty (`""`). The `$CLAUDE_CODE_SESSION_ID` environment variable is not accessible from Bash subprocesses, so do NOT run any Bash command to read it. The Stop hook's session isolation check gracefully skips when session_id is empty — this is safe because the state file (`.ddd-auto.local.md`) is inherently single-session: only one ddd-auto loop can be active at a time, and `/ddd-auto-cancel` clears it.
+**session_id:** Leave empty (`""`). The `$CLAUDE_CODE_SESSION_ID` environment variable is not accessible from Bash subprocesses, so do NOT run any Bash command to read it. The Stop hook's session isolation check gracefully skips when session_id is empty — this is safe because the state file (`.ddd-auto.local.md`) is inherently single-session: only one ddd-auto loop can be active at a time, and `/ddd-auto-cleanup` clears it.
 
 To create this file, use the Write tool to write the complete content to `.ddd-auto.local.md`.
 
@@ -371,7 +371,7 @@ When ddd-develop reports BLOCKED for a scope item:
 
 ## Cancellation
 
-The user can run `/ddd-auto-cancel` at any time to:
+The user can run `/ddd-auto-cleanup` after pressing Escape to:
 1. Delete `.ddd-auto.local.md`
 2. The Stop hook finds no state file and allows the next exit
 
@@ -381,7 +381,7 @@ The user can run `/ddd-auto-cancel` at any time to:
 |-----------|---------|
 | `max_iterations` (default 50) | Prevent infinite loops |
 | Session ID isolation | Only the originating session is trapped |
-| `/ddd-auto-cancel` | Immediate manual termination |
+| `/ddd-auto-cleanup` | Manual cleanup after interruption |
 | State file cleanup on `phase=done` | Stop hook deletes `.ddd-auto.local.md` on exit |
 | Scope confirmation before start | User reviews expanded items before committing |
 | Decision logging in Progress Log | All autonomous choices are auditable |

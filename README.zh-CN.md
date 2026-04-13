@@ -34,7 +34,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 | **ddd-roadmap** | 生成分阶段开发路线图 | `/ddd-roadmap`、`/ddd-roadmap <范围>` |
 | **ddd-develop** | 实现路线图条目或即时需求 | `/ddd-develop`、`/ddd-develop <需求>` |
 | **ddd-audit** | 8 维度 DDD 架构审计 | `/ddd-audit`、`/ddd-audit <范围>` |
-| **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/ddd-auto-cancel` |
+| **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/ddd-auto-cleanup` |
 
 ### ddd-init
 
@@ -131,7 +131,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 - `--policy <文本|预设>` — 自主决策策略。预设：`pragmatic`（默认，实用优先）、`strict-ddd`（严格 DDD）、`fast`（快速交付）
 - `--max-iterations <N>` — 安全上限（默认：50）
 
-随时可用 `/ddd-auto-cancel` 取消。
+按 Escape 中断，然后 `/ddd-auto-cleanup` 清理状态并查看进度摘要。
 
 特性：
 - 通过 Stop hook 实现可靠循环（无需手动重复调用）
@@ -362,7 +362,7 @@ You: /ddd-auto P0 --policy "偏向简单实现，复用已有库"
 随时取消：
 
 ```
-You: /ddd-auto-cancel
+You: /ddd-auto-cleanup
 ```
 
 ## 要求
@@ -383,7 +383,7 @@ ddd-coding-skills/
 │   ├── hooks.json           # Stop hook 注册
 │   └── stop-hook.sh         # ddd-auto 循环引擎
 ├── skills/
-│   ├── ddd-auto-cancel/
+│   ├── ddd-auto-cleanup/
 │   │   └── SKILL.md         # 取消运行中的 ddd-auto 循环
 │   ├── ddd-init/
 │   │   └── SKILL.md         # DDD 项目初始化

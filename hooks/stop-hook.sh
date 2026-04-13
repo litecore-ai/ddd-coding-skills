@@ -91,7 +91,7 @@ mv "$TEMP_FILE" "$STATE_FILE"
 
 # 11. Phase develop → block exit, inject develop prompt
 if [[ "$phase" == "develop" ]]; then
-  SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION/$max_iterations | phase: develop | /ddd-auto-cancel to stop"
+  SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION/$max_iterations | phase: develop | Escape then /ddd-auto-cleanup to stop"
 
   jq -n \
     --arg reason "Continue ddd-auto: Read .ddd-auto.local.md to find the 'current' scope item. Execute /ddd-develop for that specific roadmap item. $POLICY_HINT After ddd-develop completes, update the state file: add completed item to 'completed' list (or 'skipped' if BLOCKED), advance 'current' to next incomplete scope item. If no scope items remain incomplete, set phase to 'audit'. Do NOT ask the user for confirmation — proceed automatically." \
@@ -102,7 +102,7 @@ fi
 
 # 12. Phase audit → block exit, inject audit prompt
 if [[ "$phase" == "audit" ]]; then
-  SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION | phase: audit | /ddd-auto-cancel to stop"
+  SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION | phase: audit | Escape then /ddd-auto-cleanup to stop"
 
   jq -n \
     --arg reason "Continue ddd-auto: Execute /ddd-audit (full project audit). After audit completes, update .ddd-auto.local.md: set phase to 'done'. Then generate the final ddd-auto execution report summarizing all completed items, skipped items, key decisions, and audit results." \
