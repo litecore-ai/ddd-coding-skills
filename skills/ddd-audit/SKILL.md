@@ -4,6 +4,25 @@ description: Use when auditing a DDD-architecture project for quality, security,
 allowed-tools:
   - Bash(git:*)
   - Bash(gh:*)
+  - Bash(npm:*)
+  - Bash(npx:*)
+  - Bash(pnpm:*)
+  - Bash(yarn:*)
+  - Bash(bun:*)
+  - Bash(node:*)
+  - Bash(cargo:*)
+  - Bash(go:*)
+  - Bash(make:*)
+  - Bash(python3:*)
+  - Bash(pip:*)
+  - Bash(find:*)
+  - Bash(wc:*)
+  - Bash(sort:*)
+  - Bash(head:*)
+  - Bash(tail:*)
+  - Bash(cat:*)
+  - Bash(ls:*)
+  - Bash(jq:*)
   - Edit
   - Write
   - Read
@@ -26,6 +45,17 @@ Supports three input modes:
 - If asking user: "Using ddd-audit — what scope would you like to audit?"
 
 **All artifacts** are saved to `docs/audit/YYYY-MM-DD-NNN/` (NNN = zero-padded sequence within the same date).
+
+## Tool Preferences
+
+Prefer dedicated tools over Bash for file operations:
+
+- **File discovery**: Use Glob tool (`**/*.ts`, `src/domain/**/*.py`) instead of `find`
+- **Content search**: Use Grep tool instead of `grep` or `rg`
+- **File reading**: Use Read tool instead of `cat`, `head`, `tail`
+- **Line counting**: Use Bash `wc -l` only when counting across many files; for individual files, Read and count
+
+Reserve Bash for commands that have no dedicated tool equivalent: `npm test`, `npx eslint`, `tsc --noEmit`, `wc -l`, `npm audit`, etc.
 
 ## 8-Dimension Audit Matrix
 

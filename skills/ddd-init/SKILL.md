@@ -10,9 +10,15 @@ allowed-tools:
   - Bash(pnpm:*)
   - Bash(yarn:*)
   - Bash(bun:*)
+  - Bash(find:*)
+  - Bash(wc:*)
+  - Bash(ls:*)
+  - Bash(cat:*)
   - Edit
   - Write
   - Read
+  - Glob
+  - Grep
   - Glob
   - Grep
 ---

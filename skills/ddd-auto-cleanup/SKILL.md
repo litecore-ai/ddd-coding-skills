@@ -5,6 +5,7 @@ allowed-tools:
   - Bash(test:*)
   - Bash(rm:*)
   - Read
+  - Glob
 ---
 
 # ddd-auto cleanup

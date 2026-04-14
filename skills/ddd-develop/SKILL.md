@@ -18,6 +18,12 @@ allowed-tools:
   - Bash(go:*)
   - Bash(make:*)
   - Bash(python3:*)
+  - Bash(find:*)
+  - Bash(wc:*)
+  - Bash(sort:*)
+  - Bash(head:*)
+  - Bash(cat:*)
+  - Bash(ls:*)
   - Edit
   - Write
   - Read
