@@ -270,6 +270,36 @@ Phase 7 (docs) — parallel with 6
 
 Each subagent receives: its phase section from the audit plan + dimension matrix + severity definitions.
 
+### Phase 0 — Baseline Auto-Fix
+
+Phase 0 collects baseline metrics (lint, type check, test coverage, dead code, dependency audit). After collecting initial results, **automatically fix mechanical issues** before proceeding to layer audits:
+
+1. **Collect initial baseline** — Run lint, type check, test suite, record error counts
+2. **Auto-fix mechanical issues** — Run language-appropriate auto-fix tools:
+   - **TypeScript/JavaScript**: `npx eslint --fix .`, `npx prettier --write .` (if configured)
+   - **Rust**: `cargo fmt`, `cargo clippy --fix --allow-dirty`
+   - **Go**: `go fmt ./...`, `goimports -w .`
+   - **Python**: `black .`, `isort .`, `ruff check --fix .` (if configured)
+   - Only run tools that are already configured in the project (check config files first)
+3. **Re-collect baseline** — Run lint/type check again to measure improvement
+4. **Report delta** in `phase-0-baseline.md`:
+   ```
+   ## Auto-Fix Results
+   - Lint errors: [before] → [after] ([N] auto-fixed)
+   - Formatting issues: [before] → [after] ([N] auto-fixed)
+   - Remaining (require manual fix): [N]
+   ```
+5. **Commit auto-fix changes** (if any files changed):
+   ```bash
+   git add -A
+   git commit -m "fix: auto-fix lint and formatting issues (ddd-audit baseline)"
+   ```
+
+**Rules:**
+- Only fix issues that tools handle automatically — never modify logic, architecture, or behavior
+- Skip auto-fix if the project has no lint/format tooling configured
+- If auto-fix introduces test failures, revert and report: `Auto-fix reverted: caused [N] test failures`
+
 ### Phase Report Format
 
 Each `phase-N-[layer].md`:
@@ -332,30 +362,84 @@ Generate `audit-report.md`:
 
 ## Step 8 — Fix Roadmap
 
-Generate `fix-roadmap.md`:
+Generate fix roadmap in **ddd-develop/ddd-auto compatible format** (heading hierarchy + checkboxes).
 
-```
+**Save to two locations:**
+1. `docs/roadmap/fix-roadmap.md` — primary, consumed by ddd-auto
+2. `docs/audit/YYYY-MM-DD-NNN/fix-roadmap.md` — copy in audit artifacts
+
+### Format
+
+```markdown
 # Fix Roadmap
 
-> **Based on**: [N] findings
-> **Organization**: Waves by severity, parallel tracks within waves
+> **Based on**: [audit report path]
+> **Date**: [YYYY-MM-DD]
+> **Findings**: [N] total ([N] CRITICAL, [N] HIGH, [N] MEDIUM, [N] LOW)
 
-## Wave 1 — CRITICAL ([N] items, [est] days)
-### Track [A-Z]: [Theme]
-| # | ID | Fix | Effort | File |
+## 1 Wave 1 — CRITICAL
 
-## Wave 2 — HIGH
-## Wave 3 — MEDIUM
-## Wave 4 — LOW
+### 1.1 [Theme/Track Name]
 
-## Effort Estimation
-| Wave | Items | S | M | L | Est. Days |
+[Context: what these fixes address, why they're critical, which modules are affected]
 
-## Execution Order
-[Timeline with dependencies]
+- [ ] [ID] Fix [description with enough context to implement] (`path/file.ext:line`) — Effort: S
+- [ ] [ID] Fix [description] (`path/file.ext:line`) — Effort: M
 
-## Post-Fix Verification
-[Automated checks per wave]
+### 1.2 [Theme/Track Name]
+
+[Context]
+
+- [ ] [ID] Fix [description] (`path/file.ext:line`) — Effort: S
+
+## 2 Wave 2 — HIGH
+
+### 2.1 [Theme]
+
+[Context]
+
+- [ ] [ID] Fix [description] (`path/file.ext:line`) — Effort: S
+
+## 3 Wave 3 — MEDIUM
+
+### 3.1 [Theme]
+...
+
+## 4 Wave 4 — LOW
+
+### 4.1 [Theme]
+...
+```
+
+### Item Writing Rules
+
+Each checkbox item must be **self-contained** — ddd-develop will use it as the development target:
+
+1. Include the finding ID for traceability (e.g., `AUTH-CRIT-001`)
+2. Describe the fix action, not just the problem (e.g., "Add input sanitization to UserController.create" not "XSS vulnerability")
+3. Include file path and line number when applicable
+4. Include effort estimate (S = <30min, M = 1-3hr, L = 4-8hr)
+
+### Heading Hierarchy Compatibility
+
+The format aligns with ddd-develop/ddd-auto parsing:
+- `# Fix Roadmap` — document root
+- `## N Wave N — [SEVERITY]` — maps to Phase level
+- `### N.M [Theme]` — maps to Sub-feature level (execution unit for ddd-develop)
+- `- [ ] item` — actionable checkbox items
+
+### After Generation
+
+Present to user:
+
+```
+Fix roadmap saved to docs/roadmap/fix-roadmap.md
+
+To auto-fix all findings:
+  /ddd-auto --roadmap docs/roadmap/fix-roadmap.md
+
+To fix only CRITICAL and HIGH:
+  /ddd-auto --roadmap docs/roadmap/fix-roadmap.md 1 - 2
 ```
 
 ---
@@ -659,5 +743,5 @@ When running in PR context:
 | `phase-6-integration.md` | Step 3-6 | System integration findings |
 | `phase-7-docs.md` | Step 3-6 | Documentation & compliance findings |
 | `audit-report.md` | Step 7 | Executive summary + statistics + score |
-| `fix-roadmap.md` | Step 8 | Prioritized remediation plan |
+| `fix-roadmap.md` | Step 8 | Prioritized remediation plan (also saved to `docs/roadmap/fix-roadmap.md`) |
 | `audit-delta.md` | Diff mode | Delta comparison with previous audit |
