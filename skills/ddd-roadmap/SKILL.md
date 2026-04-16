@@ -2,13 +2,7 @@
 name: ddd-roadmap
 description: Use when planning a DDD project's development roadmap, generating phased feature plans, or when user says "generate roadmap", "plan development phases", "create roadmap", or "/ddd-roadmap <scope description>". Supports full-project roadmaps, scoped roadmaps for specific features, and interactive mode. Produces structured checkbox-format roadmap compatible with ddd-develop consumption.
 allowed-tools:
-  - Bash(git:*)
-  - Bash(find:*)
-  - Bash(wc:*)
-  - Bash(sort:*)
-  - Bash(head:*)
-  - Bash(cat:*)
-  - Bash(ls:*)
+  - Bash(*)
   - Edit
   - Write
   - Read
@@ -29,17 +23,6 @@ Supports three input modes:
 - If arguments provided: "Using ddd-roadmap to plan: [user's scope description]."
 - If full project: "Using ddd-roadmap to generate a full project roadmap."
 - If asking user: "Using ddd-roadmap — what scope would you like to plan?"
-
-## Bash Permission Rules
-
-`allowed-tools` matches the **first word** of each Bash command. To avoid permission blocking:
-- **NEVER** use shell control structures: `for`, `while`, `if`, `case`, `select` — none are in the allowed list
-- **NEVER** use variable assignment wrapping: `var=$(find ...)` — the first word becomes `var=...`
-- **NEVER** use subshell wrapping: `(find ...)` or `{ find ...; }`
-- **DO** run commands directly: `find ... | wc -l` — pipes are OK, the first word `find` is matched
-- **DO** use separate Bash tool calls instead of combining commands with `&&`/`;`
-- **DO** prefer dedicated tools: use **Glob** instead of `find`, **Grep** instead of `grep`, **Read** instead of `cat`
-- For per-file iteration (e.g., LOC per file), use `find ... -exec wc -l {} +` or `wc -l path/**/*.ts` — NOT `for file in ...; do ...; done`
 
 ## Execution Flow
 

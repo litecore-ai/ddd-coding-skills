@@ -2,31 +2,7 @@
 name: ddd-auto
 description: Use when auto-executing multiple roadmap items in sequence - triggers on "auto develop", "batch develop", "ddd-auto", "/ddd-auto", "run roadmap items P0 to P1", or "/ddd-auto <scope>". Automatically loops through ddd-develop for each item in scope, then runs ddd-audit. Requires Stop hook for loop reliability.
 allowed-tools:
-  - Bash(mkdir:*)
-  - Bash(touch:*)
-  - Bash(cp:*)
-  - Bash(mv:*)
-  - Bash(rm:*)
-  - Bash(chmod:*)
-  - Bash(ls:*)
-  - Bash(cat:*)
-  - Bash(echo:*)
-  - Bash(sed:*)
-  - Bash(find:*)
-  - Bash(test:*)
-  - Bash(bash:*)
-  - Bash(git:*)
-  - Bash(npm:*)
-  - Bash(npx:*)
-  - Bash(pnpm:*)
-  - Bash(yarn:*)
-  - Bash(bun:*)
-  - Bash(node:*)
-  - Bash(cargo:*)
-  - Bash(go:*)
-  - Bash(make:*)
-  - Bash(python3:*)
-  - Bash(jq:*)
+  - Bash(*)
   - Edit
   - Write
   - Read
@@ -41,17 +17,6 @@ allowed-tools:
 Automated roadmap execution: loop through `ddd-develop` for each item in a user-specified scope, then run a full-project `ddd-audit`. Uses a Stop hook to guarantee the loop continues even if Claude tries to exit.
 
 **Announce at start:** "Using ddd-auto to execute roadmap items [scope description]."
-
-## Bash Permission Rules
-
-`allowed-tools` matches the **first word** of each Bash command. To avoid permission blocking:
-- **NEVER** use shell control structures: `for`, `while`, `if`, `case`, `select` — none are in the allowed list
-- **NEVER** use variable assignment wrapping: `var=$(find ...)` — the first word becomes `var=...`
-- **NEVER** use subshell wrapping: `(find ...)` or `{ find ...; }`
-- **DO** run commands directly: `find ... | wc -l` — pipes are OK, the first word `find` is matched
-- **DO** use separate Bash tool calls instead of combining commands with `&&`/`;`
-- **DO** prefer dedicated tools: use **Glob** instead of `find`, **Grep** instead of `grep`, **Read** instead of `cat`
-- For per-file iteration (e.g., LOC per file), use `find ... -exec wc -l {} +` or `wc -l path/**/*.ts` — NOT `for file in ...; do ...; done`
 
 ## Input Modes
 

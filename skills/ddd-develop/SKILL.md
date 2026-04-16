@@ -2,28 +2,7 @@
 name: ddd-develop
 description: Use when developing features from a DDD project roadmap or ad-hoc requirements - triggers on "continue development", "next roadmap item", "ddd-develop", "按 roadmap 开发", or "/ddd-develop <feature description>". Self-contained workflow with TDD, implementation planning, subagent execution, audit, and verification built in. Supports both roadmap-driven and freeform development.
 allowed-tools:
-  - Bash(mkdir:*)
-  - Bash(touch:*)
-  - Bash(cp:*)
-  - Bash(mv:*)
-  - Bash(rm:*)
-  - Bash(git:*)
-  - Bash(npm:*)
-  - Bash(npx:*)
-  - Bash(pnpm:*)
-  - Bash(yarn:*)
-  - Bash(bun:*)
-  - Bash(node:*)
-  - Bash(cargo:*)
-  - Bash(go:*)
-  - Bash(make:*)
-  - Bash(python3:*)
-  - Bash(find:*)
-  - Bash(wc:*)
-  - Bash(sort:*)
-  - Bash(head:*)
-  - Bash(cat:*)
-  - Bash(ls:*)
+  - Bash(*)
   - Edit
   - Write
   - Read
@@ -44,17 +23,6 @@ Supports three input modes:
 - If arguments provided: "Using ddd-develop to implement: [user's description]."
 - If roadmap item found: "Using ddd-develop to implement the next roadmap feature."
 - If asking user: "Using ddd-develop — no pending roadmap items found. What would you like to develop?"
-
-## Bash Permission Rules
-
-`allowed-tools` matches the **first word** of each Bash command. To avoid permission blocking:
-- **NEVER** use shell control structures: `for`, `while`, `if`, `case`, `select` — none are in the allowed list
-- **NEVER** use variable assignment wrapping: `var=$(find ...)` — the first word becomes `var=...`
-- **NEVER** use subshell wrapping: `(find ...)` or `{ find ...; }`
-- **DO** run commands directly: `find ... | wc -l` — pipes are OK, the first word `find` is matched
-- **DO** use separate Bash tool calls instead of combining commands with `&&`/`;`
-- **DO** prefer dedicated tools: use **Glob** instead of `find`, **Grep** instead of `grep`, **Read** instead of `cat`
-- For per-file iteration (e.g., LOC per file), use `find ... -exec wc -l {} +` or `wc -l path/**/*.ts` — NOT `for file in ...; do ...; done`
 
 ## Execution Flow
 

@@ -2,8 +2,7 @@
 name: ddd-auto-cleanup
 description: Clean up after interrupting a ddd-auto loop — removes state file and reports progress summary. Use after pressing Escape to stop ddd-auto.
 allowed-tools:
-  - Bash(test:*)
-  - Bash(rm:*)
+  - Bash(*)
   - Read
   - Glob
 ---

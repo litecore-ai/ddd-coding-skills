@@ -2,28 +2,7 @@
 name: ddd-audit
 description: Use when auditing a DDD-architecture project for quality, security, and architectural compliance - triggers on "audit this project", "DDD review", "ddd-audit", "/ddd-audit <scope>", pre-production readiness check, architecture compliance review. Supports full-project audits, scoped audits for specific modules/layers, and interactive mode. Works with any language/framework.
 allowed-tools:
-  - Bash(git:*)
-  - Bash(gh:*)
-  - Bash(npm:*)
-  - Bash(npx:*)
-  - Bash(pnpm:*)
-  - Bash(yarn:*)
-  - Bash(bun:*)
-  - Bash(node:*)
-  - Bash(cargo:*)
-  - Bash(go:*)
-  - Bash(make:*)
-  - Bash(python3:*)
-  - Bash(pip:*)
-  - Bash(find:*)
-  - Bash(wc:*)
-  - Bash(sort:*)
-  - Bash(head:*)
-  - Bash(tail:*)
-  - Bash(cat:*)
-  - Bash(ls:*)
-  - Bash(jq:*)
-  - Bash(echo:*)
+  - Bash(*)
   - Edit
   - Write
   - Read
@@ -57,15 +36,6 @@ Prefer dedicated tools over Bash for file operations:
 - **Line counting**: Use Bash `wc -l` only when counting across many files; for individual files, Read and count
 
 Reserve Bash for commands that have no dedicated tool equivalent: `npm test`, `npx eslint`, `tsc --noEmit`, `wc -l`, `npm audit`, etc.
-
-**Bash permission rules**: `allowed-tools` matches the **first word** of each Bash command. To avoid permission blocking:
-- **NEVER** use shell control structures: `for`, `while`, `if`, `case`, `select` — none are in the allowed list
-- **NEVER** use variable assignment wrapping: `var=$(find ...)` — the first word becomes `var=...`
-- **NEVER** use subshell wrapping: `(find ...)` or `{ find ...; }`
-- **DO** run commands directly: `find ... | wc -l` — pipes are OK, the first word `find` is matched
-- **DO** use separate Bash tool calls instead of combining commands with `&&`/`;`
-- **DO** prefer dedicated tools: use **Glob** instead of `find`, **Grep** instead of `grep`, **Read** instead of `cat`
-- For per-file iteration (e.g., LOC per file), use `find ... -exec wc -l {} +` or `wc -l path/**/*.ts` — NOT `for file in ...; do ...; done`
 
 ## 8-Dimension Audit Matrix
 
