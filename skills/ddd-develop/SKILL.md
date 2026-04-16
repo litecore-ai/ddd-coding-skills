@@ -33,7 +33,10 @@ digraph ddd_develop {
 
   input [label="Phase 1: LOCATE\nDetect input mode"];
   has_args [label="Arguments provided?" shape=diamond];
+  classify [label="Classify input" shape=diamond];
+  roadmap_ref [label="Treat as roadmap\nscope reference"];
   use_args [label="Use arguments as\ndevelopment target"];
+  oversized [label="Mode D: Oversized\nSuggest /ddd-roadmap\nthen /ddd-auto"];
   scan_roadmap [label="Scan roadmap\nfor next unchecked item"];
   has_item [label="Unchecked item found?" shape=diamond];
   use_item [label="Present roadmap item"];
@@ -48,8 +51,12 @@ digraph ddd_develop {
   complete [label="Phase 6: COMPLETE\nUpdate roadmap (if applicable) + commit"];
 
   input -> has_args;
-  has_args -> use_args [label="yes"];
+  has_args -> classify [label="yes"];
   has_args -> scan_roadmap [label="no"];
+  classify -> roadmap_ref [label="roadmap ref\nor .md file"];
+  classify -> use_args [label="small\nrequirement"];
+  classify -> oversized [label="large\nunplanned"];
+  roadmap_ref -> scan_roadmap;
   scan_roadmap -> has_item;
   has_item -> use_item [label="yes"];
   has_item -> ask_user [label="no"];
@@ -74,12 +81,25 @@ Determine the development target based on input mode.
 
 Check whether the user provided arguments after the command:
 
-- **Arguments provided** (e.g., `/ddd-develop implement user login with JWT`) → Go to **Mode A: Explicit Requirement**
+- **Arguments provided** → Go to **Step 1a: Classify Input**
 - **No arguments** → Go to **Mode B: Roadmap Scan**
+
+### Step 1a: Classify Input
+
+When arguments are provided, classify them before proceeding:
+
+1. **Roadmap reference?** — Check in this order:
+   - Arguments match `P\d+` patterns (e.g., `P0`, `P1.2`, `P0.1.1`) → treat as roadmap scope reference, switch to **Mode B: Roadmap Scan** with that scope filter
+   - Arguments are a `.md` file path AND the file contains `- [ ]` checkboxes → treat as roadmap file, switch to **Mode B: Roadmap Scan** using that file as the roadmap source
+   - If matched → set `source = "roadmap"`
+
+2. **Scope assessment** (for natural language input that didn't match above):
+   - **Small requirement** — single feature, single module, ≤3 sentences → Go to **Mode A: Explicit Requirement**
+   - **Large requirement** — any of: multiple modules/subsystems, >3 distinct features, >5 sentences of description → Go to **Mode D: Oversized Requirement**
 
 ### Mode A: Explicit Requirement
 
-The user specified what to develop. Use their description as the development target directly.
+The user specified a single, scoped feature to develop. Use their description as the development target directly.
 
 1. Parse the user's description into a clear feature requirement
 2. Read project context (CLAUDE.md, existing code, DDD layer structure) to understand how this requirement fits
@@ -97,6 +117,24 @@ Proceed with this requirement?
 ```
 
 Wait for user confirmation. User may refine the requirement.
+
+### Mode D: Oversized Requirement
+
+The input describes a large, multi-feature requirement that exceeds ddd-develop's single-item scope. Guide the user to the correct workflow.
+
+**Present to User:**
+
+```
+This requirement involves multiple features/modules. ddd-develop executes one item at a time.
+
+Recommended workflow:
+1. /ddd-roadmap <your requirement> — generate a structured development roadmap
+2. /ddd-auto — auto-execute all roadmap items in sequence
+
+Alternatively, you can narrow the scope to a single feature and re-run /ddd-develop.
+```
+
+Wait for user response. Do NOT attempt to execute the oversized requirement directly.
 
 ### Mode B: Roadmap Scan
 

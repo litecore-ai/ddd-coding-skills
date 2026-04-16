@@ -46,6 +46,10 @@ digraph ddd_auto {
   rankdir=TB;
   node [shape=box, style=rounded];
 
+  classify [label="Step 0: Classify input"];
+  is_scope [label="Scope tokens or\n--roadmap flag?" shape=diamond];
+  auto_roadmap [label="Step 0a: Auto-Roadmap\nInvoke /ddd-roadmap"];
+  confirm_roadmap [label="User confirms\ngenerated roadmap"];
   parse [label="Step 1: Parse scope\n& options from arguments"];
   read_roadmap [label="Step 2: Read roadmap files\nExpand scope to item list"];
   validate [label="Step 3: Filter completed items\nValidate scope is non-empty"];
@@ -58,6 +62,10 @@ digraph ddd_auto {
   audit [label="Step 8: Set phase=audit\nExecute /ddd-audit"];
   report [label="Step 9: Set phase=done\nGenerate final report"];
 
+  classify -> is_scope;
+  is_scope -> parse [label="yes"];
+  is_scope -> auto_roadmap [label="no\n(natural language)"];
+  auto_roadmap -> confirm_roadmap -> parse;
   parse -> read_roadmap -> validate -> perm_check -> confirm -> create_state -> develop;
   develop -> update -> check;
   check -> develop [label="yes (Stop hook\nre-injects)"];
@@ -70,6 +78,43 @@ digraph ddd_auto {
 - If `phase=develop` → blocks exit, re-injects prompt to continue with next item
 - If `phase=audit` → blocks exit, re-injects prompt to run ddd-audit
 - If `phase=done` → allows exit (loop complete)
+
+---
+
+## Step 0: Classify Input
+
+Before parsing scope, determine whether the input is a roadmap reference or an unplanned requirement.
+
+**Classification logic** (check in order):
+
+1. **Scope tokens present?** — Arguments contain `P\d+` patterns (e.g., `P0`, `P1.2`, `P0.1.1`) or `--roadmap` flag → **skip to Step 1** (existing flow)
+2. **Roadmap file path?** — Arguments are a `.md` file path AND the file contains `- [ ]` checkboxes → treat as `--roadmap <path>`, **skip to Step 1**
+3. **Natural language requirement** — Arguments don't match above patterns → **Step 0a: Auto-Roadmap**
+
+### Step 0a: Auto-Roadmap
+
+The input is an unplanned requirement that needs a roadmap before batch execution.
+
+**Announce:**
+
+```
+Detected: unplanned requirement (no existing roadmap).
+Generating development roadmap before execution...
+```
+
+**Execute:**
+
+1. Invoke `/ddd-roadmap <user's requirement>` to generate a structured roadmap
+2. After roadmap generation completes, present the result to the user:
+   ```
+   Roadmap generated at docs/roadmap/. [N] items across [M] phases.
+
+   Review the roadmap and confirm to begin auto-execution?
+   ```
+3. **Wait for user confirmation** — this is the one pause point before batch execution begins
+4. After confirmation, set `--roadmap` to the generated roadmap path and continue to **Step 1**
+
+If the user requests changes to the roadmap, re-run `/ddd-roadmap` with adjusted input before proceeding.
 
 ---
 
