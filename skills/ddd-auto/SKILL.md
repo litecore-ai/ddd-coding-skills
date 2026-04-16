@@ -42,6 +42,14 @@ Automated roadmap execution: loop through `ddd-develop` for each item in a user-
 
 **Announce at start:** "Using ddd-auto to execute roadmap items [scope description]."
 
+## Bash Permission Rules
+
+`allowed-tools` matches the **first word** of each Bash command. To avoid permission blocking:
+- **NEVER** use variable assignment wrapping: `var=$(find ...)` — the first word becomes `var=...` which is not allowed
+- **DO** run commands directly: `find ... | wc -l` — the first word `find` is allowed
+- **NEVER** chain unrelated commands with `&&`/`;` — each subcommand is matched independently; use separate Bash calls instead
+- If you need to capture output, use separate Bash tool calls and reference results in your response
+
 ## Input Modes
 
 1. **Scoped** — `/ddd-auto P0.1.1 - P1.3.1, P2.1.1` executes specific items

@@ -45,6 +45,14 @@ Supports three input modes:
 - If roadmap item found: "Using ddd-develop to implement the next roadmap feature."
 - If asking user: "Using ddd-develop — no pending roadmap items found. What would you like to develop?"
 
+## Bash Permission Rules
+
+`allowed-tools` matches the **first word** of each Bash command. To avoid permission blocking:
+- **NEVER** use variable assignment wrapping: `var=$(find ...)` — the first word becomes `var=...` which is not allowed
+- **DO** run commands directly: `find ... | wc -l` — the first word `find` is allowed
+- **NEVER** chain unrelated commands with `&&`/`;` — each subcommand is matched independently; use separate Bash calls instead
+- If you need to capture output, use separate Bash tool calls and reference results in your response
+
 ## Execution Flow
 
 ```dot

@@ -23,6 +23,7 @@ allowed-tools:
   - Bash(cat:*)
   - Bash(ls:*)
   - Bash(jq:*)
+  - Bash(echo:*)
   - Edit
   - Write
   - Read
@@ -56,6 +57,12 @@ Prefer dedicated tools over Bash for file operations:
 - **Line counting**: Use Bash `wc -l` only when counting across many files; for individual files, Read and count
 
 Reserve Bash for commands that have no dedicated tool equivalent: `npm test`, `npx eslint`, `tsc --noEmit`, `wc -l`, `npm audit`, etc.
+
+**Bash permission rules**: `allowed-tools` matches the **first word** of each command. To avoid permission blocking:
+- **NEVER** use variable assignment wrapping: `var=$(find ...)` — the first word becomes `var=...` which is not allowed
+- **DO** run commands directly: `find ... | wc -l` — the first word `find` is allowed
+- **NEVER** chain unrelated commands with `&&`/`;` — each subcommand is matched independently; use separate Bash calls instead
+- If you need to capture output, use separate Bash tool calls and reference results in your response
 
 ## 8-Dimension Audit Matrix
 
