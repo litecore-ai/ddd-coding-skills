@@ -42,10 +42,13 @@ If both `--template` and `--ref` are provided, `--ref` takes precedence.
 ## Bash Permission Rules
 
 `allowed-tools` matches the **first word** of each Bash command. To avoid permission blocking:
-- **NEVER** use variable assignment wrapping: `var=$(find ...)` — the first word becomes `var=...` which is not allowed
-- **DO** run commands directly: `find ... | wc -l` — the first word `find` is allowed
-- **NEVER** chain unrelated commands with `&&`/`;` — each subcommand is matched independently; use separate Bash calls instead
-- If you need to capture output, use separate Bash tool calls and reference results in your response
+- **NEVER** use shell control structures: `for`, `while`, `if`, `case`, `select` — none are in the allowed list
+- **NEVER** use variable assignment wrapping: `var=$(find ...)` — the first word becomes `var=...`
+- **NEVER** use subshell wrapping: `(find ...)` or `{ find ...; }`
+- **DO** run commands directly: `find ... | wc -l` — pipes are OK, the first word `find` is matched
+- **DO** use separate Bash tool calls instead of combining commands with `&&`/`;`
+- **DO** prefer dedicated tools: use **Glob** instead of `find`, **Grep** instead of `grep`, **Read** instead of `cat`
+- For per-file iteration (e.g., LOC per file), use `find ... -exec wc -l {} +` or `wc -l path/**/*.ts` — NOT `for file in ...; do ...; done`
 
 ## Execution Flow
 
