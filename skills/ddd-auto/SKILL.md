@@ -56,7 +56,7 @@ digraph ddd_auto {
   perm_check [label="Step 4a: Permission pre-check\nVerify settings.local.json"];
   confirm [label="Step 4b: Display plan\nAsk user confirmation"];
   create_state [label="Step 5: Create state file\n.ddd-auto.local.md"];
-  develop [label="Step 6: Execute /ddd-develop\nfor current scope item"];
+  develop [label="Step 6: Dispatch Agent\nfor /ddd-develop"];
   update [label="Step 7: Update state file\n(completed/skipped, advance current)"];
   check [label="More items?" shape=diamond];
   audit [label="Step 8: Set phase=audit\nExecute /ddd-audit"];
@@ -291,27 +291,39 @@ policy_preset: "[preset name if provided, otherwise empty]"
 
 To create this file, use the Write tool to write the complete content to `.ddd-auto.local.md`.
 
-## Step 6: Execute /ddd-develop for Current Item
+## Step 6: Dispatch Agent for /ddd-develop
 
 Look at the `current` field in the state file. This is the sub-feature ID (e.g., `P0.1.1`) to develop next.
 
-Invoke ddd-develop with the specific item as an ad-hoc requirement. Frame it as:
+**Use the Agent tool** to dispatch a subagent that executes ddd-develop in isolated context. This prevents context accumulation across iterations — each ddd-develop cycle (30-80K tokens) stays inside the subagent, and only a ~200 token summary returns to the main session.
+
+### Agent Dispatch
+
+Call the Agent tool with this prompt (fill in `[current]`, `[sub-feature title and description]`, and policy if set):
 
 ```
-/ddd-develop Implement roadmap item [current]: [sub-feature title and description from roadmap]. This is part of an automated ddd-auto run.
+You are executing a single ddd-develop cycle as part of a ddd-auto batch run.
+
+[If policy set:] Decision policy for this implementation: [policy text]. When encountering design choices, apply this policy to choose autonomously without asking the user. Log key decisions in your commit messages.
+
+Execute: /ddd-develop Implement roadmap item [current]: [sub-feature title and description from roadmap]. This is part of an automated ddd-auto run.
+
+After ddd-develop completes (all 6 phases), report back with EXACTLY this format:
+
+STATUS: [DONE or BLOCKED]
+ITEM: [item ID, e.g. P0.1.1]
+COMMIT: [short SHA of final commit, or "none"]
+DECISIONS: [key decisions made, one per line, or "none"]
+BLOCKED_REASON: [reason if BLOCKED, or "none"]
 ```
 
-**Decision policy injection:** If a policy is set, prepend to the ddd-develop invocation:
+**Do not interfere with the subagent's ddd-develop workflow.** It will execute the full 6-phase cycle (LOCATE → PLAN → IMPLEMENT → AUDIT → VERIFY → COMPLETE) independently.
 
-```
-Decision policy for this implementation: [policy text]. When encountering design choices, apply this policy to choose autonomously without asking the user. Log key decisions in your commit messages.
-```
-
-**ddd-develop will execute its full 6-phase cycle** (LOCATE → PLAN → IMPLEMENT → AUDIT → VERIFY → COMPLETE) for this single item. Do not interfere with its workflow.
+**Why Agent instead of direct Skill invocation:** Each Agent runs in isolated context. The full ddd-develop cycle stays inside the subagent and does not pollute the main ddd-auto session. This keeps the main session lean — enabling reliable execution of 10+ items without context window pressure or degraded prompt cache hit rates.
 
 ## Step 7: Update State File After Each Item
 
-After ddd-develop completes (or reports BLOCKED):
+After the Agent returns its report (STATUS: DONE or BLOCKED), parse the structured fields (ITEM, COMMIT, DECISIONS, BLOCKED_REASON) and update the state file:
 
 ### If DONE:
 1. Add the current item to `completed` list in frontmatter

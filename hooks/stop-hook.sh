@@ -94,7 +94,7 @@ if [[ "$phase" == "develop" ]]; then
   SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION/$max_iterations | phase: develop | Escape then /ddd-auto-cleanup to stop"
 
   jq -n \
-    --arg reason "Continue ddd-auto: Read .ddd-auto.local.md to find the 'current' scope item. Execute /ddd-develop for that specific roadmap item. $POLICY_HINT After ddd-develop completes, update the state file: add completed item to 'completed' list (or 'skipped' if BLOCKED), advance 'current' to next incomplete scope item. If no scope items remain incomplete, set phase to 'audit'. Do NOT ask the user for confirmation — proceed automatically." \
+    --arg reason "Continue ddd-auto: Read .ddd-auto.local.md to find the 'current' scope item and its title/description from the roadmap. Dispatch an Agent (subagent) to execute /ddd-develop for that item — do NOT call /ddd-develop directly in this session. $POLICY_HINT Parse the Agent's returned report (STATUS, COMMIT, DECISIONS, BLOCKED_REASON) and update the state file: add completed item to 'completed' list (or 'skipped' if BLOCKED), advance 'current' to next incomplete scope item. If no scope items remain incomplete, set phase to 'audit'. Do NOT ask the user for confirmation — proceed automatically." \
     --arg msg "$SYSTEM_MSG" \
     '{"decision": "block", "reason": $reason, "systemMessage": $msg}'
   exit 0
