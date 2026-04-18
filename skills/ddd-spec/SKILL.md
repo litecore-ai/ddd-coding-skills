@@ -8,6 +8,7 @@ allowed-tools:
   - Read
   - Glob
   - Grep
+  - Agent
 ---
 
 # DDD Spec Generator
@@ -55,7 +56,8 @@ digraph ddd_spec {
   ask_user -> confirm;
   confirm -> read_ctx;
   read_ctx -> skip_check;
-  skip_check -> skip [label="yes"];
+  skip_check -> skip [label="yes\n(per feature area)"];
+  skip -> multi_check [label="continue with\nremaining areas"];
   skip_check -> multi_check [label="no"];
   multi_check -> dispatch [label="yes"];
   multi_check -> single [label="no"];
@@ -125,7 +127,7 @@ Gather all information needed to generate accurate specs.
 
 If a spec file already exists for a feature area AND its frontmatter contains `status: approved`:
 - Skip generation for that feature area
-- Report: `Spec for [feature area] already exists with status: approved. Skipping. Use --force to regenerate.`
+- Report: `Spec for [feature area] already exists with status: approved. Skipping. Delete the file to regenerate.`
 
 If the existing spec has `status: draft`, regenerate and overwrite it.
 

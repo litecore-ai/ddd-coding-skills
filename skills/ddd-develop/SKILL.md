@@ -841,7 +841,7 @@ When scanning, check for `- [ ]` first, fall back to lines without ✅ in emoji-
 | 2. PLAN | Scope analysis (blast radius + iteration detection) → implementation plan | Plan doc with TDD tasks; frozen targets + completion condition if iterative |
 | 3. IMPLEMENT | Subagent TDD execution | Working code + tests + commits |
 | 4. AUDIT | ddd-audit (incremental) | Zero findings |
-| 5. VERIFY | Lint + tests + build | Evidence of all passing |
+| 5. VERIFY | Lint + tests + build + spec compliance | Evidence of all passing + all ACs covered |
 | 6. COMPLETE | Update roadmap (if applicable) + commit + push | Updated roadmap (roadmap source) or clean commit (ad-hoc) |
 
 ## Integration
