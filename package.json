@@ -1,6 +1,6 @@
 {
   "name": "ddd-coding-skills",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "type": "module",
   "description": "DDD development skill suite: project initialization, roadmap generation, spec generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
   "keywords": [
