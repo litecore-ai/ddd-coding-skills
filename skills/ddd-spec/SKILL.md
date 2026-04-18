@@ -129,7 +129,7 @@ Gather all information needed to generate accurate specs.
 
 If a spec file already exists for a feature area AND its frontmatter contains `status: approved`:
 - Skip generation for that feature area
-- Report: `Spec for [feature area] already exists with status: approved. Skipping. Delete the file to regenerate.`
+- Report: `Spec for [feature area] already exists with status: approved. Skipping. Delete the file or change its status to draft to trigger regeneration on next run.`
 
 If the existing spec has `status: draft`, regenerate and overwrite it.
 
@@ -314,10 +314,12 @@ Write each generated spec to the `docs/specs/` directory.
 docs/specs/P{phase}.{area}-{slug}.md
 ```
 
-Where `{slug}` is the feature area name in kebab-case, e.g.:
-- `docs/specs/P0.1-user-authentication.md`
-- `docs/specs/P0.2-billing-integration.md`
-- `docs/specs/P1.3-notification-system.md`
+Where `{slug}` is the feature area title in kebab-case. **Slug algorithm:** lowercase the title, replace spaces and non-alphanumeric characters with hyphens, collapse consecutive hyphens, strip leading/trailing hyphens.
+
+Examples:
+- "User Authentication" → `docs/specs/P0.1-user-authentication.md`
+- "Billing & Integration" → `docs/specs/P0.2-billing-integration.md`
+- "Notification System" → `docs/specs/P1.3-notification-system.md`
 
 ### Directory Structure
 
