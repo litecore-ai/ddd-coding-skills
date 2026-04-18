@@ -271,7 +271,7 @@ Before generating a plan, verify that a behavior contract (spec) exists for this
 ### Spec Context for Phase 2
 
 When the gate passes, extract and carry forward:
-- **Acceptance criteria** relevant to the current item (from the Coverage table)
+- **Acceptance criteria** — match the current item's checkbox text against the "Roadmap Item" column in the spec's Coverage table; carry forward the AC IDs listed in that row (e.g., item "Build user registration endpoint" → row maps to AC-1, AC-2, AC-3)
 - **Data model definitions** (all models in the spec — shared across items)
 - **API contracts** relevant to the current item
 - **Boundary conditions** relevant to the current item
@@ -714,7 +714,7 @@ Run ALL of these and show output:
 
 After all technical verifications pass, check implementation against the spec:
 
-1. **Read the spec's Coverage table** for the current roadmap item
+1. **Read the spec's Coverage table** — find the row whose "Roadmap Item" column matches the current item's checkbox text. The matched row's "Acceptance Criteria" column lists the AC IDs to verify.
 2. **For each mapped AC**, verify the implementation covers the Given/When/Then:
    - Check that the "Given" precondition is set up in tests
    - Check that the "When" action is implemented in production code
@@ -760,6 +760,8 @@ After all technical verifications pass, check implementation against the spec:
   3. Commit the progress and exit cleanly
 
 This is a hard gate: **an iterative migration cannot be marked complete while the completion condition command returns > 0.** This prevents half-finished migrations from being lost.
+
+> **See also:** Phase 1 — Completion Detection (Iterative plan with frozen targets) describes the three detection states for this same mechanism: count == 0 (complete), count > 0 but < original (resume), count == original (not started).
 
 #### Standard Completion
 
