@@ -66,7 +66,9 @@ digraph roadmap_flow {
   align_ask -> decompose;
   decompose -> prioritize -> generate -> review;
   review -> generate [label="revisions"];
-  review -> commit [label="approved"];
+  review -> spec_prompt [label="approved"];
+  spec_prompt [label="6.5 Spec Generation\nPrompt"];
+  spec_prompt -> commit;
 }
 ```
 
@@ -375,6 +377,31 @@ Wait for user feedback. Iterate until approved.
 
 ---
 
+## Step 6.5 — Spec Generation Prompt
+
+After the user approves the roadmap, offer to generate behavior contracts (specs) for all feature areas:
+
+```
+Roadmap approved. Generate behavior contracts (specs) for all feature areas?
+
+Specs define acceptance criteria, data models, and API contracts per feature area.
+They anchor ddd-develop plans to prevent direction drift.
+
+Feature areas to spec:
+- P0.1 [title]
+- P0.2 [title]
+- P1.1 [title]
+...
+
+Generate specs? [Y/n]
+```
+
+**If yes:** Invoke `/ddd-spec` with the full scope (all feature areas across all phases). After spec generation completes, continue to Step 7.
+
+**If no:** Continue to Step 7. Specs can be generated later with `/ddd-spec`.
+
+---
+
 ## Step 7 — Commit
 
 After approval, commit the roadmap files:
@@ -431,3 +458,4 @@ Link design docs from the roadmap README and relevant phase documents.
 - **ddd-develop** — Scans phase docs for `- [ ]` items to locate next development target
 - **ddd-auto** — Reads phase docs to expand scope and execute items in batch
 - **ddd-audit** — References roadmap for functional completeness verification
+- **ddd-spec** — Feature area headings and items provide input for spec generation (Step 6.5 triggers this)
