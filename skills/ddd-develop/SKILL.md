@@ -710,6 +710,30 @@ Run ALL of these and show output:
 
 **Every verification must show actual command output.** "Should pass" is not evidence.
 
+### Spec Compliance Check (when spec is available)
+
+After all technical verifications pass, check implementation against the spec:
+
+1. **Read the spec's Coverage table** for the current roadmap item
+2. **For each mapped AC**, verify the implementation covers the Given/When/Then:
+   - Check that the "Given" precondition is set up in tests
+   - Check that the "When" action is implemented in production code
+   - Check that the "Then" outcome is asserted in tests
+3. **Report compliance:**
+   ```
+   Spec Compliance: docs/specs/P0.1-user-authentication.md
+   
+   - AC-1: User Registration ✓ — test_user_registration covers Given/When/Then
+   - AC-2: Duplicate Email Rejection ✓ — test_duplicate_email covers Given/When/Then
+   - AC-3: Password Strength ✗ — no test for passwords < 8 chars
+   
+   Result: 2/3 ACs covered. FAIL — AC-3 missing.
+   ```
+4. **If any AC is missing** → Do NOT mark the item complete. Implement the missing AC (return to Phase 3 for a focused TDD cycle on the missing criteria).
+5. **If all ACs covered** → Proceed to Phase 6.
+
+**Skip this check if** `source = "ad-hoc"` with `--skip-spec`, or no spec exists for the feature area.
+
 ### Red Flags — STOP
 
 - Using "should", "probably", "seems to"
