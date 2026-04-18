@@ -42,6 +42,7 @@ digraph ddd_develop {
   use_item [label="Present roadmap item"];
   ask_user [label="Ask user:\nWhat to develop?"];
   confirm [label="User confirms target"];
+  spec_gate [label="Phase 1.5: SPEC GATE\nVerify behavior contract"];
   plan [label="Phase 2: PLAN\nGenerate implementation plan"];
   implement [label="Phase 3: IMPLEMENT\nSubagent TDD execution"];
   audit [label="Phase 4: AUDIT\nDDD code review (incremental)"];
@@ -63,7 +64,7 @@ digraph ddd_develop {
   use_args -> confirm;
   use_item -> confirm;
   ask_user -> confirm;
-  confirm -> plan -> implement -> audit -> pass;
+  confirm -> spec_gate -> plan -> implement -> audit -> pass;
   pass -> fix [label="no"];
   fix -> audit [label="re-audit"];
   pass -> verify [label="yes"];
@@ -225,6 +226,55 @@ You can describe a feature, bug fix, refactoring task, or any other development 
 ```
 
 Once the user provides a description, treat it the same as **Mode A** (set `source = "ad-hoc"`) and present for confirmation.
+
+---
+
+## Phase 1.5: SPEC GATE
+
+Before generating a plan, verify that a behavior contract (spec) exists for this feature area. The spec anchors the plan to explicit acceptance criteria, preventing direction drift.
+
+**Skip this gate if:**
+- `source = "ad-hoc"` AND user passed `--skip-spec` flag
+- The development target is a bug fix or refactoring task (not a feature)
+
+### Gate Logic
+
+1. **Determine feature area** — Extract `P{phase}.{area}` from the development target:
+   - Roadmap item `P0.1.2` → feature area `P0.1`
+   - Roadmap item `P0.2.1` → feature area `P0.2`
+   - Ad-hoc requirement → attempt to match against existing roadmap feature areas; if no match, skip gate
+
+2. **Find spec file** — Search for `docs/specs/P{phase}.{area}-*.md` using Glob
+
+3. **Check spec status:**
+   - **File not found** → BLOCK:
+     ```
+     Spec not found for feature area P0.1.
+     
+     A behavior contract is required before development to prevent direction drift.
+     Run: /ddd-spec P0.1
+     Or pass --skip-spec to bypass this gate for ad-hoc work.
+     ```
+     Wait for user response. Do NOT proceed without spec or explicit bypass.
+   
+   - **File found, status: draft** → BLOCK:
+     ```
+     Spec for P0.1 exists but is still in draft status.
+     
+     File: docs/specs/P0.1-user-authentication.md
+     Please review and approve the spec before development.
+     ```
+     Wait for user response.
+   
+   - **File found, status: approved** → PASS. Read the spec file and pass its content to Phase 2.
+
+### Spec Context for Phase 2
+
+When the gate passes, extract and carry forward:
+- **Acceptance criteria** relevant to the current item (from the Coverage table)
+- **Data model definitions** (all models in the spec — shared across items)
+- **API contracts** relevant to the current item
+- **Boundary conditions** relevant to the current item
 
 ---
 
@@ -758,6 +808,7 @@ When scanning, check for `- [ ]` first, fall back to lines without ✅ in emoji-
 | Phase | What | Key Output |
 |-------|------|------------|
 | 1. LOCATE | Find development target (args / roadmap / ask user); resume iterative migrations via frozen targets | Confirmed development target + source type |
+| 1.5. SPEC GATE | Verify approved spec exists for feature area; block if missing | Spec context (ACs, data models, API contracts) for Phase 2 |
 | 2. PLAN | Scope analysis (blast radius + iteration detection) → implementation plan | Plan doc with TDD tasks; frozen targets + completion condition if iterative |
 | 3. IMPLEMENT | Subagent TDD execution | Working code + tests + commits |
 | 4. AUDIT | ddd-audit (incremental) | Zero findings |
