@@ -2,29 +2,31 @@
 
 [English](README.md) | 中文
 
-面向编码智能体的完整领域驱动设计（DDD）开发工作流。五个可组合的技能覆盖完整生命周期：初始化、规划、实现、审计和自动化批量执行。
+面向编码智能体的完整领域驱动设计（DDD）开发工作流。六个可组合的技能覆盖完整生命周期：初始化、规划、规格生成、实现、审计和自动化批量执行。
 
 ## 工作原理
 
-五个技能构成一条流水线：
+六个技能构成一条流水线：
 
 ```
-ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
- (初始化)      (规划)          (实现)           (审计)
-                                    ↑               ↑
-                                ddd-auto ───────────┘
-                               (自动化)
+ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
+ (初始化)      (规划)          (规格)       (实现)           (审计)
+                                                ↑               ↑
+                                            ddd-auto ───────────┘
+                                           (自动化)
 ```
 
 **ddd-init** 为新项目初始化 DDD 架构结构，或为现有项目生成重构路线图。创建目录结构、标准化 `docs/` 布局，并将架构约束写入 `CLAUDE.md`。支持内置模板（`/ddd-init --template fastlayer`）或自定义参考架构（`/ddd-init --ref <路径>`）。
 
-**ddd-roadmap** 分析项目结构，通过对话对齐产品目标，将功能分解为可执行的条目，并按优先级组织为多个阶段（P0-P3）。支持范围化路线图（`/ddd-roadmap 计费系统`）或全项目规划。
+**ddd-roadmap** 分析项目结构，通过对话对齐产品目标，将功能分解为可执行的条目，并按优先级组织为多个阶段（P0-P3）。支持范围化路线图（`/ddd-roadmap 计费系统`）或全项目规划。路线图审批后，提示为所有功能领域生成规格。
 
-**ddd-develop** 自动选取下一个未完成的路线图条目，生成实现计划，通过子智能体以 TDD 方式执行，运行审计并修复所有问题，最后提交代码。也支持非路线图的即时需求（`/ddd-develop 添加用户认证`）。全流程自包含，无外部技能依赖。
+**ddd-spec** 按功能领域（Feature Area）生成结构化行为契约，包含编号的验收标准（Given/When/Then）、数据模型、API 契约和边界条件。通过将 `ddd-develop` 的计划锚定到可测试的验收标准来防止方向漂移。支持单个（`/ddd-spec P0.1`）、范围（`/ddd-spec P0.1 - P0.3`）或阶段级（`/ddd-spec P0`）生成，每个功能领域使用独立子智能体。
+
+**ddd-develop** 自动选取下一个未完成的路线图条目，验证已批准的规格是否存在（规格门禁），生成锚定到规格验收标准的实现计划，通过子智能体以 TDD 方式执行，运行审计，验证规格合规性，最后提交代码。也支持非路线图的即时需求（`/ddd-develop 添加用户认证`）。
 
 **ddd-audit** 基于 DDD 架构标准执行 8 维度审计：设计、架构、质量、安全、测试、集成、性能、可观测性。支持范围化审计（`/ddd-audit src/domain/`）或全项目审计。
 
-**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后对已完成条目运行范围化 `ddd-audit`。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
+**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后对已完成条目运行范围化 `ddd-audit`。执行前检查规格覆盖率——缺失的规格可即时生成。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
 
 ## 技能一览
 
@@ -32,6 +34,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 |------|------|--------|
 | **ddd-init** | 初始化或重构项目为 DDD 架构 | `/ddd-init`、`/ddd-init --template fastlayer`、`/ddd-init --ref <路径>` |
 | **ddd-roadmap** | 生成分阶段开发路线图 | `/ddd-roadmap`、`/ddd-roadmap <范围>` |
+| **ddd-spec** | 按功能领域生成行为契约 | `/ddd-spec`、`/ddd-spec P0.1`、`/ddd-spec P0` |
 | **ddd-develop** | 实现路线图条目或即时需求 | `/ddd-develop`、`/ddd-develop <需求>` |
 | **ddd-audit** | 8 维度 DDD 架构审计 | `/ddd-audit`、`/ddd-audit <范围>` |
 | **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/ddd-auto-cleanup` |
@@ -65,15 +68,33 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 
 **输出**：标准化 checkbox 格式路线图，存放于 `docs/roadmap/`。
 
+### ddd-spec
+
+按功能领域生成结构化行为契约（规格）。每个规格定义验收标准、数据模型、API 契约、边界条件和覆盖映射表，将每个路线图条目关联到具体的 AC 编号。
+
+三种输入模式：
+- `/ddd-spec P0.1` — 单个功能领域
+- `/ddd-spec P0.1 - P0.3` 或 `/ddd-spec P0` — 范围或整个阶段
+- 批量 — 由 ddd-roadmap 在路线图审批后触发
+
+关键特性：
+- **子智能体隔离** — 每个功能领域一个独立 Agent，防止注意力衰减
+- **AC 编号制** — `AC-1, AC-2...` 采用 Given/When/Then 格式，被 ddd-develop 引用
+- **状态门禁** — `draft` → `approved`；ddd-develop 在无已批准规格时阻塞
+- **Superpowers 集成** — 扫描 `docs/superpowers/specs/` 作为 PRD 级别输入
+
+**输出**：结构化规格文件，存放于 `docs/specs/P{phase}.{area}-{slug}.md`。
+
 ### ddd-develop
 
-自包含的端到端开发工作流，包含 6 个阶段：
+自包含的端到端开发工作流，包含 7 个阶段：
 
 1. **LOCATE** — 确定开发目标（命令参数 / 路线图 / 询问用户）
-2. **PLAN** — 生成细粒度实现计划，包含 TDD 步骤
+1.5. **SPEC GATE** — 验证已批准的规格是否存在；缺失则阻塞
+2. **PLAN** — 生成锚定到规格验收标准的实现计划
 3. **IMPLEMENT** — 每个任务启动一个子智能体，按 RED-GREEN-REFACTOR 循环执行，配备规格审查员 + 代码质量审查员
 4. **AUDIT** — 以增量模式运行 ddd-audit，修复所有发现（所有严重级别）
-5. **VERIFY** — 运行 lint、类型检查、完整测试套件，提供实际输出证据
+5. **VERIFY** — 运行 lint、类型检查、完整测试套件、规格合规检查，提供实际输出证据
 6. **COMPLETE** — 更新路线图（如适用）、提交代码、推送（需用户确认）
 
 三种输入模式：
@@ -81,7 +102,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 - `/ddd-develop` — 选取路线图中下一个未完成条目
 - `/ddd-develop` — 交互模式（路线图已完成时主动询问）
 
-**内置能力**：TDD（RED-GREEN-REFACTOR）、实现计划生成、子智能体编排（实现者 + 规格审查员 + 质量审查员）、完成前验证。
+**内置能力**：TDD（RED-GREEN-REFACTOR）、实现计划生成、子智能体编排（实现者 + 规格审查员 + 质量审查员）、规格合规验证、完成前验证。
 
 ### ddd-audit
 
@@ -169,6 +190,7 @@ git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-s
 # 安装为个人技能（所有项目可用）
 cp -r /tmp/ddd-coding-skills/skills/ddd-init ~/.claude/skills/ddd-init
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
+cp -r /tmp/ddd-coding-skills/skills/ddd-spec ~/.claude/skills/ddd-spec
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit ~/.claude/skills/ddd-audit
 cp -r /tmp/ddd-coding-skills/skills/ddd-auto ~/.claude/skills/ddd-auto
@@ -176,6 +198,7 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-auto ~/.claude/skills/ddd-auto
 # 或安装为项目级技能（随项目版本控制）
 cp -r /tmp/ddd-coding-skills/skills/ddd-init .claude/skills/ddd-init
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap .claude/skills/ddd-roadmap
+cp -r /tmp/ddd-coding-skills/skills/ddd-spec .claude/skills/ddd-spec
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
 cp -r /tmp/ddd-coding-skills/skills/ddd-auto .claude/skills/ddd-auto
@@ -221,6 +244,7 @@ claude plugin update ddd-coding-skills@ddd-coding-skills
 cd /tmp/ddd-coding-skills && git pull
 cp -r skills/ddd-init ~/.claude/skills/ddd-init
 cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
+cp -r skills/ddd-spec ~/.claude/skills/ddd-spec
 cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r skills/ddd-audit ~/.claude/skills/ddd-audit
 cp -r skills/ddd-auto ~/.claude/skills/ddd-auto
@@ -331,12 +355,15 @@ You: /ddd-audit --diff HEAD~3
 # 第一步：规划项目
 You: /ddd-roadmap
 
-# 第二步：逐个实现功能
+# 第二步：为所有功能领域生成行为契约（规格）
+You: /ddd-spec P0
+
+# 第三步：逐个实现功能（锚定到规格）
 You: /ddd-develop
 You: /ddd-develop
 You: /ddd-develop
 
-# 第三步：发布前做最终审计
+# 第四步：发布前做最终审计
 You: /ddd-audit
 ```
 
@@ -392,6 +419,8 @@ ddd-coding-skills/
 │   │   └── SKILL.md         # DDD 项目初始化
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # 路线图生成
+│   ├── ddd-spec/
+│   │   └── SKILL.md         # 行为契约生成
 │   ├── ddd-develop/
 │   │   └── SKILL.md         # 开发工作流
 │   ├── ddd-auto/

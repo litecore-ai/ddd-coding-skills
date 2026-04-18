@@ -2,29 +2,31 @@
 
 English | [中文](README.zh-CN.md)
 
-A complete Domain-Driven Design development workflow for coding agents. Five composable skills that cover the full lifecycle: initialization, planning, implementing, auditing, and automated batch execution.
+A complete Domain-Driven Design development workflow for coding agents. Six composable skills that cover the full lifecycle: initialization, planning, spec generation, implementing, auditing, and automated batch execution.
 
 ## How It Works
 
-The five skills form a pipeline:
+The six skills form a pipeline:
 
 ```
-ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
- (init)       (plan)          (implement)      (audit)
-                                   ↑               ↑
-                               ddd-auto ───────────┘
-                              (automate)
+ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
+ (init)       (plan)          (spec)       (implement)      (audit)
+                                                ↑               ↑
+                                            ddd-auto ───────────┘
+                                           (automate)
 ```
 
 **ddd-init** initializes a new project with DDD architecture or generates a refactoring roadmap for existing projects. Creates the directory structure, standardized `docs/` layout, and writes architecture constraints to `CLAUDE.md`. Supports built-in templates (`/ddd-init --template fastlayer`) or custom reference architectures (`/ddd-init --ref <path>`).
 
-**ddd-roadmap** analyzes your project and generates a structured, phased roadmap with actionable checkbox items. Supports scoped roadmaps (`/ddd-roadmap billing system`) or full-project planning.
+**ddd-roadmap** analyzes your project and generates a structured, phased roadmap with actionable checkbox items. Supports scoped roadmaps (`/ddd-roadmap billing system`) or full-project planning. After roadmap approval, offers to generate specs for all feature areas.
 
-**ddd-develop** picks the next unchecked roadmap item, generates an implementation plan, executes it with TDD via subagents, runs an audit, fixes all findings, and commits. Also supports ad-hoc requirements (`/ddd-develop add user authentication`). Self-contained — no external skill dependencies.
+**ddd-spec** generates structured behavior contracts per feature area with numbered acceptance criteria (Given/When/Then), data models, API contracts, and boundary conditions. Prevents direction drift by anchoring `ddd-develop` plans to testable criteria. Supports single (`/ddd-spec P0.1`), range (`/ddd-spec P0.1 - P0.3`), or phase-level (`/ddd-spec P0`) generation with subagent isolation per feature area.
+
+**ddd-develop** picks the next unchecked roadmap item, verifies an approved spec exists (spec gate), generates an implementation plan anchored to spec acceptance criteria, executes it with TDD via subagents, runs an audit, verifies spec compliance, and commits. Also supports ad-hoc requirements (`/ddd-develop add user authentication`).
 
 **ddd-audit** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability. Supports scoped audits (`/ddd-audit src/domain/`) or full-project audits.
 
-**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a scoped `ddd-audit` on completed items. Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Uses a Stop hook for reliable looping with configurable decision policies.
+**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a scoped `ddd-audit` on completed items. Checks spec coverage before starting — missing specs can be generated on the fly. Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Uses a Stop hook for reliable looping with configurable decision policies.
 
 ## Skills
 
@@ -32,6 +34,7 @@ ddd-init  →  ddd-roadmap  →  ddd-develop  →  ddd-audit
 |-------|---------|---------|
 | **ddd-init** | Initialize or refactor project to DDD architecture | `/ddd-init`, `/ddd-init --template fastlayer`, `/ddd-init --ref <path>` |
 | **ddd-roadmap** | Generate phased development roadmap | `/ddd-roadmap`, `/ddd-roadmap <scope>` |
+| **ddd-spec** | Generate behavior contracts per feature area | `/ddd-spec`, `/ddd-spec P0.1`, `/ddd-spec P0` |
 | **ddd-develop** | Implement next roadmap item or ad-hoc requirement | `/ddd-develop`, `/ddd-develop <requirement>` |
 | **ddd-audit** | 8-dimension DDD architecture audit | `/ddd-audit`, `/ddd-audit <scope>` |
 | **ddd-auto** | Automated batch roadmap execution + audit | `/ddd-auto`, `/ddd-auto <scope>`, `/ddd-auto-cleanup` |
@@ -65,15 +68,33 @@ Three input modes:
 
 Output: standardized checkbox-format roadmap in `docs/roadmap/`.
 
+### ddd-spec
+
+Generates structured behavior contracts (specs) per feature area. Each spec defines acceptance criteria, data models, API contracts, boundary conditions, and a coverage mapping table that links every roadmap item to specific ACs.
+
+Three input modes:
+- `/ddd-spec P0.1` — single feature area
+- `/ddd-spec P0.1 - P0.3` or `/ddd-spec P0` — range or entire phase
+- Batch — triggered by ddd-roadmap after roadmap approval
+
+Key features:
+- **Subagent isolation** — one Agent per feature area prevents attention degradation
+- **AC numbering** — `AC-1, AC-2...` in Given/When/Then format, referenced by ddd-develop
+- **Status gating** — `draft` → `approved`; ddd-develop blocks without an approved spec
+- **Superpowers integration** — scans `docs/superpowers/specs/` as PRD-level input
+
+Output: structured specs in `docs/specs/P{phase}.{area}-{slug}.md`.
+
 ### ddd-develop
 
-Self-contained development workflow with 6 phases:
+Self-contained development workflow with 7 phases:
 
 1. **LOCATE** — Find development target (args / roadmap / ask user)
-2. **PLAN** — Generate bite-sized implementation plan with TDD steps
+1.5. **SPEC GATE** — Verify approved spec exists; block if missing
+2. **PLAN** — Generate implementation plan anchored to spec acceptance criteria
 3. **IMPLEMENT** — Subagent-per-task execution with spec + quality review loops
 4. **AUDIT** — Incremental DDD code review, fix ALL findings (all severity levels)
-5. **VERIFY** — Lint, type check, full test suite with evidence
+5. **VERIFY** — Lint, type check, full test suite, spec compliance check with evidence
 6. **COMPLETE** — Update roadmap (if applicable), commit, push (with user confirmation)
 
 Three input modes:
@@ -81,7 +102,7 @@ Three input modes:
 - `/ddd-develop` — pick next unchecked roadmap item
 - `/ddd-develop` — interactive (asks what to develop when no roadmap items remain)
 
-Built-in: TDD (RED-GREEN-REFACTOR), implementation planning, subagent orchestration (implementer + spec reviewer + quality reviewer), and verification-before-completion.
+Built-in: TDD (RED-GREEN-REFACTOR), implementation planning, subagent orchestration (implementer + spec reviewer + quality reviewer), spec compliance verification, and verification-before-completion.
 
 ### ddd-audit
 
@@ -160,6 +181,7 @@ git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-s
 # Install as personal skills (available in all projects)
 cp -r /tmp/ddd-coding-skills/skills/ddd-init ~/.claude/skills/ddd-init
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
+cp -r /tmp/ddd-coding-skills/skills/ddd-spec ~/.claude/skills/ddd-spec
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit ~/.claude/skills/ddd-audit
 cp -r /tmp/ddd-coding-skills/skills/ddd-auto ~/.claude/skills/ddd-auto
@@ -167,6 +189,7 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-auto ~/.claude/skills/ddd-auto
 # Or install as project-specific skills (version-controlled with your project)
 cp -r /tmp/ddd-coding-skills/skills/ddd-init .claude/skills/ddd-init
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap .claude/skills/ddd-roadmap
+cp -r /tmp/ddd-coding-skills/skills/ddd-spec .claude/skills/ddd-spec
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
 cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
 cp -r /tmp/ddd-coding-skills/skills/ddd-auto .claude/skills/ddd-auto
@@ -212,6 +235,7 @@ Restart Claude Code after updating.
 cd /tmp/ddd-coding-skills && git pull
 cp -r skills/ddd-init ~/.claude/skills/ddd-init
 cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
+cp -r skills/ddd-spec ~/.claude/skills/ddd-spec
 cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
 cp -r skills/ddd-audit ~/.claude/skills/ddd-audit
 cp -r skills/ddd-auto ~/.claude/skills/ddd-auto
@@ -322,12 +346,15 @@ A typical end-to-end workflow:
 # Step 1: Plan your project
 You: /ddd-roadmap
 
-# Step 2: Implement features one by one
+# Step 2: Generate behavior contracts (specs) for all feature areas
+You: /ddd-spec P0
+
+# Step 3: Implement features one by one (spec-anchored)
 You: /ddd-develop
 You: /ddd-develop
 You: /ddd-develop
 
-# Step 3: Run a final audit before release
+# Step 4: Run a final audit before release
 You: /ddd-audit
 ```
 
@@ -383,6 +410,8 @@ ddd-coding-skills/
 │   │   └── SKILL.md         # DDD project initialization
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # Roadmap generation
+│   ├── ddd-spec/
+│   │   └── SKILL.md         # Behavior contract generation
 │   ├── ddd-develop/
 │   │   └── SKILL.md         # Development workflow
 │   ├── ddd-auto/
