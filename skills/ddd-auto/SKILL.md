@@ -55,6 +55,7 @@ digraph ddd_auto {
   validate [label="Step 3: Filter completed items\nValidate scope is non-empty"];
   perm_check [label="Step 4a: Permission pre-check\nVerify settings.local.json"];
   confirm [label="Step 4b: Display plan\nAsk user confirmation"];
+  spec_check [label="Step 4.5: Spec coverage\nVerify specs exist"];
   create_state [label="Step 5: Create state file\n.ddd-auto.local.md"];
   develop [label="Step 6: Dispatch Agent\nfor /ddd-develop"];
   update [label="Step 7: Update state file\n(completed/skipped, advance current)"];
@@ -66,7 +67,8 @@ digraph ddd_auto {
   is_scope -> parse [label="yes"];
   is_scope -> auto_roadmap [label="no\n(natural language)"];
   auto_roadmap -> confirm_roadmap -> parse;
-  parse -> read_roadmap -> validate -> perm_check -> confirm -> create_state -> develop;
+
+  parse -> read_roadmap -> validate -> perm_check -> confirm -> spec_check -> create_state -> develop;
   develop -> update -> check;
   check -> develop [label="yes (Stop hook\nre-injects)"];
   check -> audit [label="no"];
@@ -254,6 +256,42 @@ Proceed?
 **If `--yes` was passed**, skip the confirmation and proceed directly to Step 5.
 
 **Otherwise**, wait for user confirmation. If the user says no or wants changes, adjust scope and re-present.
+
+## Step 4.5: Spec Coverage Check
+
+Before creating the state file and entering the execution loop, verify that behavior contracts (specs) exist for all feature areas in scope.
+
+### Check Logic
+
+1. **Extract unique feature areas** from the expanded scope list:
+   - `P0.1.1, P0.1.2, P0.2.1` → unique feature areas: `P0.1, P0.2`
+2. **For each feature area**, check `docs/specs/P{phase}.{area}-*.md`:
+   - File exists with `status: approved` → covered
+   - File exists with `status: draft` → not covered (draft doesn't count)
+   - File not found → not covered
+3. **If all covered** → proceed to Step 5
+4. **If any not covered** → present to user:
+
+```
+Spec coverage check:
+
+✓ P0.1 — docs/specs/P0.1-user-authentication.md (approved)
+✗ P0.2 — no spec found
+✗ P1.1 — docs/specs/P1.1-billing.md (draft, not approved)
+
+Missing approved specs for: P0.2, P1.1
+
+Options:
+1. Generate missing specs now (recommended) — runs /ddd-spec P0.2, P1.1
+2. Skip spec check and proceed — items will run without spec anchoring
+3. Remove uncovered items from scope — only execute spec-covered items
+```
+
+**If option 1:** Invoke `/ddd-spec` for the missing feature areas. After specs are generated and approved, re-run the coverage check.
+
+**If option 2:** Proceed to Step 5. Log a warning in the state file: `spec_coverage: partial`.
+
+**If option 3:** Remove items belonging to uncovered feature areas from the scope list. Re-display the execution plan (Step 4b) with the reduced scope.
 
 ## Step 5: Create State File
 
