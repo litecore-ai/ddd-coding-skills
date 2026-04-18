@@ -351,6 +351,8 @@ Save to `docs/plans/YYYY-MM-DD-<feature-name>.md`:
 **Architecture:** [2-3 sentences about approach]
 **Tech Stack:** [Key technologies]
 **Source:** [Roadmap: Phase / Feature Area / Item reference] or [Ad-hoc: user requirement summary]
+**Spec Source:** [docs/specs/P{x}.{y}-{slug}.md] or [N/A — ad-hoc with --skip-spec]
+**Acceptance Criteria:** [AC-1, AC-2, AC-3 — from spec Coverage table for this item]
 
 ---
 
@@ -376,7 +378,7 @@ Save to `docs/plans/YYYY-MM-DD-<feature-name>.md`:
 
 ---
 
-### Task 1: [Component Name]
+### Task 1: [Component Name] [AC-1, AC-3]
 
 **Files:**
 - Create: `exact/path/to/file.ts`
@@ -400,6 +402,8 @@ Expected: PASS
 `git commit -m "feat: [description]"`
 ```
 
+**AC Reference Rule:** When a spec is available, every task heading must list which acceptance criteria it implements in square brackets (e.g., `[AC-1, AC-3]`). The union of all task AC references must cover all ACs mapped to this roadmap item in the spec's Coverage table.
+
 ### Plan Quality Rules
 
 - **No placeholders**: Every step has actual code, actual commands, actual expected output
@@ -413,9 +417,10 @@ Expected: PASS
 ### Plan Self-Review
 
 After writing, check:
-1. **Spec coverage**: Does every requirement from the development target (roadmap item or ad-hoc requirement) have a task?
+1. **Spec coverage**: Does every AC mapped to this item (from the spec's Coverage table) have at least one task? List any gaps.
 2. **Placeholder scan**: Any "TBD", "TODO", "fill in", vague steps?
-3. **Type consistency**: Do names in later tasks match definitions in earlier tasks?
+3. **Type consistency**: Do names in later tasks match definitions in earlier tasks? Do data model field names match the spec's Data Models section?
+4. **AC completeness**: Is the union of all task AC references equal to the set of ACs mapped to this item? No missing, no extra.
 
 Fix issues inline. Then present plan to user for approval.
 
