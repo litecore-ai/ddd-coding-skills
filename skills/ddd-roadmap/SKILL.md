@@ -256,6 +256,21 @@ Organize items into phases by priority:
 
 ---
 
+### Roadmap Hierarchy Terminology
+
+> **Canonical terms** — all DDD skills use these consistently:
+>
+> | Heading | Term | Example |
+> |---------|------|---------|
+> | `# P[N]: Phase Name` | **Phase** | P0: Foundation |
+> | `## [N].M Feature Area Name` | **Feature Area** | 0.1 User Authentication |
+> | `### [N].M.K Sub-feature Name` | **Sub-feature** | 0.1.1 Email/Password Auth |
+> | `- [ ] Actionable item` | **Item** | Build user registration endpoint |
+>
+> ddd-develop executes one **sub-feature** (all its items) per cycle. ddd-spec generates one spec per **feature area**. ddd-auto expands scope to **sub-feature** level.
+
+---
+
 ## Step 5 — Generate Roadmap
 
 ### Output Location
@@ -397,7 +412,7 @@ Feature areas to spec:
 Generate specs? [Y/n]
 ```
 
-**If yes:** Invoke `/ddd-spec` with the full scope (all feature areas across all phases). After spec generation completes, continue to Step 7.
+**If yes:** Invoke `/ddd-spec` with the full scope (all feature areas across all phases). **Wait for spec generation to complete before continuing to Step 7** — do not proceed in parallel.
 
 **If no:** Continue to Step 7. Specs can be generated later with `/ddd-spec`.
 
