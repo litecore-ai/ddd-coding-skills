@@ -147,6 +147,7 @@ Parse the user's arguments to extract:
 1. Determine roadmap source:
    - If `--roadmap` points to a **directory**: read all `P[0-3]-*.md` files inside that directory
    - If `--roadmap` points to a **single file**: read that file only (treat it as a single-phase roadmap)
+   - **Fix-roadmap special case**: if the roadmap source is a file named `fix-roadmap.md` (from ddd-audit), read items as a flat ordered list of checkboxes in document order. Do not parse `## N Wave` headings as feature-area scope — iterate all `- [ ]` checkboxes sequentially.
    - If `--roadmap` not provided: read `docs/roadmap/P[0-3]-*.md` (default)
 2. For each file, extract the phase/feature-area/sub-feature hierarchy by parsing markdown headings:
    - `# P[N]: ...` → phase
@@ -325,7 +326,7 @@ policy_preset: "[preset name if provided, otherwise empty]"
 
 ```
 
-**session_id:** Leave empty (`""`). The `$CLAUDE_CODE_SESSION_ID` environment variable is not accessible from Bash subprocesses, so do NOT run any Bash command to read it. The Stop hook's session isolation check gracefully skips when session_id is empty — this is safe because the state file (`.ddd-auto.local.md`) is inherently single-session: only one ddd-auto loop can be active at a time, and `/ddd-auto-cleanup` clears it.
+**session_id:** Leave empty (`""`). Session isolation is **best-effort**: the `$CLAUDE_CODE_SESSION_ID` environment variable is not accessible from Bash subprocesses, so do NOT run any Bash command to read it. The Stop hook's session isolation check gracefully skips when session_id is empty. This is safe in practice because the state file (`.ddd-auto.local.md`) is inherently single-session — only one ddd-auto loop can be active at a time, and `/ddd-auto-cleanup` clears it. If a second Claude session starts while a loop is active, the Stop hook cannot distinguish sessions; use `/ddd-auto-cleanup` in the stale session to resolve.
 
 To create this file, use the Write tool to write the complete content to `.ddd-auto.local.md`.
 
