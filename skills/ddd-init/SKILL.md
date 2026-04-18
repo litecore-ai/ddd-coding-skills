@@ -182,7 +182,7 @@ Adapt directory paths based on the template/reference architecture used. When cr
 ### Step 6: Write CLAUDE.md
 
 If `CLAUDE.md` does not exist, create it. If it exists, check for an existing `## DDD Architecture` section:
-- If found, replace the entire section (from `## DDD Architecture` to the next `## ` heading or end of file)
+- If found, replace the entire section — match from the line `## DDD Architecture` (exact: `/^## DDD Architecture$/`) up to but not including the next line matching `/^## /` (any other H2 heading), or end of file if no subsequent H2 exists
 - If not found, append at the end
 
 The content is adapted based on the template used. For fastlayer:
