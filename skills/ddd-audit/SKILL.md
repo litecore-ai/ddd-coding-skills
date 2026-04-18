@@ -342,7 +342,7 @@ Generate `audit-report.md`:
 
 ## Step 8 — Fix Roadmap
 
-Generate fix roadmap in **ddd-develop/ddd-auto compatible format** (heading hierarchy + checkboxes).
+Generate fix roadmap as a **flat checkbox list grouped by severity**. ddd-auto consumes fix-roadmap items as a flat ordered list of checkboxes in document order — Wave/theme headings are for human readability and do not participate in scope hierarchy parsing.
 
 **Save to two locations:**
 1. `docs/roadmap/fix-roadmap.md` — primary, consumed by ddd-auto
