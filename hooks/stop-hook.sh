@@ -105,7 +105,7 @@ if [[ "$phase" == "audit" ]]; then
   SYSTEM_MSG="ddd-auto iteration $NEXT_ITERATION | phase: audit | Escape then /ddd-auto-cleanup to stop"
 
   jq -n \
-    --arg reason "Continue ddd-auto: Execute /ddd-audit (full project audit). After audit completes, update .ddd-auto.local.md: set phase to 'done'. Then generate the final ddd-auto execution report summarizing all completed items, skipped items, key decisions, and audit results." \
+    --arg reason "Continue ddd-auto: Execute /ddd-audit scoped to the files changed during this run. Read .ddd-auto.local.md for 'baseline_sha' and 'completed'; compute the file list with 'git diff --name-only <baseline_sha>..HEAD' and pass it to /ddd-audit (see Step 8 in ddd-auto SKILL.md for the exact invocation). If baseline_sha is empty, fall back to passing the completed item IDs. After audit completes, set phase to 'done' in .ddd-auto.local.md and generate the final ddd-auto execution report summarizing completed items, skipped items, key decisions, and audit results." \
     --arg msg "$SYSTEM_MSG" \
     '{"decision": "block", "reason": $reason, "systemMessage": $msg}'
   exit 0

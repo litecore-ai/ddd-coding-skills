@@ -53,8 +53,7 @@ digraph ddd_auto {
   parse [label="Step 1: Parse scope\n& options from arguments"];
   read_roadmap [label="Step 2: Read roadmap files\nExpand scope to item list"];
   validate [label="Step 3: Filter completed items\nValidate scope is non-empty"];
-  perm_check [label="Step 4a: Permission pre-check\nVerify settings.local.json"];
-  confirm [label="Step 4b: Display plan\nAsk user confirmation"];
+  confirm [label="Step 4: Display plan\nAsk user confirmation"];
   spec_check [label="Step 4.5: Spec coverage\nVerify specs exist"];
   create_state [label="Step 5: Create state file\n.ddd-auto.local.md"];
   develop [label="Step 6: Dispatch Agent\nfor /ddd-develop"];
@@ -68,7 +67,7 @@ digraph ddd_auto {
   is_scope -> auto_roadmap [label="no\n(natural language)"];
   auto_roadmap -> confirm_roadmap -> parse;
 
-  parse -> read_roadmap -> validate -> perm_check -> confirm -> spec_check -> create_state -> develop;
+  parse -> read_roadmap -> validate -> confirm -> spec_check -> create_state -> develop;
   develop -> update -> check;
   check -> develop [label="yes (Stop hook\nre-injects)"];
   check -> audit [label="no"];
@@ -113,8 +112,8 @@ Generating development roadmap before execution...
 
    Review the roadmap and confirm to begin auto-execution?
    ```
-3. **Wait for user confirmation** — this is the one pause point before batch execution begins
-4. After confirmation, set `--roadmap` to the generated roadmap path and continue to **Step 1**
+3. **Wait for user confirmation** — this is the one pause point before batch execution begins. **With `--yes`**, skip this confirmation and proceed directly.
+4. After confirmation (or immediately, under `--yes`), set `--roadmap` to the generated roadmap path and continue to **Step 1**
 
 If the user requests changes to the roadmap, re-run `/ddd-roadmap` with adjusted input before proceeding.
 
@@ -167,71 +166,9 @@ Parse the user's arguments to extract:
 3. If no incomplete items remain, inform the user: "All items in scope [scope] are already complete." and exit
 4. Build the final ordered list of sub-feature IDs to execute
 
-## Step 4: Permission Pre-Check & Display Plan
+## Step 4: Display Plan & Confirm
 
-### 4a: Permission Auto-Configuration
-
-> **Primary permissions come from `allowed-tools` in this skill's frontmatter** — most tools and Bash commands are pre-approved when this skill is invoked. The settings.local.json injection below is a **defense-in-depth fallback** for edge cases (e.g., dynamically-generated commands that don't match frontmatter patterns).
-
-Read `.claude/settings.local.json` (if it exists) and check whether `permissions.allow` includes the required Bash patterns.
-
-**Required permissions** (fallback set — complements frontmatter):
-
-```json
-[
-  "Write",
-  "Edit",
-  "WebSearch",
-  "WebFetch",
-  "Bash(mkdir:*)",
-  "Bash(cp:*)",
-  "Bash(mv:*)",
-  "Bash(rm:*)",
-  "Bash(chmod:*)",
-  "Bash(ls:*)",
-  "Bash(cat:*)",
-  "Bash(echo:*)",
-  "Bash(find:*)",
-  "Bash(sed:*)",
-  "Bash(touch:*)",
-  "Bash(bash:*)",
-  "Bash(npm:*)",
-  "Bash(npx:*)",
-  "Bash(pnpm:*)",
-  "Bash(bun:*)",
-  "Bash(yarn:*)",
-  "Bash(node:*)",
-  "Bash(python3:*)",
-  "Bash(git:*)",
-  "Bash(jq:*)",
-  "Bash(test:*)"
-]
-```
-
-**Auto-injection logic:**
-
-1. If `.claude/settings.local.json` does not exist → create it with `{ "permissions": { "allow": [...] } }` containing the full required list
-2. If the file exists → read it, compute which required permissions are missing from `permissions.allow`, and **merge** only the missing ones (append to the existing array, preserve everything already there)
-3. If all required permissions are already present → do nothing
-
-**After injection (if any permissions were added)**, display a summary:
-
-```
-✅ Permission auto-configured (.claude/settings.local.json)
-   Added [N] missing permissions for unattended execution.
-```
-
-If no changes were needed:
-
-```
-✅ Permissions adequate
-```
-
-**Toolchain detection (optional enhancement):** If the project contains `Cargo.toml`, also add `Bash(cargo:*)`. If it contains `go.mod`, add `Bash(go:*)`. If it contains `Makefile`, add `Bash(make:*)`.
-
-**Note:** `.claude/settings.local.json` is gitignored by convention (local to the developer's machine).
-
-### 4b: Display Plan & Confirm
+Primary permissions come from this skill's `allowed-tools` frontmatter — no persistent settings mutation is required. If a specific command is denied by the user's environment during the run, surface the error rather than auto-editing `settings.local.json`.
 
 Present the execution plan to the user:
 
@@ -249,7 +186,7 @@ ddd-auto execution plan:
 ...
 
 Each item will be developed via /ddd-develop (with TDD, audit, and verification).
-After all items complete, a full-project /ddd-audit will run.
+After all items complete, a scoped /ddd-audit will run over the files touched by this batch.
 
 Proceed?
 ```
@@ -292,7 +229,9 @@ Options:
 
 **If option 2:** Proceed to Step 5. Log a warning in the state file: `spec_coverage: partial`.
 
-**If option 3:** Remove items belonging to uncovered feature areas from the scope list. Re-display the execution plan (Step 4b) with the reduced scope.
+**If option 3:** Remove items belonging to uncovered feature areas from the scope list. Re-display the execution plan (Step 4) with the reduced scope.
+
+**`--yes` behavior:** with `--yes`, skip this interactive prompt and auto-select option 2 (proceed with `spec_coverage: partial` warning). This matches `--yes`'s "no human in the loop" contract.
 
 ## Step 5: Create State File
 
@@ -305,6 +244,7 @@ session_id: ""
 iteration: 1
 max_iterations: [N from --max-iterations or 50]
 started_at: "[current UTC timestamp in ISO 8601]"
+baseline_sha: "[output of `git rev-parse HEAD` at this moment, or empty string if not a git repo]"
 roadmap_path: "[--roadmap value, or 'docs/roadmap/' if not specified]"
 scope:
   - "P0.1.1"
@@ -326,26 +266,29 @@ policy_preset: "[preset name if provided, otherwise empty]"
 
 ```
 
-**session_id:** Leave empty (`""`). Session isolation is **best-effort**: the `$CLAUDE_CODE_SESSION_ID` environment variable is not accessible from Bash subprocesses, so do NOT run any Bash command to read it. The Stop hook's session isolation check gracefully skips when session_id is empty. This is safe in practice because the state file (`.ddd-auto.local.md`) is inherently single-session — only one ddd-auto loop can be active at a time, and `/ddd-auto-cleanup` clears it. If a second Claude session starts while a loop is active, the Stop hook cannot distinguish sessions; use `/ddd-auto-cleanup` in the stale session to resolve.
-
-To create this file, use the Write tool to write the complete content to `.ddd-auto.local.md`.
+**session_id:** leave as `""`. `$CLAUDE_CODE_SESSION_ID` is not accessible from Bash subprocesses, so do not try to read it. The single state file enforces single-session assumption; if a stale loop persists in another session, `/ddd-auto-cleanup` resolves it.
 
 ## Step 6: Dispatch Agent for /ddd-develop
 
 Look at the `current` field in the state file. This is the sub-feature ID (e.g., `P0.1.1`) to develop next.
 
-**Use the Agent tool** to dispatch a subagent that executes ddd-develop in isolated context. This prevents context accumulation across iterations — each ddd-develop cycle (30-80K tokens) stays inside the subagent, and only a ~200 token summary returns to the main session.
+**Use the Agent tool** to dispatch a subagent. Each ddd-develop cycle (30-80K tokens) stays inside the subagent and only a ~200 token summary returns to the main session, which keeps the main ddd-auto loop lean enough to reliably run 10+ items without context or cache-hit pressure.
 
 ### Agent Dispatch
 
-Call the Agent tool with this prompt (fill in `[current]`, `[sub-feature title and description]`, and policy if set):
+Call the Agent tool with this prompt (fill in `[current]`, `[roadmap_path]`, `[sub-feature title]`, and policy if set):
 
 ```
 You are executing a single ddd-develop cycle as part of a ddd-auto batch run.
 
 [If policy set:] Decision policy for this implementation: [policy text]. When encountering design choices, apply this policy to choose autonomously without asking the user. Log key decisions in your commit messages.
 
-Execute: /ddd-develop Implement roadmap item [current]: [sub-feature title and description from roadmap]. This is part of an automated ddd-auto run.
+Invoke the ddd-develop skill with args: `[current]` (roadmap scope token — this MUST be the sole argument so ddd-develop classifies the run as Mode B / roadmap-driven and executes Phase 6.1 to flip the checkbox).
+
+Context (do NOT include in the skill args — this is for your situational awareness only):
+- Roadmap file: [roadmap_path]
+- Sub-feature title: [sub-feature title from roadmap]
+- This is part of an automated ddd-auto run; do not prompt the user for confirmations.
 
 After ddd-develop completes (all 6 phases), report back with EXACTLY this format:
 
@@ -358,27 +301,33 @@ BLOCKED_REASON: [reason if BLOCKED, or "none"]
 
 **Do not interfere with the subagent's ddd-develop workflow.** It will execute the full 6-phase cycle (LOCATE → PLAN → IMPLEMENT → AUDIT → VERIFY → COMPLETE) independently.
 
-**Why Agent instead of direct Skill invocation:** Each Agent runs in isolated context. The full ddd-develop cycle stays inside the subagent and does not pollute the main ddd-auto session. This keeps the main session lean — enabling reliable execution of 10+ items without context window pressure or degraded prompt cache hit rates.
-
 ## Step 7: Update State File After Each Item
 
 After the Agent returns its report (STATUS: DONE or BLOCKED), parse the structured fields (ITEM, COMMIT, DECISIONS, BLOCKED_REASON) and update the state file:
 
 ### If DONE:
+
 1. Add the current item to `completed` list in frontmatter
 2. Append to Progress Log: `- [YYYY-MM-DD HH:MM] [item ID] — DONE (commit: [short SHA])`
 3. Record any key decisions: `  - Decision: [what was decided] (policy: [rationale])`
+4. **Sync the roadmap checkbox** (mandatory, see procedure below) — ddd-auto owns this, since the subagent's Phase 6.1 only runs when it classified as roadmap mode and cannot be relied on.
+
+**Roadmap sync procedure:**
+
+- *Standard roadmap* (item IDs match `P[N].M.K`): find the sub-feature heading `### N.M.K ...` in the roadmap file recorded during Step 2 (heading regex: `^### N\.M\.K(\s|$)` — the `P` prefix is dropped in headings). Flip every `- [ ]` to `- [x]` between that heading and the next `### ` (or EOF). Already-checked lines are left alone. If the heading is not found, append a warning to the Progress Log (`WARN roadmap sync skipped (heading not found)`) and continue — do not fail the loop.
+- *fix-roadmap.md* (flat checkbox list from ddd-audit): flip only the specific `- [ ]` line that was `current` this iteration, identified by its position in the ordered list built in Step 2.
+- Idempotent: safe to re-run. Phase-level status lines are not updated here.
 
 ### If BLOCKED/SKIPPED:
+
 1. Add the current item to `skipped` list in frontmatter
 2. Append to Progress Log: `- [YYYY-MM-DD HH:MM] [item ID] — SKIPPED (BLOCKED: [reason])`
 
 ### Advance to Next Item:
+
 1. Find the next item in `scope` that is NOT in `completed` and NOT in `skipped`
 2. Update `current` to that item's ID
 3. If no items remain → set `phase` to `"audit"` (the Stop hook will inject the audit prompt on next exit)
-
-**Use the Edit tool** to update the state file. Edit the YAML frontmatter fields and append to the Progress Log section.
 
 ## Step 8: Scoped Audit
 
@@ -386,18 +335,28 @@ When phase transitions to `audit`, the Stop hook will inject a prompt to run `/d
 
 Execute `/ddd-audit` scoped to the **completed items only** — not the entire project. Each ddd-develop cycle already audits its own item; this final audit focuses on **cross-module integration** between the items developed in this run.
 
-Construct the audit scope from the `completed` list in the state file. For example, if completed items are `P1.2.1, P1.2.2, P1.3.1`, invoke:
+Construct the audit scope from the files changed since the pre-run baseline (`baseline_sha` in the state file). Compute the file list with:
+
+```bash
+git diff --name-only <baseline_sha>..HEAD
+```
+
+Then invoke ddd-audit with that concrete file list plus the completed item IDs for context:
 
 ```
-/ddd-audit Audit the code changed by roadmap items [completed list]. Focus on cross-module integration, shared dependencies, and consistency between these items. Skip areas not touched by this run.
+/ddd-audit Audit only the files listed below. Focus on cross-module integration, shared dependencies, and consistency between roadmap items [completed list].
+
+Files:
+[paste the `git diff --name-only` output]
 ```
+
+If `baseline_sha` is empty (non-git repo), fall back to auditing by completed item IDs: `/ddd-audit P0.1.1, P0.1.2, P0.2.1`.
 
 Let ddd-audit run its pipeline on the scoped area:
-1. Scan files changed by the completed items (use `git diff` against the pre-run baseline)
-2. Generate scoped audit plan
-3. Execute phases (baseline → layers → integration → docs) for affected code only
-4. Generate final report with scores
-5. Generate fix roadmap
+1. Generate scoped audit plan from the provided file list
+2. Execute phases (layers → integration → docs) for affected code only
+3. Generate final report with scores
+4. Generate fix roadmap
 
 **Do NOT fix findings in this audit** — this is a final assessment, not the incremental audit-fix loop that ddd-develop does internally. The purpose is to verify integration quality across the items developed in this run.
 
@@ -452,14 +411,6 @@ Present this report to the user. The loop will end naturally — the Stop hook s
 
 ---
 
-## BLOCKED Handling
-
-When ddd-develop reports BLOCKED for a scope item:
-
-1. **Do NOT stop the loop.** Skip the item and continue.
-2. Update state file: add to `skipped`, advance `current`, log the reason.
-3. If ALL remaining scope items are BLOCKED (nothing left to develop), transition to `phase=audit` early.
-
 ## Cancellation
 
 The user can run `/ddd-auto-cleanup` after pressing Escape to:
@@ -470,7 +421,7 @@ The user can run `/ddd-auto-cleanup` after pressing Escape to:
 
 | Mechanism | Purpose |
 |-----------|---------|
-| `max_iterations` (default 50) | Prevent infinite loops |
+| `max_iterations` (default 50) | Prevent infinite loops. Enforced by the Stop hook, which increments `iteration` on each loop and exits+cleans up when `iteration >= max_iterations`. ddd-auto itself does not check this field. |
 | Session ID isolation | Only the originating session is trapped |
 | `/ddd-auto-cleanup` | Manual cleanup after interruption |
 | State file cleanup on `phase=done` | Stop hook deletes `.ddd-auto.local.md` on exit |
@@ -484,8 +435,8 @@ The user can run `/ddd-auto-cleanup` after pressing Escape to:
 - `jq` available on system (for hook JSON handling)
 
 **Invokes:**
-- **ddd-develop** (per-item, ad-hoc mode with specific roadmap item reference)
-- **ddd-audit** (full-project mode, after all develop items complete)
+- **ddd-develop** (per-item, roadmap mode — dispatched via Agent with the scope token as its sole arg; see Step 6)
+- **ddd-audit** (scoped to files touched by the `completed` list, after all develop items complete; see Step 8)
 
 **Consumes:**
 - Roadmap files from `docs/roadmap/P[0-3]-*.md` (generated by ddd-roadmap)
