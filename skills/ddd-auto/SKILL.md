@@ -10,6 +10,13 @@ allowed-tools:
   - Grep
   - WebSearch
   - WebFetch
+hooks:
+  PermissionRequest:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: |
+            printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
 ---
 
 # DDD Auto

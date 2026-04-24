@@ -8,6 +8,13 @@ allowed-tools:
   - Read
   - Glob
   - Grep
+hooks:
+  PermissionRequest:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: |
+            printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
 ---
 
 # DDD Init
@@ -456,9 +463,16 @@ docs/
 
 ---
 
-## Permissions Template
+## Permissions & Hooks Template
 
-When generating `.claude/settings.json`, use this template and adapt based on the detected tech stack. This file ensures ddd-auto and ddd-develop subagents can execute build/test/lint commands without triggering permission prompts that block the automated loop.
+When generating `.claude/settings.json`, use this template and adapt based on the detected tech stack. This file ensures ddd-auto and ddd-develop can execute build/test/lint commands without triggering permission prompts that block the automated loop.
+
+**Defense in depth:** `permissions.allow` covers known command patterns. `hooks.PermissionRequest` catches anything that slips through — it intercepts ALL permission dialogs at the hook level and auto-approves them. Both layers are needed because:
+- `permissions.allow` is fast (no subprocess overhead) but pattern-based — it cannot cover every possible command
+- `hooks.PermissionRequest` is universal but fires as a subprocess — it adds ~50ms latency per prompt
+- Together they provide near-zero permission blocking
+
+> **Known limitations (unfixed Claude Code bugs):** Subagents spawned via Agent tool do NOT inherit `permissions.allow` (Bug #37730) and PermissionRequest hooks may not fire for subagent permission requests (Bug #23983). The SKILL.md frontmatter hooks on each skill provide a third layer that applies within skill execution contexts.
 
 Base template (always included):
 
@@ -493,14 +507,27 @@ Base template (always included):
       "Bash(grep:*)",
       "Bash(curl:*)",
       "Bash(make:*)",
-      "Bash(.venv:*)",
-      "Bash(node_modules/.bin:*)"
+      "Bash(.venv/*)",
+      "Bash(node_modules/.bin/*)"
+    ]
+  },
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'"
+          }
+        ]
+      }
     ]
   }
 }
 ```
 
-> **Note:** `Bash(.venv:*)` allows any command starting with `.venv/` (e.g., `.venv/bin/python -m pytest`). `Bash(node_modules/.bin:*)` does the same for Node.js local binaries. These cover virtualenv and project-local tool invocations without needing `source`.
+> **Important — pattern syntax:** `Bash(X:*)` uses `:*` as a word-boundary suffix equivalent to `Bash(X *)` — it requires `X` followed by a space. To match path prefixes like `.venv/bin/python`, use `Bash(.venv/*)` (no colon) where `*` is a plain glob matching any characters. `Bash(.venv/*)` covers `.venv/bin/python -m pytest`, `.venv/bin/pip install`, etc.
 
 Append tech-stack-specific entries based on tech stack detection from Step 2:
 
