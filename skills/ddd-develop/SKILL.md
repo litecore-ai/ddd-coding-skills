@@ -510,6 +510,7 @@ If you have questions about requirements, approach, dependencies, or anything un
 - NEVER use glob patterns `[...]` in write operations
 - NEVER use `for` loops, pipes (`|`), or subshells (`$(...)`) in Bash commands — these trigger permission prompts
 - NEVER use bash `grep`, `find`, `cat`, `wc` — use the **Grep**, **Glob**, **Read** tools instead
+- NEVER use `source` to activate virtualenvs — invoke the venv binary directly: `.venv/bin/python -c "..."` or `.venv/bin/pip install ...`
 - Create directories with separate Bash calls: `mkdir -p path/to/dir1` then `mkdir -p path/to/dir2` (no `&&`)
 - For Next.js catch-all routes like `[...all]`, use Write tool directly
 - **Each Bash call must be a single, simple command** — one executable, no shell operators

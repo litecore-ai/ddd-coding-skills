@@ -252,15 +252,18 @@ Infrastructure ← ACL, Repository  # Shared infra consumed by outer layers
 - Immutability: prefer immutable data structures in domain layer
 ````
 
+Also generate `.claude/settings.json` using the **Permissions Template** section below. Adapt the Bash allowlist based on the detected tech stack — only include entries relevant to the project's language and tooling. If the file already exists, merge the new `permissions.allow` entries into the existing array (deduplicate).
+
 ### Step 7: Commit
 
 ```bash
-git add [list all created directories, .gitkeep files, and CLAUDE.md explicitly]
+git add [list all created directories, .gitkeep files, CLAUDE.md, and .claude/settings.json explicitly]
 git commit -m "feat: initialize DDD architecture structure
 
 - Created DDD layer directories ([template] template)
 - Created standardized docs/ structure
-- Added DDD Architecture section to CLAUDE.md"
+- Added DDD Architecture section to CLAUDE.md
+- Configured permissions in .claude/settings.json"
 ```
 
 ---
@@ -365,13 +368,14 @@ Same as scaffold mode.
 ### Step 9: Commit
 
 ```bash
-git add [list all created directories, .gitkeep files, CLAUDE.md, and docs/roadmap/ explicitly]
+git add [list all created directories, .gitkeep files, CLAUDE.md, docs/roadmap/, and .claude/settings.json explicitly]
 git commit -m "feat: add DDD architecture structure and refactoring roadmap
 
 - Created target DDD layer directories ([template] template)
 - Created standardized docs/ structure
 - Generated refactoring roadmap in docs/roadmap/
-- Added DDD Architecture section to CLAUDE.md"
+- Added DDD Architecture section to CLAUDE.md
+- Configured permissions in .claude/settings.json"
 ```
 
 ### Step 10: Suggest Next Step
@@ -452,6 +456,62 @@ docs/
 
 ---
 
+## Permissions Template
+
+When generating `.claude/settings.json`, use this template and adapt based on the detected tech stack. This file ensures ddd-auto and ddd-develop subagents can execute build/test/lint commands without triggering permission prompts that block the automated loop.
+
+Base template (always included):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Write",
+      "Edit",
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(find:*)",
+      "Bash(sed:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(sort:*)",
+      "Bash(touch:*)",
+      "Bash(chmod:*)",
+      "Bash(source:*)",
+      "Bash(bash:*)",
+      "Bash(git:*)",
+      "Bash(jq:*)",
+      "Bash(grep:*)",
+      "Bash(curl:*)",
+      "Bash(make:*)"
+    ]
+  }
+}
+```
+
+Append tech-stack-specific entries based on tech stack detection from Step 2:
+
+| Detected Stack | Additional Entries |
+|----------------|-------------------|
+| Python | `Bash(python:*)`, `Bash(python3:*)`, `Bash(pip:*)`, `Bash(pip3:*)` |
+| Node.js / TypeScript | `Bash(node:*)`, `Bash(npm:*)`, `Bash(npx:*)`, `Bash(pnpm:*)`, `Bash(yarn:*)`, `Bash(bun:*)` |
+| Go | `Bash(go:*)` |
+| Java / Kotlin | `Bash(mvn:*)`, `Bash(gradle:*)` |
+| Rust | `Bash(cargo:*)` |
+
+Also add `Bash(gh:*)` if GitHub CLI is available.
+
+---
+
 ## Integration
 
 **Pipeline position:** Entry point — runs before all other skills.
@@ -465,5 +525,6 @@ ddd-init → ddd-roadmap → ddd-develop/ddd-auto → ddd-audit
 - `docs/` structure (consumed by all skills for output)
 - CLAUDE.md architecture section (consumed by ddd-develop for plan generation, ddd-audit for compliance checking)
 - Refactoring roadmap in `docs/roadmap/` (consumed by ddd-develop/ddd-auto)
+- `.claude/settings.json` permissions configuration (prevents permission prompts during ddd-auto/ddd-develop)
 
-**Does NOT produce:** Any source code. Only directories, `.gitkeep` files, and documentation.
+**Does NOT produce:** Any source code. Only directories, `.gitkeep` files, configuration, and documentation.
