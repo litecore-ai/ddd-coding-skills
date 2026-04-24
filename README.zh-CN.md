@@ -26,7 +26,7 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 
 **ddd-audit** 基于 DDD 架构标准执行 8 维度审计：设计、架构、质量、安全、测试、集成、性能、可观测性。支持范围化审计（`/ddd-audit src/domain/`）或全项目审计。
 
-**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后对已完成条目运行范围化 `ddd-audit`。执行前检查规格覆盖率——缺失的规格可即时生成。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
+**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后对已完成条目运行范围化 `ddd-audit`。执行前检查规格覆盖率——缺失的规格可即时生成。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。支持自然语言输入自动生成路线图后执行。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
 
 ## 技能一览
 
@@ -37,7 +37,7 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 | **ddd-spec** | 按功能领域生成行为契约 | `/ddd-spec`、`/ddd-spec P0.1`、`/ddd-spec P0` |
 | **ddd-develop** | 实现路线图条目或即时需求 | `/ddd-develop`、`/ddd-develop <需求>` |
 | **ddd-audit** | 8 维度 DDD 架构审计 | `/ddd-audit`、`/ddd-audit <范围>` |
-| **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/ddd-auto-cleanup` |
+| **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/ddd-auto --roadmap <路径>`、`/ddd-auto-cleanup` |
 
 ### ddd-init
 
@@ -147,8 +147,11 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 - `/ddd-auto P0.1.1 - P1.3.1, P2.1.1` — 混合（范围 + 单项）
 - `/ddd-auto P0` — 整个阶段
 - `/ddd-auto` — 所有未完成的路线图条目
+- `/ddd-auto --roadmap path/to/roadmap/` — 自定义路线图目录或文件
+- `/ddd-auto <自然语言需求>` — 自动生成路线图后执行
 
 选项：
+- `--roadmap <路径>` — 自定义路线图目录或文件（覆盖默认的 `docs/roadmap/`）
 - `--yes` — 跳过确认直接开始（仍会显示执行计划）
 - `--policy <文本|预设>` — 自主决策策略。预设：`pragmatic`（默认，实用优先）、`strict-ddd`（严格 DDD）、`fast`（快速交付）
 - `--max-iterations <N>` — 安全上限（默认：50）
@@ -158,10 +161,12 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 特性：
 - 通过 Stop hook 实现可靠循环（无需手动重复调用）
 - 会话隔离（仅启动循环的会话受影响）
+- Auto-Roadmap — 传入自然语言需求，ddd-auto 先生成路线图再自动执行
 - 决策策略（预设或自由文本，用于自主设计决策）
 - 进度追踪与完整执行日志
+- 每完成一个条目自动同步路线图 checkbox
 - 遇到 BLOCKED 自动跳过
-- 范围化最终审计（仅审计已完成条目，减少大型项目的 token 消耗）
+- 基于预运行基线的 git diff 范围化审计（减少大型项目的 token 消耗）
 - 最终执行报告含审计结果
 
 ## 安装
@@ -406,9 +411,14 @@ You: /ddd-auto-cleanup
 ```
 ddd-coding-skills/
 ├── .claude-plugin/
+│   ├── marketplace.json     # Claude Code 插件市场条目
 │   └── plugin.json          # Claude Code 插件清单
 ├── .codex/
 │   └── INSTALL.md           # Codex CLI 安装指南
+├── docs/
+│   └── superpowers/         # 设计规格与实现计划
+│       ├── plans/           # 技能功能的实现计划
+│       └── specs/           # PRD 级别的设计规格
 ├── hooks/
 │   ├── hooks.json           # Stop hook 注册
 │   └── stop-hook.sh         # ddd-auto 循环引擎

@@ -26,7 +26,7 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 
 **ddd-audit** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability. Supports scoped audits (`/ddd-audit src/domain/`) or full-project audits.
 
-**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a scoped `ddd-audit` on completed items. Checks spec coverage before starting — missing specs can be generated on the fly. Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Uses a Stop hook for reliable looping with configurable decision policies.
+**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a scoped `ddd-audit` on completed items. Checks spec coverage before starting — missing specs can be generated on the fly. Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Accepts natural language input to auto-generate a roadmap before execution. Uses a Stop hook for reliable looping with configurable decision policies.
 
 ## Skills
 
@@ -37,7 +37,7 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 | **ddd-spec** | Generate behavior contracts per feature area | `/ddd-spec`, `/ddd-spec P0.1`, `/ddd-spec P0` |
 | **ddd-develop** | Implement next roadmap item or ad-hoc requirement | `/ddd-develop`, `/ddd-develop <requirement>` |
 | **ddd-audit** | 8-dimension DDD architecture audit | `/ddd-audit`, `/ddd-audit <scope>` |
-| **ddd-auto** | Automated batch roadmap execution + audit | `/ddd-auto`, `/ddd-auto <scope>`, `/ddd-auto-cleanup` |
+| **ddd-auto** | Automated batch roadmap execution + audit | `/ddd-auto`, `/ddd-auto <scope>`, `/ddd-auto --roadmap <path>`, `/ddd-auto-cleanup` |
 
 ### ddd-init
 
@@ -138,8 +138,11 @@ Scope syntax:
 - `/ddd-auto P0.1.1 - P1.3.1, P2.1.1` — mixed range + individual
 - `/ddd-auto P0` — entire phase
 - `/ddd-auto` — all incomplete roadmap items
+- `/ddd-auto --roadmap path/to/roadmap/` — custom roadmap directory or file
+- `/ddd-auto <natural language requirement>` — auto-generate roadmap then execute
 
 Options:
+- `--roadmap <path>` — Custom roadmap directory or file (overrides default `docs/roadmap/`)
 - `--yes` — Skip confirmation and start immediately (execution plan still displayed)
 - `--policy <text|preset>` — Decision policy for autonomous choices. Presets: `pragmatic` (default), `strict-ddd`, `fast`
 - `--max-iterations <N>` — Safety cap (default: 50)
@@ -149,10 +152,12 @@ Press Escape to interrupt, then `/ddd-auto-cleanup` to clean up state and see pr
 Features:
 - Reliable loop via Stop hook (no manual re-invocation needed)
 - Session isolation (only the session that started the loop is affected)
+- Auto-Roadmap — pass a natural language requirement and ddd-auto generates a roadmap first, then executes it
 - Decision policy (presets or free text for autonomous design choices)
 - Progress tracking with full execution log
+- Roadmap checkbox sync after each completed item
 - Automatic skip on BLOCKED items
-- Scoped final audit (completed items only, reducing token usage for large projects)
+- Scoped final audit via git diff against pre-run baseline (reducing token usage for large projects)
 - Final execution report with audit results
 
 ## Installation
@@ -397,9 +402,14 @@ You: /ddd-auto-cleanup
 ```
 ddd-coding-skills/
 ├── .claude-plugin/
+│   ├── marketplace.json     # Claude Code plugin marketplace entry
 │   └── plugin.json          # Claude Code plugin manifest
 ├── .codex/
 │   └── INSTALL.md           # Codex CLI installation guide
+├── docs/
+│   └── superpowers/         # Design specs & implementation plans
+│       ├── plans/           # Implementation plans for skill features
+│       └── specs/           # PRD-level design specs
 ├── hooks/
 │   ├── hooks.json           # Stop hook registration
 │   └── stop-hook.sh         # Loop engine for ddd-auto
