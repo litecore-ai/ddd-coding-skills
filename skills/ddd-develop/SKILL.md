@@ -506,14 +506,20 @@ If you have questions about requirements, approach, dependencies, or anything un
 5. Self-review before reporting
 
 ## Shell Safety — Avoiding Permission Prompts
-- NEVER use brace expansion `{a,b,c}` in any shell command
-- NEVER use glob patterns `[...]` in write operations
-- NEVER use `for` loops, pipes (`|`), or subshells (`$(...)`) in Bash commands — these trigger permission prompts
+
+Claude Code's permission system triggers prompts on shell operators (`&&`, `||`, `|`, `;`), redirections (`>`, `>>`, `2>/dev/null`, `2>&1`, `<`), subshells (`$(...)`, backticks), and `source`. **A single `&&` or redirection in a Bash call will block the entire automated loop.**
+
+Rules:
+- **Each Bash call = one simple command, no shell operators whatsoever**
+- NEVER use `&&`, `||`, `|`, `;` — chain logic in the skill orchestrator, not in shell
+- NEVER use redirections (`>`, `>>`, `<`, `2>/dev/null`, `2>&1`) — if output must be discarded, use `Bash(run_in_background=true)` or restructure
+- NEVER use `for`/`while` loops, subshells `$(...)`, or backticks in Bash commands
+- NEVER use brace expansion `{a,b,c}` or glob patterns `[...]`
+- NEVER use `source` to activate virtualenvs — invoke the venv binary directly: `.venv/bin/python -c "..."` (ensure `Bash(.venv/*:*)` is in the project's `.claude/settings.json`)
 - NEVER use bash `grep`, `find`, `cat`, `wc` — use the **Grep**, **Glob**, **Read** tools instead
-- NEVER use `source` to activate virtualenvs — invoke the venv binary directly: `.venv/bin/python -c "..."` or `.venv/bin/pip install ...`
-- Create directories with separate Bash calls: `mkdir -p path/to/dir1` then `mkdir -p path/to/dir2` (no `&&`)
+- Create directories with separate Bash calls: `mkdir -p path1` then `mkdir -p path2`
 - For Next.js catch-all routes like `[...all]`, use Write tool directly
-- **Each Bash call must be a single, simple command** — one executable, no shell operators
+- If a command needs to check whether a file/binary exists before acting, use the **Glob** or **Bash(ls:*)** tool to check first, then run the command in a separate Bash call
 
 ## Code Organization
 - Follow the file structure defined in the plan

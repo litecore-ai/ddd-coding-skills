@@ -492,11 +492,15 @@ Base template (always included):
       "Bash(jq:*)",
       "Bash(grep:*)",
       "Bash(curl:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Bash(.venv:*)",
+      "Bash(node_modules/.bin:*)"
     ]
   }
 }
 ```
+
+> **Note:** `Bash(.venv:*)` allows any command starting with `.venv/` (e.g., `.venv/bin/python -m pytest`). `Bash(node_modules/.bin:*)` does the same for Node.js local binaries. These cover virtualenv and project-local tool invocations without needing `source`.
 
 Append tech-stack-specific entries based on tech stack detection from Step 2:
 
