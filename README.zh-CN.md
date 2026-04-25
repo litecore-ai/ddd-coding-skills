@@ -400,6 +400,43 @@ You: [按 Escape 停止循环]
 You: /ddd-auto-cleanup
 ```
 
+## 常见问题
+
+### ddd-auto 被权限确认弹窗阻塞（Claude Code）
+
+**症状：** `ddd-auto` 或 `ddd-develop` 执行中弹出 "This command requires approval"，阻塞在 `grep`、`find`、`python` 等基础命令上。
+
+**原因：** Claude Code 存在两个已知 Bug，导致子智能体无法继承项目的权限设置：
+- **Bug #37730** — 通过 Agent 工具派生的子智能体不会继承项目级 `.claude/settings.json` 的权限
+- **Bug #23983** — 技能 SKILL.md 中定义的 `PermissionRequest` 钩子在子智能体中可能不触发
+
+`ddd-auto` 通过子智能体运行每个 `ddd-develop` 周期，这些子智能体启动时权限表为空，几乎所有操作都会触发确认弹窗。
+
+**解决方法 — 在全局设置中添加权限。** 项目级权限无法传递给子智能体，但全局级权限可以。运行以下一行命令：
+
+```bash
+python3 -c "
+import json, pathlib
+p = pathlib.Path.home() / '.claude' / 'settings.json'
+s = json.loads(p.read_text()) if p.exists() else {}
+s.setdefault('permissions', {}).setdefault('allow', [])
+for r in ['Bash(*)','Edit','Write','Read','Glob','Grep']:
+    if r not in s['permissions']['allow']: s['permissions']['allow'].append(r)
+p.write_text(json.dumps(s, indent=2) + '\n')
+print('Done:', p)
+"
+```
+
+或手动编辑 `~/.claude/settings.json`，添加：
+
+```json
+"permissions": {
+  "allow": ["Bash(*)", "Edit", "Write", "Read", "Glob", "Grep"]
+}
+```
+
+> **注意：** 这是机器级设置，对所有 Claude Code 项目生效。编辑后需重启会话。待 Claude Code 修复底层 Bug 后，此临时方案将移除。
+
 ## 要求
 
 - 支持子智能体的编码智能体 — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 或 [Codex CLI](https://github.com/openai/codex)

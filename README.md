@@ -391,6 +391,43 @@ You: [press Escape to stop the loop]
 You: /ddd-auto-cleanup
 ```
 
+## Troubleshooting
+
+### ddd-auto blocked by permission prompts (Claude Code)
+
+**Symptom:** `ddd-auto` or `ddd-develop` pauses with "This command requires approval" for basic commands like `grep`, `find`, or `python`.
+
+**Cause:** Two Claude Code bugs prevent subagents from inheriting your project's permission settings:
+- **Bug #37730** — Subagents (Agent tool) do NOT inherit project-level `.claude/settings.json` permissions
+- **Bug #23983** — `PermissionRequest` hooks defined in skill frontmatter may not fire for subagent requests
+
+Since `ddd-auto` dispatches subagents to run each `ddd-develop` cycle, those subagents start with a blank permission slate.
+
+**Fix — add permissions to global settings.** Project-level permissions don't reach subagents, but global-level ones do. Run this one-liner:
+
+```bash
+python3 -c "
+import json, pathlib
+p = pathlib.Path.home() / '.claude' / 'settings.json'
+s = json.loads(p.read_text()) if p.exists() else {}
+s.setdefault('permissions', {}).setdefault('allow', [])
+for r in ['Bash(*)','Edit','Write','Read','Glob','Grep']:
+    if r not in s['permissions']['allow']: s['permissions']['allow'].append(r)
+p.write_text(json.dumps(s, indent=2) + '\n')
+print('Done:', p)
+"
+```
+
+Or manually add to `~/.claude/settings.json`:
+
+```json
+"permissions": {
+  "allow": ["Bash(*)", "Edit", "Write", "Read", "Glob", "Grep"]
+}
+```
+
+> **Note:** This is a machine-wide setting — it applies to **all** Claude Code projects. Restart your session after editing. This workaround will be removed once Claude Code fixes the underlying bugs.
+
 ## Requirements
 
 - A coding agent with subagent support — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex CLI](https://github.com/openai/codex)
