@@ -26,7 +26,7 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 
 **ddd-audit** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability. Supports scoped audits (`/ddd-audit src/domain/`) or full-project audits.
 
-**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a scoped `ddd-audit` on completed items. Checks spec coverage before starting — missing specs can be generated on the fly. Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Accepts natural language input to auto-generate a roadmap before execution. Uses a Stop hook for reliable looping with configurable decision policies.
+**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a scoped `ddd-audit` on completed items. Auto-generates missing specs before starting (hard gate — use `--skip-spec` to bypass). Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Accepts natural language input to auto-generate a roadmap before execution. Uses a Stop hook for reliable looping with configurable decision policies.
 
 ## Skills
 
@@ -143,6 +143,7 @@ Scope syntax:
 
 Options:
 - `--roadmap <path>` — Custom roadmap directory or file (overrides default `docs/roadmap/`)
+- `--skip-spec` — Skip spec generation gate. Items proceed without behavior contracts. Use only for quick fixes or refactoring
 - `--yes` — Skip confirmation and start immediately (execution plan still displayed)
 - `--policy <text|preset>` — Decision policy for autonomous choices. Presets: `pragmatic` (default), `strict-ddd`, `fast`
 - `--max-iterations <N>` — Safety cap (default: 50)
@@ -150,6 +151,7 @@ Options:
 Press Escape to interrupt, then `/ddd-auto-cleanup` to clean up state and see progress summary.
 
 Features:
+- Spec coverage gate — auto-generates specs before development; `--skip-spec` to bypass
 - Reliable loop via Stop hook (no manual re-invocation needed)
 - Session isolation (only the session that started the loop is affected)
 - Auto-Roadmap — pass a natural language requirement and ddd-auto generates a roadmap first, then executes it

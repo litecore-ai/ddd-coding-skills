@@ -36,6 +36,7 @@ Automated roadmap execution: loop through `ddd-develop` for each item in a user-
 - `--roadmap <path>` — Path to a roadmap directory or single roadmap file. Overrides the default `docs/roadmap/` location. Accepts a directory (reads all `P[0-3]-*.md` files inside) or a single `.md` file.
 - `--policy <text|preset>` — Decision policy for autonomous choices (default: `pragmatic`)
 - `--max-iterations <N>` — Safety cap to prevent infinite loops (default: 50)
+- `--skip-spec` — Skip spec generation gate. Spec-less items proceed without behavior contracts. Use only for quick fixes or refactoring.
 - `--yes` — Skip the execution plan confirmation and start immediately
 
 ## Preset Decision Policies
@@ -61,7 +62,7 @@ digraph ddd_auto {
   read_roadmap [label="Step 2: Read roadmap files\nExpand scope to item list"];
   validate [label="Step 3: Filter completed items\nValidate scope is non-empty"];
   confirm [label="Step 4: Display plan\nAsk user confirmation"];
-  spec_check [label="Step 4.5: Spec coverage\nVerify specs exist"];
+  spec_check [label="Step 4.5: Spec coverage gate\nAuto-generate missing specs"];
   create_state [label="Step 5: Create state file\n.ddd-auto.local.md"];
   develop [label="Step 6: Dispatch Agent\nfor /ddd-develop"];
   update [label="Step 7: Update state file\n(completed/skipped, advance current)"];
@@ -134,7 +135,8 @@ Parse the user's arguments to extract:
 2. **--roadmap**: Path to a roadmap directory or single file. Default: `docs/roadmap/`
 3. **--policy**: Free text or preset name (`pragmatic`, `strict-ddd`, `fast`). Default: `pragmatic`. If the value matches a preset name exactly, set `policy_preset`; otherwise set `policy` (free text)
 4. **--max-iterations**: Integer, default 50
-5. **--yes**: Boolean flag, default false. Skip execution plan confirmation
+5. **--skip-spec**: Boolean flag, default false. Skip spec generation and proceed without behavior contracts
+6. **--yes**: Boolean flag, default false. Skip execution plan confirmation
 
 **Parsing rules:**
 - Scope tokens are `P` followed by digits and dots: `P[0-3]`, `P[0-3].[1-9]`, `P[0-3].[1-9].[1-9]`
@@ -202,43 +204,39 @@ Proceed?
 
 **Otherwise**, wait for user confirmation. If the user says no or wants changes, adjust scope and re-present.
 
-## Step 4.5: Spec Coverage Check
+## Step 4.5: Spec Coverage Gate
 
-Before creating the state file and entering the execution loop, verify that behavior contracts (specs) exist for all feature areas in scope.
+Before creating the state file and entering the execution loop, verify that behavior contracts (specs) exist for all feature areas in scope. **This is a hard gate** — specs are generated automatically when missing. The gate only bypasses with an explicit `--skip-spec` flag.
 
-### Check Logic
+### Gate Logic
 
-1. **Extract unique feature areas** from the expanded scope list:
+1. **Check for `--skip-spec` flag** — if present, log `spec_coverage: skipped` in the state file and proceed to Step 5. This is the only bypass.
+
+2. **Extract unique feature areas** from the expanded scope list:
    - `P0.1.1, P0.1.2, P0.2.1` → unique feature areas: `P0.1, P0.2`
-2. **For each feature area**, check `docs/specs/P{phase}.{area}-*.md`:
+
+3. **For each feature area**, check `docs/specs/P{phase}.{area}-*.md`:
    - File exists with `status: approved` → covered
    - File exists with `status: draft` → not covered (draft doesn't count)
    - File not found → not covered
-3. **If all covered** → proceed to Step 5
-4. **If any not covered** → present to user:
+
+4. **If all covered** → proceed to Step 5
+
+5. **If any not covered** → **auto-generate missing specs**:
 
 ```
-Spec coverage check:
+Spec coverage gate — missing specs detected:
 
 ✓ P0.1 — docs/specs/P0.1-user-authentication.md (approved)
 ✗ P0.2 — no spec found
 ✗ P1.1 — docs/specs/P1.1-billing.md (draft, not approved)
 
-Missing approved specs for: P0.2, P1.1
-
-Options:
-1. Generate missing specs now (recommended) — runs /ddd-spec P0.2, P1.1
-2. Skip spec check and proceed — items will run without spec anchoring
-3. Remove uncovered items from scope — only execute spec-covered items
+Generating specs for: P0.2, P1.1 ...
 ```
 
-**If option 1:** Invoke `/ddd-spec` for the missing feature areas. After specs are generated and approved, re-run the coverage check.
+   Invoke `/ddd-spec` for each uncovered feature area. After each spec is generated and its status is set to `approved`, proceed. If spec generation fails for an area, log a warning and skip items belonging to that area (move them to `skipped` in the state file).
 
-**If option 2:** Proceed to Step 5. Log a warning in the state file: `spec_coverage: partial`.
-
-**If option 3:** Remove items belonging to uncovered feature areas from the scope list. Re-display the execution plan (Step 4) with the reduced scope.
-
-**`--yes` behavior:** with `--yes`, skip this interactive prompt and auto-select option 2 (proceed with `spec_coverage: partial` warning). This matches `--yes`'s "no human in the loop" contract.
+6. **Re-run coverage check** after generation. If still uncovered areas remain, skip those items and continue with covered ones only.
 
 ## Step 5: Create State File
 
@@ -263,6 +261,7 @@ current: "[first item in scope list]"
 phase: "develop"
 policy: "[free text policy if provided, otherwise empty]"
 policy_preset: "[preset name if provided, otherwise empty]"
+spec_coverage: "[full|partial|skipped]"
 ---
 
 ## Original Command
@@ -433,6 +432,7 @@ The user can run `/ddd-auto-cleanup` after pressing Escape to:
 | `/ddd-auto-cleanup` | Manual cleanup after interruption |
 | State file cleanup on `phase=done` | Stop hook deletes `.ddd-auto.local.md` on exit |
 | Scope confirmation before start | User reviews expanded items before committing |
+| Spec coverage gate (Step 4.5) | Auto-generates specs before development; `--skip-spec` to bypass |
 | Decision logging in Progress Log | All autonomous choices are auditable |
 
 ## Integration

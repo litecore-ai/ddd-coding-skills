@@ -26,7 +26,7 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 
 **ddd-audit** 基于 DDD 架构标准执行 8 维度审计：设计、架构、质量、安全、测试、集成、性能、可观测性。支持范围化审计（`/ddd-audit src/domain/`）或全项目审计。
 
-**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后对已完成条目运行范围化 `ddd-audit`。执行前检查规格覆盖率——缺失的规格可即时生成。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。支持自然语言输入自动生成路线图后执行。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
+**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后对已完成条目运行范围化 `ddd-audit`。执行前自动生成缺失的规格（硬门禁——使用 `--skip-spec` 可跳过）。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。支持自然语言输入自动生成路线图后执行。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
 
 ## 技能一览
 
@@ -152,6 +152,7 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 
 选项：
 - `--roadmap <路径>` — 自定义路线图目录或文件（覆盖默认的 `docs/roadmap/`）
+- `--skip-spec` — 跳过规格生成门禁。条目将在无行为契约的情况下执行，仅用于快速修复或重构
 - `--yes` — 跳过确认直接开始（仍会显示执行计划）
 - `--policy <文本|预设>` — 自主决策策略。预设：`pragmatic`（默认，实用优先）、`strict-ddd`（严格 DDD）、`fast`（快速交付）
 - `--max-iterations <N>` — 安全上限（默认：50）
@@ -160,6 +161,7 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 
 特性：
 - 通过 Stop hook 实现可靠循环（无需手动重复调用）
+- 规格覆盖门禁 — 开发前自动生成缺失的规格；`--skip-spec` 可跳过
 - 会话隔离（仅启动循环的会话受影响）
 - Auto-Roadmap — 传入自然语言需求，ddd-auto 先生成路线图再自动执行
 - 决策策略（预设或自由文本，用于自主设计决策）
