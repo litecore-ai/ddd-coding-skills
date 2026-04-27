@@ -351,9 +351,7 @@ Generate `audit-report.md`:
 
 Generate fix roadmap as a **flat checkbox list grouped by severity**. ddd-auto consumes fix-roadmap items as a flat ordered list of checkboxes in document order — Wave/theme headings are for human readability and do not participate in scope hierarchy parsing.
 
-**Save to two locations:**
-1. `docs/roadmap/fix-roadmap.md` — primary, consumed by ddd-auto
-2. `docs/audit/YYYY-MM-DD-NNN/fix-roadmap.md` — copy in audit artifacts
+**Save to:** `docs/audit/YYYY-MM-DD-NNN/fix-roadmap.md` (consumed by ddd-auto via `--roadmap docs/audit/YYYY-MM-DD-NNN/fix-roadmap.md`)
 
 ### Format
 
@@ -420,13 +418,13 @@ The format aligns with ddd-develop/ddd-auto parsing:
 Present to user:
 
 ```
-Fix roadmap saved to docs/roadmap/fix-roadmap.md
+Fix roadmap saved to docs/audit/YYYY-MM-DD-NNN/fix-roadmap.md
 
 To auto-fix all findings:
-  /ddd-auto --roadmap docs/roadmap/fix-roadmap.md
+  /ddd-auto --roadmap docs/audit/YYYY-MM-DD-NNN/fix-roadmap.md
 
 To fix only CRITICAL and HIGH:
-  /ddd-auto --roadmap docs/roadmap/fix-roadmap.md 1 - 2
+  /ddd-auto --roadmap docs/audit/YYYY-MM-DD-NNN/fix-roadmap.md 1 - 2
 ```
 
 ---
@@ -730,5 +728,5 @@ When running in PR context:
 | `phase-6-integration.md` | Step 3-6 | System integration findings |
 | `phase-7-docs.md` | Step 3-6 | Documentation & compliance findings |
 | `audit-report.md` | Step 7 | Executive summary + statistics + score |
-| `fix-roadmap.md` | Step 8 | Prioritized remediation plan (also saved to `docs/roadmap/fix-roadmap.md`) |
+| `fix-roadmap.md` | Step 8 | Prioritized remediation plan |
 | `audit-delta.md` | Diff mode | Delta comparison with previous audit |

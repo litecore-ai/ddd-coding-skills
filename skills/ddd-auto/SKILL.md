@@ -155,7 +155,7 @@ Parse the user's arguments to extract:
 1. Determine roadmap source:
    - If `--roadmap` points to a **directory**: read all `P[0-3]-*.md` files inside that directory
    - If `--roadmap` points to a **single file**: read that file only (treat it as a single-phase roadmap)
-   - **Fix-roadmap special case**: if the roadmap source is a file named `fix-roadmap.md` (from ddd-audit), read items as a flat ordered list of checkboxes in document order. Do not parse `## N Wave` headings as feature-area scope — iterate all `- [ ]` checkboxes sequentially.
+   - **Fix-roadmap special case**: if the roadmap source is a file named `fix-roadmap.md` (from ddd-audit), read items as a flat ordered list of checkboxes in document order. Do not parse `## N Wave` headings as feature-area scope — iterate all `- [ ]` checkboxes sequentially. Store each unchecked item's full checkbox text (the content after `- [ ] `, trimmed) as its identifier in the `scope` list. Example: `"AUTH-CRIT-001 Fix input sanitization in UserController.create (\`src/auth/UserController.ts:45\`) — Effort: M"`.
    - If `--roadmap` not provided: read `docs/roadmap/P[0-3]-*.md` (default)
 2. For each file, extract the phase/feature-area/sub-feature hierarchy by parsing markdown headings:
    - `# P[N]: ...` → phase
@@ -321,7 +321,7 @@ After the Agent returns its report (STATUS: DONE or BLOCKED), parse the structur
 **Roadmap sync procedure:**
 
 - *Standard roadmap* (item IDs match `P[N].M.K`): find the sub-feature heading `### N.M.K ...` in the roadmap file recorded during Step 2 (heading regex: `^### N\.M\.K(\s|$)` — the `P` prefix is dropped in headings). Flip every `- [ ]` to `- [x]` between that heading and the next `### ` (or EOF). Already-checked lines are left alone. If the heading is not found, append a warning to the Progress Log (`WARN roadmap sync skipped (heading not found)`) and continue — do not fail the loop.
-- *fix-roadmap.md* (flat checkbox list from ddd-audit): flip only the specific `- [ ]` line that was `current` this iteration, identified by its position in the ordered list built in Step 2.
+- *fix-roadmap.md* (flat checkbox list from ddd-audit): use the **Edit tool** to flip `- [ ]` to `- [x]` on the line that matches the `current` item's stored identifier text. Read the fix-roadmap.md at `roadmap_path`, find the line whose content matches `- [ ] [current item text]` exactly (the identifier stored in `scope` in Step 2). Perform this edit **immediately after the subagent reports DONE, before advancing `current`**. If the line is already `- [x]`, skip. If no matching line is found, append a warning to the Progress Log (`WARN fix-roadmap sync skipped — line not found: [current]`) and continue.
 - Idempotent: safe to re-run. Phase-level status lines are not updated here.
 
 ### If BLOCKED/SKIPPED:
