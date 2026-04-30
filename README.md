@@ -400,7 +400,7 @@ You: /ddd-auto-cleanup
 **Symptom:** `ddd-auto` or `ddd-develop` pauses with "This command requires approval" for basic commands like `grep`, `find`, or `python`.
 
 **Cause:** Two Claude Code bugs prevent subagents from inheriting your project's permission settings:
-- **Bug #37730** — Subagents (Agent tool) do NOT inherit project-level `.claude/settings.json` permissions
+- **Bug #37442** — Subagents (Agent tool) do NOT inherit project-level `.claude/settings.json` permissions
 - **Bug #23983** — `PermissionRequest` hooks defined in skill frontmatter may not fire for subagent requests
 
 Since `ddd-auto` dispatches subagents to run each `ddd-develop` cycle, those subagents start with a blank permission slate.

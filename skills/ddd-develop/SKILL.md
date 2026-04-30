@@ -97,6 +97,7 @@ Check whether the user provided arguments after the command:
 When arguments are provided, classify them before proceeding:
 
 1. **Roadmap reference?** — Check in this order:
+   - Arguments contain `--roadmap <path>` — extract the path as `roadmap_override` and the remaining text as the item identifier. Set `source = "roadmap"`. Proceed to **Mode A: Explicit Requirement** using the item text as the development target, but carry `roadmap_override` through to Phase 6.1 for checkbox flipping. (This is the path for fix-roadmap items dispatched by ddd-auto.)
    - Arguments match `P\d+` patterns (e.g., `P0`, `P1.2`, `P0.1.1`) → treat as roadmap scope reference, switch to **Mode B: Roadmap Scan** with that scope filter
    - Arguments are a `.md` file path AND the file contains `- [ ]` checkboxes → treat as roadmap file, switch to **Mode B: Roadmap Scan** using that file as the roadmap source
    - If matched → set `source = "roadmap"`
@@ -111,9 +112,22 @@ The user specified a single, scoped feature to develop. Use their description as
 
 1. Parse the user's description into a clear feature requirement
 2. Read project context (CLAUDE.md, existing code, DDD layer structure) to understand how this requirement fits
-3. Set `source = "ad-hoc"` (used in Phase 6 to skip roadmap updates)
+3. If `roadmap_override` is NOT set: Set `source = "ad-hoc"` (used in Phase 6 to skip roadmap updates). If `roadmap_override` IS set (from `--roadmap` flag in Phase 1a): `source` is already `"roadmap"` — do NOT overwrite it.
 
 **Present to User:**
+
+[If `roadmap_override` is set, display:]
+
+```
+Development target (roadmap — fix-roadmap item):
+
+**Requirement**: [item text from --roadmap args]
+**Roadmap file**: [roadmap_override path]
+
+Proceed with this requirement?
+```
+
+[Otherwise (ad-hoc):]
 
 ```
 Development target (ad-hoc):
@@ -763,6 +777,14 @@ After all technical verifications pass, check implementation against the spec:
 ### 6.1 Update Roadmap (roadmap source only)
 
 **Skip this step if `source = "ad-hoc"`.** Ad-hoc requirements have no roadmap entry to update.
+
+**If `roadmap_override` is set:** The development was driven by an explicit roadmap file (e.g., fix-roadmap.md from ddd-audit, dispatched by ddd-auto).
+
+1. Read the file at `roadmap_override`
+2. If it is a **fix-roadmap** (flat checkbox list, items have IDs like `AREA-SEV-NNN`): find the line whose text after `- [ ] ` matches the item identifier passed after `--roadmap <path>`. Use the **Edit tool** to flip `- [ ]` to `- [x]` on that line.
+3. If it is a **standard roadmap** (hierarchical with `### N.M.K` headings): navigate to the sub-feature heading matching the item identifier and flip checkboxes under it.
+4. If the line is already `- [x]`, skip. If no matching line is found, log a warning and continue.
+5. After updating, skip the rest of Phase 6.1 (Iterative Migration Gate and Standard Completion do not apply) and proceed to Phase 6.2.
 
 #### Iterative Migration Gate
 

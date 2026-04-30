@@ -214,6 +214,7 @@ Before creating the state file and entering the execution loop, verify that beha
 
 2. **Extract unique feature areas** from the expanded scope list:
    - `P0.1.1, P0.1.2, P0.2.1` → unique feature areas: `P0.1, P0.2`
+   - **Fix-roadmap**: scope items are flat text strings (not `P\d+` IDs). Spec coverage is not applicable — set `spec_coverage: skipped` and proceed to Step 5.
 
 3. **For each feature area**, check `docs/specs/P{phase}.{area}-*.md`:
    - File exists with `status: approved` → covered
@@ -289,7 +290,9 @@ You are executing a single ddd-develop cycle as part of a ddd-auto batch run.
 
 [If policy set:] Decision policy for this implementation: [policy text]. When encountering design choices, apply this policy to choose autonomously without asking the user. Log key decisions in your commit messages.
 
-Invoke the ddd-develop skill with args: `[current]` (roadmap scope token — this MUST be the sole argument so ddd-develop classifies the run as Mode B / roadmap-driven and executes Phase 6.1 to flip the checkbox).
+[If fix-roadmap (roadmap_path ends with fix-roadmap.md):] Invoke the ddd-develop skill with args: `--roadmap [roadmap_path] [current]`. The --roadmap flag tells ddd-develop this is a roadmap-driven run with the checkbox item text as the target, so it classifies correctly and flips the checkbox in Phase 6.1.
+
+[If standard roadmap:] Invoke the ddd-develop skill with args: `[current]` (roadmap scope token — this MUST be the sole argument so ddd-develop classifies the run as Mode B / roadmap-driven and executes Phase 6.1 to flip the checkbox).
 
 Context (do NOT include in the skill args — this is for your situational awareness only):
 - Roadmap file: [roadmap_path]
@@ -321,7 +324,7 @@ After the Agent returns its report (STATUS: DONE or BLOCKED), parse the structur
 **Roadmap sync procedure:**
 
 - *Standard roadmap* (item IDs match `P[N].M.K`): find the sub-feature heading `### N.M.K ...` in the roadmap file recorded during Step 2 (heading regex: `^### N\.M\.K(\s|$)` — the `P` prefix is dropped in headings). Flip every `- [ ]` to `- [x]` between that heading and the next `### ` (or EOF). Already-checked lines are left alone. If the heading is not found, append a warning to the Progress Log (`WARN roadmap sync skipped (heading not found)`) and continue — do not fail the loop.
-- *fix-roadmap.md* (flat checkbox list from ddd-audit): use the **Edit tool** to flip `- [ ]` to `- [x]` on the line that matches the `current` item's stored identifier text. Read the fix-roadmap.md at `roadmap_path`, find the line whose content matches `- [ ] [current item text]` exactly (the identifier stored in `scope` in Step 2). Perform this edit **immediately after the subagent reports DONE, before advancing `current`**. If the line is already `- [x]`, skip. If no matching line is found, append a warning to the Progress Log (`WARN fix-roadmap sync skipped — line not found: [current]`) and continue.
+- *fix-roadmap.md* (flat checkbox list from ddd-audit): ddd-develop's Phase 6.1 (with `--roadmap` flag, per Step 6) is the primary mechanism — it flips the checkbox during its COMPLETE phase. This Step 7 sync is a secondary backup. Use the **Edit tool** to flip `- [ ]` to `- [x]` on the line that matches the `current` item's stored identifier text. Read the fix-roadmap.md at `roadmap_path`, find the line whose content matches `- [ ] [current item text]` exactly (the identifier stored in `scope` in Step 2). If the line is already `- [x]` (flipped by ddd-develop), skip. If no matching line is found, append a warning to the Progress Log (`WARN fix-roadmap sync skipped — line not found: [current]`) and continue.
 - Idempotent: safe to re-run. Phase-level status lines are not updated here.
 
 ### If BLOCKED/SKIPPED:
