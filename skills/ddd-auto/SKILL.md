@@ -273,7 +273,7 @@ spec_coverage: "[full|partial|skipped]"
 
 ```
 
-**session_id:** leave as `""`. `$CLAUDE_CODE_SESSION_ID` is not accessible from Bash subprocesses, so do not try to read it. The single state file enforces single-session assumption; if a stale loop persists in another session, `/ddd-auto-cleanup` resolves it.
+**session_id:** always write as `""`. The Stop hook claims ownership atomically on its first fire — it writes the real session ID into the state file so that concurrent sessions are excluded. Do not try to set this from the skill; the hook handles it.
 
 ## Step 6: Dispatch Agent for /ddd-develop
 
@@ -431,7 +431,7 @@ The user can run `/ddd-auto-cleanup` after pressing Escape to:
 | Mechanism | Purpose |
 |-----------|---------|
 | `max_iterations` (default 50) | Prevent infinite loops. Enforced by the Stop hook, which increments `iteration` on each loop and exits+cleans up when `iteration >= max_iterations`. ddd-auto itself does not check this field. |
-| Session ID isolation | Only the originating session is trapped |
+| Session ID isolation | Hook atomically claims the state file on first fire using `mkdir` lock; concurrent sessions see a mismatched session_id and exit cleanly |
 | `/ddd-auto-cleanup` | Manual cleanup after interruption |
 | State file cleanup on `phase=done` | Stop hook deletes `.ddd-auto.local.md` on exit |
 | Scope confirmation before start | User reviews expanded items before committing |

@@ -39,9 +39,36 @@ if [[ "$active" != "true" ]]; then
   exit 0
 fi
 
-# 5. Session mismatch → allow exit (don't trap other sessions)
-if [[ -n "$HOOK_SESSION" ]] && [[ -n "$session_id" ]] && [[ "$session_id" != "$HOOK_SESSION" ]]; then
-  exit 0
+# 5. Session claim & mismatch check
+if [[ -n "$HOOK_SESSION" ]]; then
+  if [[ -z "$session_id" ]]; then
+    # State file has no owner yet — atomically claim it for this session.
+    # mkdir is POSIX-atomic, preventing two sessions from both claiming simultaneously.
+    LOCK_DIR="${STATE_FILE}.lock"
+
+    # Clean up stale lock (crash during a prior claim left it behind)
+    if [[ -d "$LOCK_DIR" ]]; then
+      lock_age=$(( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0) ))
+      [[ $lock_age -gt 10 ]] && rmdir "$LOCK_DIR" 2>/dev/null || true
+    fi
+
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      CLAIM_TEMP="${STATE_FILE}.claim.$$"
+      awk -v sid="$HOOK_SESSION" '
+        /^---$/ { delim++; print; next }
+        delim == 1 && /^session_id:/ { print "session_id: \"" sid "\""; next }
+        { print }
+      ' "$STATE_FILE" > "$CLAIM_TEMP" && mv "$CLAIM_TEMP" "$STATE_FILE"
+      rmdir "$LOCK_DIR"
+      session_id="$HOOK_SESSION"
+    else
+      # Another session won the claim race — allow this session to exit cleanly
+      exit 0
+    fi
+  elif [[ "$session_id" != "$HOOK_SESSION" ]]; then
+    # Already claimed by a different session — allow exit
+    exit 0
+  fi
 fi
 
 # 6. Validate numeric fields
