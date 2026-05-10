@@ -48,7 +48,7 @@ if [[ -n "$HOOK_SESSION" ]]; then
 
     # Clean up stale lock (crash during a prior claim left it behind)
     if [[ -d "$LOCK_DIR" ]]; then
-      lock_age=$(( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0) ))
+      lock_age=$(( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || stat -c %Y "$LOCK_DIR" 2>/dev/null || echo 0) ))
       [[ $lock_age -gt 10 ]] && rmdir "$LOCK_DIR" 2>/dev/null || true
     fi
 

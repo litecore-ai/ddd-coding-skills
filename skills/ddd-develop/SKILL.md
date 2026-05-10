@@ -1,6 +1,6 @@
 ---
 name: ddd-develop
-description: Use when developing features from a DDD project roadmap or ad-hoc requirements - triggers on "continue development", "next roadmap item", "ddd-develop", "按 roadmap 开发", or "/ddd-develop <feature description>". Self-contained workflow with TDD, implementation planning, subagent execution, audit, and verification built in. Supports both roadmap-driven and freeform development.
+description: Develop features from DDD roadmap or ad-hoc requirements. Triggers: "continue development", "next roadmap item", "ddd-develop", "/ddd-develop <feature>". Self-contained TDD workflow with planning, subagent execution, audit, and verification. Roadmap-driven or freeform.
 allowed-tools:
   - Bash(*)
   - Edit
@@ -8,6 +8,7 @@ allowed-tools:
   - Read
   - Glob
   - Grep
+  - Agent
 hooks:
   PermissionRequest:
     - matcher: "*"
@@ -672,10 +673,10 @@ After all plan tasks complete, run a full incremental audit.
 
 ### Invoke ddd-audit
 
-Run ddd-audit in **incremental/diff mode**:
-- Scope: only files changed since Phase 3 started
-- Use `git diff` to determine change set
-- Apply the 8-dimension audit matrix (see ddd-audit skill: D1-Design, D2-Architecture, D3-Quality, D4-Security, D5-Testing, D6-Integration, D7-Performance, D8-Observability) against changed files
+Invoke `/ddd-audit` via the **Skill tool** in incremental/diff mode:
+- Scope: only files changed since Phase 3 started — use `git diff --name-only` to build the file list
+- Example invocation: `/ddd-audit audit only the following changed files: [file list]`
+- The audit applies the 8-dimension matrix (D1-D8) against changed files
 
 ### Audit-Fix Loop
 

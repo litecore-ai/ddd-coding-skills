@@ -1,6 +1,6 @@
 ---
 name: ddd-audit
-description: Use when auditing a DDD-architecture project for quality, security, and architectural compliance - triggers on "audit this project", "DDD review", "ddd-audit", "/ddd-audit <scope>", pre-production readiness check, architecture compliance review. Supports full-project audits, scoped audits for specific modules/layers, and interactive mode. Works with any language/framework.
+description: Audit DDD projects for quality, security, and architecture compliance. Triggers: "audit project", "DDD review", "ddd-audit", "/ddd-audit <scope>", readiness check. Supports full-project, scoped (modules/layers), and interactive modes. Any language/framework.
 allowed-tools:
   - Bash(*)
   - Edit
@@ -730,3 +730,28 @@ When running in PR context:
 | `audit-report.md` | Step 7 | Executive summary + statistics + score |
 | `fix-roadmap.md` | Step 8 | Prioritized remediation plan |
 | `audit-delta.md` | Diff mode | Delta comparison with previous audit |
+
+---
+
+## Integration
+
+**Pipeline position:** Quality gate — invoked after development or as a standalone assessment.
+
+```
+ddd-develop → ddd-audit (Phase 4, incremental)
+ddd-auto → ddd-audit (Step 8, scoped to completed items)
+ddd-audit → fix-roadmap.md → ddd-auto --roadmap (remediation loop)
+```
+
+**Consumes:**
+- Project source code
+- `.audit-config.yml` (optional, for dimension weights and custom layer mappings)
+- Previous audit reports (for incremental/diff mode)
+
+**Produces artifacts consumed by:**
+- **ddd-auto** — `fix-roadmap.md` serves as input via `--roadmap docs/audit/YYYY-MM-DD-NNN/fix-roadmap.md`
+- **ddd-develop** — fix-roadmap items are dispatched as development targets with `--roadmap` flag
+
+**Invoked by:**
+- **ddd-develop** — Phase 4 (incremental audit of changed files)
+- **ddd-auto** — Step 8 (scoped audit of all files touched during the batch run)

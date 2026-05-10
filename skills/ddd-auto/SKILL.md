@@ -8,8 +8,7 @@ allowed-tools:
   - Read
   - Glob
   - Grep
-  - WebSearch
-  - WebFetch
+  - Agent
 hooks:
   PermissionRequest:
     - matcher: "*"

@@ -87,7 +87,7 @@ Output: structured specs in `docs/specs/P{phase}.{area}-{slug}.md`.
 
 ### ddd-develop
 
-Self-contained development workflow with 7 phases:
+Self-contained development workflow with 6 phases:
 
 1. **LOCATE** — Find development target (args / roadmap / ask user)
 1.5. **SPEC GATE** — Verify approved spec exists; block if missing
@@ -339,10 +339,11 @@ You: /ddd-audit src/domain/billing
 You: /ddd-audit security review of auth module
 ```
 
-Incremental mode (only recent changes):
+Incremental mode (only recent changes — triggered by natural language):
 
 ```
-You: /ddd-audit --diff HEAD~3
+You: /ddd-audit audit changes since last 3 commits
+You: /ddd-audit re-audit only changed files
 ```
 
 ### Full Workflow Example
