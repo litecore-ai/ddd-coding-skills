@@ -61,7 +61,7 @@ digraph ddd_auto {
   read_roadmap [label="Step 2: Read roadmap files\nExpand scope to item list"];
   validate [label="Step 3: Filter completed items\nValidate scope is non-empty"];
   confirm [label="Step 4: Display plan\nAsk user confirmation"];
-  spec_check [label="Step 4.5: Spec coverage gate\nAuto-generate missing specs"];
+  spec_check [label="Step 4.5: Spec coverage gate\nBlock if specs missing"];
   create_state [label="Step 5: Create state file\n.ddd-auto.local.md"];
   develop [label="Step 6: Dispatch Agent\nfor /ddd-develop"];
   update [label="Step 7: Update state file\n(completed/skipped, advance current)"];
@@ -205,38 +205,50 @@ Proceed?
 
 ## Step 4.5: Spec Coverage Gate
 
-Before creating the state file and entering the execution loop, verify that behavior contracts (specs) exist for all feature areas in scope. **This is a hard gate** — specs are generated automatically when missing. The gate only bypasses with an explicit `--skip-spec` flag.
+Before creating the state file and entering the execution loop, verify two things: the product brief exists, and approved specs exist for all feature areas in scope. **This is a hard gate** — missing artifacts block execution. The user must generate them manually. The only bypass is `--skip-spec`.
 
 ### Gate Logic
 
 1. **Check for `--skip-spec` flag** — if present, log `spec_coverage: skipped` in the state file and proceed to Step 5. This is the only bypass.
 
-2. **Extract unique feature areas** from the expanded scope list:
-   - `P0.1.1, P0.1.2, P0.2.1` → unique feature areas: `P0.1, P0.2`
-   - **Fix-roadmap**: scope items are flat text strings (not `P\d+` IDs). Spec coverage is not applicable — set `spec_coverage: skipped` and proceed to Step 5.
+2. **Fix-roadmap special case**: if the roadmap source is `fix-roadmap.md`, spec coverage is not applicable — set `spec_coverage: skipped` and proceed to Step 5.
 
-3. **For each feature area**, check `docs/specs/P{phase}.{area}-*.md`:
+3. **Check `docs/product-brief.md`** — if the file does not exist, stop immediately:
+
+```
+BLOCKED: docs/product-brief.md not found.
+
+Specs cannot be generated without a product brief — specs anchored only to
+the roadmap drift from the original product intent.
+
+Run /ddd-brief first to generate the product brief, then re-run ddd-auto.
+Use --skip-spec to bypass spec checks entirely (not recommended).
+```
+
+4. **Extract unique feature areas** from the expanded scope list:
+   - `P0.1.1, P0.1.2, P0.2.1` → unique feature areas: `P0.1, P0.2`
+
+5. **For each feature area**, check `docs/specs/P{phase}.{area}-*.md`:
    - File exists with `status: approved` → covered
    - File exists with `status: draft` → not covered (draft doesn't count)
    - File not found → not covered
 
-4. **If all covered** → proceed to Step 5
+6. **If all covered** → proceed to Step 5
 
-5. **If any not covered** → **auto-generate missing specs**:
+7. **If any not covered** → **block and report**:
 
 ```
-Spec coverage gate — missing specs detected:
+BLOCKED: Spec coverage gate — missing approved specs:
 
 ✓ P0.1 — docs/specs/P0.1-user-authentication.md (approved)
 ✗ P0.2 — no spec found
 ✗ P1.1 — docs/specs/P1.1-billing.md (draft, not approved)
 
-Generating specs for: P0.2, P1.1 ...
+Run /ddd-spec P0.2, P1.1 to generate and approve specs, then re-run ddd-auto.
+Use --skip-spec to bypass spec checks entirely (not recommended).
 ```
 
-   Invoke `/ddd-spec` for each uncovered feature area. After each spec is generated and its status is set to `approved`, proceed. If spec generation fails for an area, log a warning and skip items belonging to that area (move them to `skipped` in the state file).
-
-6. **Re-run coverage check** after generation. If still uncovered areas remain, skip those items and continue with covered ones only.
+Do not proceed past this point. Do not generate specs automatically. The user must run `/ddd-spec` for the uncovered areas and approve them before re-running ddd-auto.
 
 ## Step 5: Create State File
 
@@ -434,7 +446,7 @@ The user can run `/ddd-auto-cleanup` after pressing Escape to:
 | `/ddd-auto-cleanup` | Manual cleanup after interruption |
 | State file cleanup on `phase=done` | Stop hook deletes `.ddd-auto.local.md` on exit |
 | Scope confirmation before start | User reviews expanded items before committing |
-| Spec coverage gate (Step 4.5) | Auto-generates specs before development; `--skip-spec` to bypass |
+| Spec coverage gate (Step 4.5) | Blocks if product-brief.md or approved specs are missing; user must generate manually; `--skip-spec` to bypass |
 | Decision logging in Progress Log | All autonomous choices are auditable |
 
 ## Integration
@@ -447,7 +459,9 @@ The user can run `/ddd-auto-cleanup` after pressing Escape to:
 - **ddd-develop** (per-item, roadmap mode — dispatched via Agent with the scope token as its sole arg; see Step 6)
 - **ddd-audit** (scoped to files touched by the `completed` list, after all develop items complete; see Step 8)
 
-**Consumes:**
+**Consumes (required before execution):**
+- `docs/product-brief.md` (generated by ddd-brief) — blocks at Step 4.5 if missing
+- Approved specs in `docs/specs/` (generated by ddd-spec) — blocks at Step 4.5 if any feature area is uncovered
 - Roadmap files from `docs/roadmap/P[0-3]-*.md` (generated by ddd-roadmap)
 
 **Produces:**

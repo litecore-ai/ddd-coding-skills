@@ -2,42 +2,60 @@
 
 English | [中文](README.zh-CN.md)
 
-A complete Domain-Driven Design development workflow for coding agents. Six composable skills that cover the full lifecycle: initialization, planning, spec generation, implementing, auditing, and automated batch execution.
+A complete Domain-Driven Design development workflow for coding agents. Seven composable skills that cover the full lifecycle: initialization, product intent capture, planning, spec generation, implementing, auditing, and automated batch execution.
 
 ## How It Works
 
-The six skills form a pipeline:
+The seven skills form a pipeline:
 
 ```
-ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
- (init)       (plan)          (spec)       (implement)      (audit)
-                                                ↑               ↑
-                                            ddd-auto ───────────┘
-                                           (automate)
+ddd-init  →  ddd-brief  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
+ (init)       (brief)        (plan)          (spec)       (implement)      (audit)
+                                                               ↑               ↑
+                                                           ddd-auto ───────────┘
+                                                          (automate)
 ```
 
 **ddd-init** initializes a new project with DDD architecture or generates a refactoring roadmap for existing projects. Creates the directory structure, standardized `docs/` layout, and writes architecture constraints to `CLAUDE.md`. Supports built-in templates (`/ddd-init --template fastlayer`) or custom reference architectures (`/ddd-init --ref <path>`).
 
-**ddd-roadmap** analyzes your project and generates a structured, phased roadmap with actionable checkbox items. Supports scoped roadmaps (`/ddd-roadmap billing system`) or full-project planning. After roadmap approval, offers to generate specs for all feature areas.
+**ddd-brief** distills product intent from session context, existing documentation (PRDs, design docs), or user-provided input into `docs/product-brief.md` — the canonical anchor for the entire pipeline. Run before `ddd-roadmap` to ground feature decomposition in documented product decisions. Required by `ddd-spec` before spec generation.
 
-**ddd-spec** generates structured behavior contracts per feature area with numbered acceptance criteria (Given/When/Then), data models, API contracts, and boundary conditions. Prevents direction drift by anchoring `ddd-develop` plans to testable criteria. Supports single (`/ddd-spec P0.1`), range (`/ddd-spec P0.1 - P0.3`), or phase-level (`/ddd-spec P0`) generation with subagent isolation per feature area.
+**ddd-roadmap** analyzes your project, reads `docs/product-brief.md` as its highest-priority source, and generates a structured, phased roadmap with actionable checkbox items. Supports scoped roadmaps (`/ddd-roadmap billing system`) or full-project planning. After roadmap approval, offers to generate specs for all feature areas (requires product-brief.md).
+
+**ddd-spec** generates structured behavior contracts per feature area with numbered acceptance criteria (Given/When/Then), data models, API contracts, and boundary conditions. Requires `docs/product-brief.md` — run `/ddd-brief` first. Prevents direction drift by anchoring `ddd-develop` plans to testable criteria. Supports single (`/ddd-spec P0.1`), range (`/ddd-spec P0.1 - P0.3`), or phase-level (`/ddd-spec P0`) generation with subagent isolation per feature area.
 
 **ddd-develop** picks the next unchecked roadmap item, verifies an approved spec exists (spec gate), generates an implementation plan anchored to spec acceptance criteria, executes it with TDD via subagents, runs an audit, verifies spec compliance, and commits. Also supports ad-hoc requirements (`/ddd-develop add user authentication`).
 
 **ddd-audit** performs an 8-dimension audit against DDD architecture standards: design, architecture, quality, security, testing, integration, performance, and observability. Supports scoped audits (`/ddd-audit src/domain/`) or full-project audits.
 
-**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a scoped `ddd-audit` on completed items. Auto-generates missing specs before starting (hard gate — use `--skip-spec` to bypass). Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Accepts natural language input to auto-generate a roadmap before execution. Uses a Stop hook for reliable looping with configurable decision policies.
+**ddd-auto** loops through `ddd-develop` for a user-specified scope of roadmap items, then runs a scoped `ddd-audit` on completed items. Blocks if `docs/product-brief.md` or approved specs are missing (run `/ddd-brief` + `/ddd-spec` first — use `--skip-spec` to bypass). Specify ranges (`/ddd-auto P0.1.1 - P1.3.1`), individual items, or entire phases. Accepts natural language input to auto-generate a roadmap before execution. Uses a Stop hook for reliable looping with configurable decision policies.
 
 ## Skills
 
 | Skill | Purpose | Trigger |
 |-------|---------|---------|
 | **ddd-init** | Initialize or refactor project to DDD architecture | `/ddd-init`, `/ddd-init --template fastlayer`, `/ddd-init --ref <path>` |
+| **ddd-brief** | Capture product intent → `docs/product-brief.md` | `/ddd-brief`, `/ddd-brief <description>`, `/ddd-brief <prd-file>` |
 | **ddd-roadmap** | Generate phased development roadmap | `/ddd-roadmap`, `/ddd-roadmap <scope>` |
 | **ddd-spec** | Generate behavior contracts per feature area | `/ddd-spec`, `/ddd-spec P0.1`, `/ddd-spec P0` |
 | **ddd-develop** | Implement next roadmap item or ad-hoc requirement | `/ddd-develop`, `/ddd-develop <requirement>` |
 | **ddd-audit** | 8-dimension DDD architecture audit | `/ddd-audit`, `/ddd-audit <scope>` |
 | **ddd-auto** | Automated batch roadmap execution + audit | `/ddd-auto`, `/ddd-auto <scope>`, `/ddd-auto --roadmap <path>`, `/ddd-auto-cleanup` |
+
+### ddd-brief
+
+Distills product intent from multiple sources into `docs/product-brief.md` — the canonical anchor for `ddd-roadmap`, `ddd-spec`, `ddd-develop`, and `ddd-audit`. Run before `ddd-roadmap`. Required by `ddd-spec` (blocks if missing).
+
+Three input modes:
+- `/ddd-brief` — extract from session context + auto-scan `docs/`
+- `/ddd-brief <description>` — use inline text as primary input
+- `/ddd-brief <file-path>` — use a specific PRD file as primary source
+
+Modes can be combined: `/ddd-brief my-prd.md add that we also need GDPR compliance`
+
+Output: `docs/product-brief.md` with vision, target users, goals, non-goals, key design decisions, constraints, and open questions.
+
+**Re-run after `ddd-roadmap` Goal Alignment** if new decisions were made during the session that aren't captured in the brief yet.
 
 ### ddd-init
 
@@ -78,10 +96,10 @@ Three input modes:
 - Batch — triggered by ddd-roadmap after roadmap approval
 
 Key features:
+- **product-brief.md gate** — requires `docs/product-brief.md` before generation; run `/ddd-brief` first
 - **Subagent isolation** — one Agent per feature area prevents attention degradation
 - **AC numbering** — `AC-1, AC-2...` in Given/When/Then format, referenced by ddd-develop
 - **Status gating** — `draft` → `approved`; ddd-develop blocks without an approved spec
-- **Superpowers integration** — scans `docs/superpowers/specs/` as PRD-level input
 
 Output: structured specs in `docs/specs/P{phase}.{area}-{slug}.md`.
 
@@ -151,7 +169,7 @@ Options:
 Press Escape to interrupt, then `/ddd-auto-cleanup` to clean up state and see progress summary.
 
 Features:
-- Spec coverage gate — auto-generates specs before development; `--skip-spec` to bypass
+- Spec coverage gate — blocks if `docs/product-brief.md` or approved specs are missing; run `/ddd-brief` + `/ddd-spec` first, or `--skip-spec` to bypass
 - Reliable loop via Stop hook (no manual re-invocation needed)
 - Session isolation (only the session that started the loop is affected)
 - Auto-Roadmap — pass a natural language requirement and ddd-auto generates a roadmap first, then executes it
@@ -187,6 +205,7 @@ git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-s
 
 # Install as personal skills (available in all projects)
 cp -r /tmp/ddd-coding-skills/skills/ddd-init ~/.claude/skills/ddd-init
+cp -r /tmp/ddd-coding-skills/skills/ddd-brief ~/.claude/skills/ddd-brief
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r /tmp/ddd-coding-skills/skills/ddd-spec ~/.claude/skills/ddd-spec
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop ~/.claude/skills/ddd-develop
@@ -195,6 +214,7 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-auto ~/.claude/skills/ddd-auto
 
 # Or install as project-specific skills (version-controlled with your project)
 cp -r /tmp/ddd-coding-skills/skills/ddd-init .claude/skills/ddd-init
+cp -r /tmp/ddd-coding-skills/skills/ddd-brief .claude/skills/ddd-brief
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap .claude/skills/ddd-roadmap
 cp -r /tmp/ddd-coding-skills/skills/ddd-spec .claude/skills/ddd-spec
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
@@ -241,6 +261,7 @@ Restart Claude Code after updating.
 ```bash
 cd /tmp/ddd-coding-skills && git pull
 cp -r skills/ddd-init ~/.claude/skills/ddd-init
+cp -r skills/ddd-brief ~/.claude/skills/ddd-brief
 cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r skills/ddd-spec ~/.claude/skills/ddd-spec
 cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
@@ -351,6 +372,9 @@ You: /ddd-audit re-audit only changed files
 A typical end-to-end workflow:
 
 ```
+# Step 0: Capture product intent (required before spec generation)
+You: /ddd-brief docs/my-prd.md
+
 # Step 1: Plan your project
 You: /ddd-roadmap
 
@@ -458,6 +482,8 @@ ddd-coding-skills/
 │   │   └── SKILL.md         # Clean up after interrupting ddd-auto
 │   ├── ddd-init/
 │   │   └── SKILL.md         # DDD project initialization
+│   ├── ddd-brief/
+│   │   └── SKILL.md         # Product intent capture → product-brief.md
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # Roadmap generation
 │   ├── ddd-spec/

@@ -2,42 +2,60 @@
 
 [English](README.md) | 中文
 
-面向编码智能体的完整领域驱动设计（DDD）开发工作流。六个可组合的技能覆盖完整生命周期：初始化、规划、规格生成、实现、审计和自动化批量执行。
+面向编码智能体的完整领域驱动设计（DDD）开发工作流。七个可组合的技能覆盖完整生命周期：初始化、产品意图提炼、规划、规格生成、实现、审计和自动化批量执行。
 
 ## 工作原理
 
-六个技能构成一条流水线：
+七个技能构成一条流水线：
 
 ```
-ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
- (初始化)      (规划)          (规格)       (实现)           (审计)
-                                                ↑               ↑
-                                            ddd-auto ───────────┘
-                                           (自动化)
+ddd-init  →  ddd-brief  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
+ (初始化)      (简报)          (规划)          (规格)       (实现)           (审计)
+                                                               ↑               ↑
+                                                           ddd-auto ───────────┘
+                                                          (自动化)
 ```
 
 **ddd-init** 为新项目初始化 DDD 架构结构，或为现有项目生成重构路线图。创建目录结构、标准化 `docs/` 布局，并将架构约束写入 `CLAUDE.md`。支持内置模板（`/ddd-init --template fastlayer`）或自定义参考架构（`/ddd-init --ref <路径>`）。
 
-**ddd-roadmap** 分析项目结构，通过对话对齐产品目标，将功能分解为可执行的条目，并按优先级组织为多个阶段（P0-P3）。支持范围化路线图（`/ddd-roadmap 计费系统`）或全项目规划。路线图审批后，提示为所有功能领域生成规格。
+**ddd-brief** 从会话上下文、已有产品文档（PRD、设计文档）或用户输入中提炼产品意图，写入 `docs/product-brief.md`——整个流水线的规范锚点。在 `ddd-roadmap` 之前运行，使功能分解基于已文档化的产品决策。`ddd-spec` 生成前必须存在此文件。
 
-**ddd-spec** 按功能领域（Feature Area）生成结构化行为契约，包含编号的验收标准（Given/When/Then）、数据模型、API 契约和边界条件。通过将 `ddd-develop` 的计划锚定到可测试的验收标准来防止方向漂移。支持单个（`/ddd-spec P0.1`）、范围（`/ddd-spec P0.1 - P0.3`）或阶段级（`/ddd-spec P0`）生成，每个功能领域使用独立子智能体。
+**ddd-roadmap** 扫描项目结构，以 `docs/product-brief.md` 为最高优先级来源，对齐产品目标，将功能分解为可执行条目，按优先级归入各阶段（P0-P3）。支持范围化路线图（`/ddd-roadmap 计费系统`）或全项目规划。路线图审批后，提示为所有功能领域生成规格（需先有 product-brief.md）。
+
+**ddd-spec** 按功能领域生成结构化行为契约，包含编号的验收标准（Given/When/Then）、数据模型、API 契约和边界条件。**需要 `docs/product-brief.md`**——先运行 `/ddd-brief`。通过将 `ddd-develop` 的计划锚定到可测试的验收标准来防止方向漂移。支持单个（`/ddd-spec P0.1`）、范围（`/ddd-spec P0.1 - P0.3`）或阶段级（`/ddd-spec P0`）生成，每个功能领域使用独立子智能体。
 
 **ddd-develop** 自动选取下一个未完成的路线图条目，验证已批准的规格是否存在（规格门禁），生成锚定到规格验收标准的实现计划，通过子智能体以 TDD 方式执行，运行审计，验证规格合规性，最后提交代码。也支持非路线图的即时需求（`/ddd-develop 添加用户认证`）。
 
 **ddd-audit** 基于 DDD 架构标准执行 8 维度审计：设计、架构、质量、安全、测试、集成、性能、可观测性。支持范围化审计（`/ddd-audit src/domain/`）或全项目审计。
 
-**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后对已完成条目运行范围化 `ddd-audit`。执行前自动生成缺失的规格（硬门禁——使用 `--skip-spec` 可跳过）。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。支持自然语言输入自动生成路线图后执行。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
+**ddd-auto** 按用户指定的路线图范围自动循环执行 `ddd-develop`，完成后对已完成条目运行范围化 `ddd-audit`。若 `docs/product-brief.md` 或已批准的规格缺失则阻断（先运行 `/ddd-brief` + `/ddd-spec`，或使用 `--skip-spec` 跳过）。支持范围指定（`/ddd-auto P0.1.1 - P1.3.1`）、单个条目或整个阶段。支持自然语言输入自动生成路线图后执行。通过 Stop hook 实现可靠循环，支持可配置的决策策略。
 
 ## 技能一览
 
 | 技能 | 用途 | 触发词 |
 |------|------|--------|
 | **ddd-init** | 初始化或重构项目为 DDD 架构 | `/ddd-init`、`/ddd-init --template fastlayer`、`/ddd-init --ref <路径>` |
+| **ddd-brief** | 提炼产品意图 → `docs/product-brief.md` | `/ddd-brief`、`/ddd-brief <描述>`、`/ddd-brief <prd文件>` |
 | **ddd-roadmap** | 生成分阶段开发路线图 | `/ddd-roadmap`、`/ddd-roadmap <范围>` |
 | **ddd-spec** | 按功能领域生成行为契约 | `/ddd-spec`、`/ddd-spec P0.1`、`/ddd-spec P0` |
 | **ddd-develop** | 实现路线图条目或即时需求 | `/ddd-develop`、`/ddd-develop <需求>` |
 | **ddd-audit** | 8 维度 DDD 架构审计 | `/ddd-audit`、`/ddd-audit <范围>` |
 | **ddd-auto** | 自动批量执行路线图 + 审计 | `/ddd-auto`、`/ddd-auto <范围>`、`/ddd-auto --roadmap <路径>`、`/ddd-auto-cleanup` |
+
+### ddd-brief
+
+从会话上下文、已有产品文档或用户输入中提炼产品意图，写入 `docs/product-brief.md`——整个流水线的规范锚点。在 `ddd-roadmap` 之前运行。`ddd-spec` 生成前必须存在此文件（缺失时阻断）。
+
+三种输入模式：
+- `/ddd-brief` — 从当前会话上下文提炼 + 自动扫描 `docs/`
+- `/ddd-brief <描述>` — 使用内联文本作为主要输入
+- `/ddd-brief <文件路径>` — 使用指定 PRD 文件作为主要来源
+
+模式可组合：`/ddd-brief my-prd.md 补充：需要满足 GDPR 合规`
+
+**输出**：`docs/product-brief.md`，包含愿景、目标用户、目标、非目标、关键设计决策、约束条件和待决问题。
+
+**在 `ddd-roadmap` 目标对齐后重新运行**，以捕获会话中产生的新决策。
 
 ### ddd-init
 
@@ -78,10 +96,10 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 - 批量 — 由 ddd-roadmap 在路线图审批后触发
 
 关键特性：
+- **product-brief.md 门禁** — 生成前需要 `docs/product-brief.md`；先运行 `/ddd-brief`
 - **子智能体隔离** — 每个功能领域一个独立 Agent，防止注意力衰减
 - **AC 编号制** — `AC-1, AC-2...` 采用 Given/When/Then 格式，被 ddd-develop 引用
 - **状态门禁** — `draft` → `approved`；ddd-develop 在无已批准规格时阻塞
-- **Superpowers 集成** — 扫描 `docs/superpowers/specs/` 作为 PRD 级别输入
 
 **输出**：结构化规格文件，存放于 `docs/specs/P{phase}.{area}-{slug}.md`。
 
@@ -161,7 +179,7 @@ ddd-init  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →  ddd-audit
 
 特性：
 - 通过 Stop hook 实现可靠循环（无需手动重复调用）
-- 规格覆盖门禁 — 开发前自动生成缺失的规格；`--skip-spec` 可跳过
+- 规格覆盖门禁 — 若 `docs/product-brief.md` 或已批准规格缺失则阻断；先运行 `/ddd-brief` + `/ddd-spec`，或 `--skip-spec` 跳过
 - 会话隔离（仅启动循环的会话受影响）
 - Auto-Roadmap — 传入自然语言需求，ddd-auto 先生成路线图再自动执行
 - 决策策略（预设或自由文本，用于自主设计决策）
@@ -196,6 +214,7 @@ git clone https://github.com/litecore-ai/ddd-coding-skills.git /tmp/ddd-coding-s
 
 # 安装为个人技能（所有项目可用）
 cp -r /tmp/ddd-coding-skills/skills/ddd-init ~/.claude/skills/ddd-init
+cp -r /tmp/ddd-coding-skills/skills/ddd-brief ~/.claude/skills/ddd-brief
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r /tmp/ddd-coding-skills/skills/ddd-spec ~/.claude/skills/ddd-spec
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop ~/.claude/skills/ddd-develop
@@ -204,6 +223,7 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-auto ~/.claude/skills/ddd-auto
 
 # 或安装为项目级技能（随项目版本控制）
 cp -r /tmp/ddd-coding-skills/skills/ddd-init .claude/skills/ddd-init
+cp -r /tmp/ddd-coding-skills/skills/ddd-brief .claude/skills/ddd-brief
 cp -r /tmp/ddd-coding-skills/skills/ddd-roadmap .claude/skills/ddd-roadmap
 cp -r /tmp/ddd-coding-skills/skills/ddd-spec .claude/skills/ddd-spec
 cp -r /tmp/ddd-coding-skills/skills/ddd-develop .claude/skills/ddd-develop
@@ -250,6 +270,7 @@ claude plugin update ddd-coding-skills@ddd-coding-skills
 ```bash
 cd /tmp/ddd-coding-skills && git pull
 cp -r skills/ddd-init ~/.claude/skills/ddd-init
+cp -r skills/ddd-brief ~/.claude/skills/ddd-brief
 cp -r skills/ddd-roadmap ~/.claude/skills/ddd-roadmap
 cp -r skills/ddd-spec ~/.claude/skills/ddd-spec
 cp -r skills/ddd-develop ~/.claude/skills/ddd-develop
@@ -359,6 +380,9 @@ You: /ddd-audit --diff HEAD~3
 典型的端到端工作流：
 
 ```
+# 第零步：提炼产品意图（规格生成前必须）
+You: /ddd-brief docs/my-prd.md
+
 # 第一步：规划项目
 You: /ddd-roadmap
 
@@ -466,6 +490,8 @@ ddd-coding-skills/
 │   │   └── SKILL.md         # 中断 ddd-auto 后清理状态
 │   ├── ddd-init/
 │   │   └── SKILL.md         # DDD 项目初始化
+│   ├── ddd-brief/
+│   │   └── SKILL.md         # 产品意图提炼 → product-brief.md
 │   ├── ddd-roadmap/
 │   │   └── SKILL.md         # 路线图生成
 │   ├── ddd-spec/

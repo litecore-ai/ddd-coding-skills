@@ -548,7 +548,7 @@ Also add `Bash(gh:*)` if GitHub CLI is available.
 **Pipeline position:** Entry point — runs before all other skills.
 
 ```
-ddd-init → ddd-roadmap → ddd-develop/ddd-auto → ddd-audit
+ddd-init → ddd-brief → ddd-roadmap → ddd-spec → ddd-develop/ddd-auto → ddd-audit
 ```
 
 **Produces:**

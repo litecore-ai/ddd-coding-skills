@@ -48,7 +48,7 @@ Reserve Bash for commands that have no dedicated tool equivalent: `npm test`, `n
 
 | # | Dimension | Focus |
 |---|-----------|-------|
-| D1 | **Design** | Functional completeness, optimal approach, interface clarity, over/under-engineering |
+| D1 | **Design** | Functional completeness (cross-reference `docs/product-brief.md` Goals and Non-goals if present — check whether stated goals are implemented and out-of-scope items were not), optimal approach, interface clarity, over/under-engineering |
 | D2 | **Architecture** | DDD layer compliance, dependency direction, single responsibility, bounded context |
 | D3 | **Quality** | Dead code, duplication, complexity, function size (<50 LOC), file size (<800 LOC), naming |
 | D4 | **Security** | Vulnerabilities, edge cases, error handling, sensitive data, input validation |

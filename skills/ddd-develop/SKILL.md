@@ -272,9 +272,16 @@ Before generating a plan, verify that a behavior contract (spec) exists for this
    - **File not found** → BLOCK:
      ```
      Spec not found for feature area P0.1.
-     
+
      A behavior contract is required before development to prevent direction drift.
-     Run: /ddd-spec P0.1
+
+     If docs/product-brief.md is also missing:
+       1. Run /ddd-brief to generate the product brief
+       2. Run /ddd-spec P0.1 to generate the spec
+
+     If docs/product-brief.md exists:
+       Run /ddd-spec P0.1
+
      Or pass --skip-spec to bypass this gate for ad-hoc work.
      ```
      Wait for user response. Do NOT proceed without spec or explicit bypass.
