@@ -42,8 +42,22 @@ fi
 # 5. Session claim & mismatch check
 if [[ -n "$HOOK_SESSION" ]]; then
   if [[ -z "$session_id" ]]; then
-    # State file has no owner yet — atomically claim it for this session.
-    # mkdir is POSIX-atomic, preventing two sessions from both claiming simultaneously.
+    # State file has no owner yet. Before claiming, verify this session created it
+    # by checking the session transcript — prevents concurrent sessions from
+    # hijacking the loop during the gap between state file creation and first hook fire.
+    TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | jq -r '.transcript_path // ""' 2>/dev/null || echo "")
+    if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
+      if ! grep -qF ".ddd-auto.local" "$TRANSCRIPT_PATH" 2>/dev/null; then
+        # This session's transcript has no record of creating the state file — don't claim
+        exit 0
+      fi
+    else
+      # No transcript available to verify ownership — refuse to claim to prevent hijack
+      exit 0
+    fi
+
+    # Transcript confirms this session owns the state file.
+    # Atomically claim it using mkdir (POSIX-atomic, prevents simultaneous claims).
     LOCK_DIR="${STATE_FILE}.lock"
 
     # Clean up stale lock (crash during a prior claim left it behind)
