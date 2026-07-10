@@ -301,9 +301,11 @@ You are executing a single ddd-develop cycle as part of a ddd-auto batch run.
 
 [If policy set:] Decision policy for this implementation: [policy text]. When encountering design choices, apply this policy to choose autonomously without asking the user. Log key decisions in your commit messages.
 
-[If fix-roadmap (roadmap_path ends with fix-roadmap.md):] Invoke the ddd-develop skill with args: `--roadmap [roadmap_path] [current]`. The --roadmap flag tells ddd-develop this is a roadmap-driven run with the checkbox item text as the target, so it classifies correctly and flips the checkbox in Phase 6.1.
+[If fix-roadmap (roadmap_path ends with fix-roadmap.md):] Invoke the ddd-develop skill with args: `--roadmap [roadmap_path] [current]`. The --roadmap flag tells ddd-develop this is a roadmap-driven run with the checkbox item text as the target, so it classifies correctly and flips the checkbox in Phase 6.1. ddd-develop skips its spec gate automatically for --roadmap (fix-roadmap) items.
 
-[If standard roadmap:] Invoke the ddd-develop skill with args: `[current]` (roadmap scope token — this MUST be the sole argument so ddd-develop classifies the run as Mode B / roadmap-driven and executes Phase 6.1 to flip the checkbox).
+[If standard roadmap:] Invoke the ddd-develop skill with args: `[current]` (roadmap scope token — this MUST be the first argument so ddd-develop classifies the run as Mode B / roadmap-driven and executes Phase 6.1 to flip the checkbox).
+
+[If the state file has `spec_coverage: skipped` (from --skip-spec or fix-roadmap):] Append ` --skip-spec` to the ddd-develop args. Without this, ddd-develop's own Phase 1.5 spec gate will block on the missing spec and stall the batch — ddd-auto's gate bypass MUST be forwarded to every dispatched cycle.
 
 Context (do NOT include in the skill args — this is for your situational awareness only):
 - Roadmap file: [roadmap_path]

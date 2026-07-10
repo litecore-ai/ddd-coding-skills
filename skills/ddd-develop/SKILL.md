@@ -97,6 +97,8 @@ Check whether the user provided arguments after the command:
 
 When arguments are provided, classify them before proceeding:
 
+0. **Extract flags first** — If the arguments contain a `--skip-spec` flag, record `skip_spec = true` and remove the flag from the argument text before classification. This flag may accompany any input mode (ddd-auto forwards it during batch runs).
+
 1. **Roadmap reference?** — Check in this order:
    - Arguments contain `--roadmap <path>` — extract the path as `roadmap_override` and the remaining text as the item identifier. Set `source = "roadmap"`. Proceed to **Mode A: Explicit Requirement** using the item text as the development target, but carry `roadmap_override` through to Phase 6.1 for checkbox flipping. (This is the path for fix-roadmap items dispatched by ddd-auto.)
    - Arguments match `P\d+` patterns (e.g., `P0`, `P1.2`, `P0.1.1`) → treat as roadmap scope reference, switch to **Mode B: Roadmap Scan** with that scope filter
@@ -256,7 +258,8 @@ Once the user provides a description, treat it the same as **Mode A** (set `sour
 Before generating a plan, verify that a behavior contract (spec) exists for this feature area. The spec anchors the plan to explicit acceptance criteria, preventing direction drift.
 
 **Skip this gate if:**
-- `source = "ad-hoc"` AND user passed `--skip-spec` flag
+- `skip_spec = true` (a `--skip-spec` flag was passed — any source; ddd-auto forwards this flag during batch runs with `spec_coverage: skipped`)
+- `roadmap_override` is set (fix-roadmap items from ddd-audit — audit findings are remediation work with no feature-area spec)
 - The development target is a bug fix or refactoring task (not a feature)
 
 ### Gate Logic
@@ -380,7 +383,7 @@ Save to `docs/plans/YYYY-MM-DD-<feature-name>.md`:
 **Architecture:** [2-3 sentences about approach]
 **Tech Stack:** [Key technologies]
 **Source:** [Roadmap: Phase / Feature Area / Item reference] or [Ad-hoc: user requirement summary]
-**Spec Source:** [docs/specs/P{x}.{y}-{slug}.md] or [N/A — ad-hoc with --skip-spec]
+**Spec Source:** [docs/specs/P{x}.{y}-{slug}.md] or [N/A — --skip-spec / fix-roadmap item]
 **Acceptance Criteria:** [AC-1, AC-2, AC-3 — from spec Coverage table for this item]
 
 ---
@@ -769,7 +772,7 @@ After all technical verifications pass, check implementation against the spec:
 4. **If any AC is missing** → Do NOT mark the item complete. Implement the missing AC (return to Phase 3 for a focused TDD cycle on the missing criteria).
 5. **If all ACs covered** → Proceed to Phase 6.
 
-**Skip this check if** `source = "ad-hoc"` with `--skip-spec`, or no spec exists for the feature area.
+**Skip this check if** `skip_spec = true`, `roadmap_override` is set, or no spec exists for the feature area.
 
 ### Red Flags — STOP
 
