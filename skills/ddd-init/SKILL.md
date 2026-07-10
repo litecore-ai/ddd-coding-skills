@@ -1,6 +1,7 @@
 ---
 name: ddd-init
 description: Use when initializing a project with DDD architecture or refactoring an existing project into DDD structure - triggers on "init DDD", "initialize project", "setup DDD", "ddd-init", "/ddd-init", "refactor to DDD", or "/ddd-init --template fastlayer". Creates DDD directory structure, standardized docs/, and writes architecture constraints to CLAUDE.md.
+argument-hint: "[--template fastlayer | --ref <path>]"
 allowed-tools:
   - Bash(*)
   - Edit

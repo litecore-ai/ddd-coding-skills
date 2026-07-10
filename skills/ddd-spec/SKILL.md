@@ -1,6 +1,7 @@
 ---
 name: ddd-spec
 description: Use when generating structured behavior contracts (specs) for feature areas from a roadmap - triggers on "generate spec", "create spec", "ddd-spec", "/ddd-spec", "/ddd-spec P0.1", "/ddd-spec P0.1 - P0.3", "/ddd-spec P0". Requires docs/product-brief.md (run /ddd-brief first). Produces acceptance-criteria-driven spec documents that anchor ddd-develop plans to testable contracts.
+argument-hint: "[P0.1 | P0.1 - P0.3 | P0]"
 allowed-tools:
   - Bash(*)
   - Edit

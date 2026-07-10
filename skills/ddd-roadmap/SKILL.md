@@ -1,6 +1,7 @@
 ---
 name: ddd-roadmap
 description: Generate phased DDD development roadmaps. Triggers: "generate roadmap", "plan phases", "create roadmap", "/ddd-roadmap <scope>". Supports full-project, scoped, and interactive modes. Produces checkbox-format roadmap for ddd-develop/ddd-auto consumption.
+argument-hint: "[scope description]"
 allowed-tools:
   - Bash(*)
   - Edit

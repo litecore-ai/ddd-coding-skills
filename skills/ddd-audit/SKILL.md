@@ -1,6 +1,7 @@
 ---
 name: ddd-audit
 description: Audit DDD projects for quality, security, and architecture compliance. Triggers: "audit project", "DDD review", "ddd-audit", "/ddd-audit <scope>", readiness check. Supports full-project, scoped (modules/layers), and interactive modes. Any language/framework.
+argument-hint: "[scope, path, or 'audit changes since last audit']"
 allowed-tools:
   - Bash(*)
   - Edit

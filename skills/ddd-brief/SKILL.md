@@ -1,6 +1,7 @@
 ---
 name: ddd-brief
 description: Use when creating or updating the product brief (docs/product-brief.md) that anchors ddd-spec and downstream skills to the original product intent. Triggers on "ddd-brief", "/ddd-brief", "generate brief", "create product brief", or when ddd-spec reports that product-brief.md is missing.
+argument-hint: "[description and/or file paths...]"
 allowed-tools:
   - Bash(*)
   - Edit

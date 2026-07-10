@@ -1,6 +1,7 @@
 ---
 name: ddd-auto
 description: Use when auto-executing multiple roadmap items in sequence - triggers on "auto develop", "batch develop", "ddd-auto", "/ddd-auto", "run roadmap items P0 to P1", or "/ddd-auto <scope>". Automatically loops through ddd-develop for each item in scope, then runs ddd-audit. Requires Stop hook for loop reliability.
+argument-hint: "[scope] [--roadmap <path>] [--policy <preset|text>] [--max-iterations N] [--skip-spec] [--yes]"
 allowed-tools:
   - Bash(*)
   - Edit

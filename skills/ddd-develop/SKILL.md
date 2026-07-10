@@ -1,6 +1,7 @@
 ---
 name: ddd-develop
 description: Develop features from DDD roadmap or ad-hoc requirements. Triggers: "continue development", "next roadmap item", "ddd-develop", "/ddd-develop <feature>". Self-contained TDD workflow with planning, subagent execution, audit, and verification. Roadmap-driven or freeform.
+argument-hint: "[requirement | P0.1.1 | --roadmap <path> <item>] [--skip-spec]"
 allowed-tools:
   - Bash(*)
   - Edit
