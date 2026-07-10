@@ -168,6 +168,8 @@ Options:
 
 Press Escape to interrupt, then `/ddd-auto-cleanup` to clean up state and see progress summary.
 
+> **Note:** Escape pauses the loop but does not end it — until `/ddd-auto-cleanup` runs (or the loop completes), the Stop hook resumes the loop after the session's next reply, even an unrelated one.
+
 Features:
 - Spec coverage gate — blocks if `docs/product-brief.md` or approved specs are missing; run `/ddd-brief` + `/ddd-spec` first, or `--skip-spec` to bypass
 - Reliable loop via Stop hook (no manual re-invocation needed)

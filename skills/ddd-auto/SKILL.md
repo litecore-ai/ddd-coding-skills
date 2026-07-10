@@ -32,7 +32,7 @@ Automated roadmap execution: loop through `ddd-develop` for each item in a user-
 4. **Custom roadmap path** — `/ddd-auto --roadmap path/to/roadmap/` or `/ddd-auto --roadmap my-roadmap.md P0.1.1 - P1.3.1`
 
 **Options (parsed from arguments):**
-- `--roadmap <path>` — Path to a roadmap directory or single roadmap file. Overrides the default `docs/roadmap/` location. Accepts a directory (reads all `P[0-3]-*.md` files inside) or a single `.md` file.
+- `--roadmap <path>` — Path to a roadmap directory or single roadmap file. Overrides the default `docs/roadmap/` location. Accepts a directory (reads all `P[0-9]*-*.md` files inside) or a single `.md` file.
 - `--policy <text|preset>` — Decision policy for autonomous choices (default: `pragmatic`)
 - `--max-iterations <N>` — Safety cap to prevent infinite loops (default: 50)
 - `--skip-spec` — Skip spec generation gate. Spec-less items proceed without behavior contracts. Use only for quick fixes or refactoring.
@@ -133,12 +133,12 @@ Parse the user's arguments to extract:
 1. **Scope identifiers**: `P0`, `P0.1`, `P0.1.1`, ranges (`P0.1.1 - P1.3.1`), mixed (`P0.1.1 - P1.3.1, P2.1.1`)
 2. **--roadmap**: Path to a roadmap directory or single file. Default: `docs/roadmap/`
 3. **--policy**: Free text or preset name (`pragmatic`, `strict-ddd`, `fast`). Default: `pragmatic`. If the value matches a preset name exactly, set `policy_preset`; otherwise set `policy` (free text)
-4. **--max-iterations**: Integer, default 50
+4. **--max-iterations**: Integer, default 50, minimum 1. If 0 or negative, warn and fall back to the default — the Stop hook treats `max_iterations: 0` as "no cap", which must never be set unintentionally
 5. **--skip-spec**: Boolean flag, default false. Skip spec generation and proceed without behavior contracts
 6. **--yes**: Boolean flag, default false. Skip execution plan confirmation
 
 **Parsing rules:**
-- Scope tokens are `P` followed by digits and dots: `P[0-3]`, `P[0-3].[1-9]`, `P[0-3].[1-9].[1-9]`
+- Scope tokens are `P` followed by digits and dots: `P[0-9]+`, `P[0-9]+.[0-9]+`, `P[0-9]+.[0-9]+.[0-9]+` (phases beyond P3 and two-digit area/sub-feature numbers like `P0.10` are valid)
 - Plain integer tokens (`1`, `1 - 2`) are valid only when `--roadmap` points to a `fix-roadmap.md` — they select audit Waves (see Step 2 Wave filtering). With a standard roadmap, report them as invalid scope
 - Ranges use ` - ` (space-hyphen-space) between two scope tokens
 - Commas or spaces separate enumerated items
@@ -146,18 +146,18 @@ Parse the user's arguments to extract:
 - `--policy` consumes the next token (quoted string or single word)
 - `--max-iterations` consumes the next integer token
 
-**If no scope provided:** scope = all phases (P0 through P3).
+**If no scope provided:** scope = all phases present in the roadmap.
 
 **If no --roadmap provided:** use the default discovery path `docs/roadmap/`.
 
 ## Step 2: Read Roadmap & Expand Scope
 
 1. Determine roadmap source:
-   - If `--roadmap` points to a **directory**: read all `P[0-3]-*.md` files inside that directory
+   - If `--roadmap` points to a **directory**: read all `P[0-9]*-*.md` files inside that directory
    - If `--roadmap` points to a **single file**: read that file only (treat it as a single-phase roadmap)
    - **Fix-roadmap special case**: if the roadmap source is a file named `fix-roadmap.md` (from ddd-audit), read items as a flat ordered list of checkboxes in document order. `## N Wave` headings do not create a feature-area hierarchy — iterate `- [ ]` checkboxes sequentially. Store each unchecked item's full checkbox text (the content after `- [ ] `, trimmed) as its identifier in the `scope` list. Example: `"AUTH-CRIT-001 Fix input sanitization in UserController.create (\`src/auth/UserController.ts:45\`) — Effort: M"`.
    - **Wave filtering (fix-roadmap only)**: plain integer scope tokens (`1`) and integer ranges (`1 - 2`) select Wave sections by their `## N Wave ...` headings — only checkboxes under the selected waves enter the scope, still flat and in document order. With no numeric tokens, all waves are in scope. Example: `/ddd-auto --roadmap docs/audit/2026-07-10-001/fix-roadmap.md 1 - 2` executes only CRITICAL and HIGH findings.
-   - If `--roadmap` not provided: read `docs/roadmap/P[0-3]-*.md` (default)
+   - If `--roadmap` not provided: read `docs/roadmap/P[0-9]*-*.md` (default)
 2. For each file, extract the phase/feature-area/sub-feature hierarchy by parsing markdown headings:
    - `# P[N]: ...` → phase
    - `## [N].M ...` → feature area
@@ -443,6 +443,8 @@ The user can run `/ddd-auto-cleanup` after pressing Escape to:
 1. Delete `.ddd-auto.local.md`
 2. The Stop hook finds no state file and allows the next exit
 
+> **Escape pauses, it does not stop.** As long as `.ddd-auto.local.md` exists, the Stop hook re-injects the loop prompt at the end of the session's next response — even if that response answered an unrelated question. If the user interrupts and then asks something unrelated, answer it, remind them the loop will resume, and suggest `/ddd-auto-cleanup` if they intend to stop.
+
 ## Safety Mechanisms
 
 | Mechanism | Purpose |
@@ -468,7 +470,7 @@ The user can run `/ddd-auto-cleanup` after pressing Escape to:
 **Consumes (required before execution):**
 - `docs/product-brief.md` (generated by ddd-brief) — blocks at Step 4.5 if missing
 - Approved specs in `docs/specs/` (generated by ddd-spec) — blocks at Step 4.5 if any feature area is uncovered
-- Roadmap files from `docs/roadmap/P[0-3]-*.md` (generated by ddd-roadmap)
+- Roadmap files from `docs/roadmap/P[0-9]*-*.md` (generated by ddd-roadmap)
 
 **Produces:**
 - Updated roadmap with completed items (`- [x]`)

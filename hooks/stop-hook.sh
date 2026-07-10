@@ -5,7 +5,9 @@
 
 set -euo pipefail
 
-STATE_FILE=".ddd-auto.local.md"
+# Resolve against the project root so the hook finds the state file even when
+# the session cwd has drifted (subdirectory launches, worktrees).
+STATE_FILE="${CLAUDE_PROJECT_DIR:-.}/.ddd-auto.local.md"
 
 # 0. Require jq for JSON handling
 if ! command -v jq &>/dev/null; then

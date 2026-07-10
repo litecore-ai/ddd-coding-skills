@@ -177,6 +177,8 @@ ddd-init  →  ddd-brief  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →
 
 按 Escape 中断，然后 `/ddd-auto-cleanup` 清理状态并查看进度摘要。
 
+> **注意：** Escape 只是暂停循环，并不会结束它——在运行 `/ddd-auto-cleanup`（或循环自然完成）之前，Stop hook 会在会话下一次回复结束时恢复循环，即使那次回复与 ddd-auto 无关。
+
 特性：
 - 通过 Stop hook 实现可靠循环（无需手动重复调用）
 - 规格覆盖门禁 — 若 `docs/product-brief.md` 或已批准规格缺失则阻断；先运行 `/ddd-brief` + `/ddd-spec`，或 `--skip-spec` 跳过
