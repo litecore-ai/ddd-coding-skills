@@ -406,13 +406,12 @@ Each checkbox item must be **self-contained** — ddd-develop will use it as the
 3. Include file path and line number when applicable
 4. Include effort estimate (S = <30min, M = 1-3hr, L = 4-8hr)
 
-### Heading Hierarchy Compatibility
+### How ddd-auto Parses This File
 
-The format aligns with ddd-develop/ddd-auto parsing:
-- `# Fix Roadmap` — document root
-- `## N Wave N — [SEVERITY]` — maps to Phase level
-- `### N.M [Theme]` — maps to Sub-feature level (execution unit for ddd-develop)
-- `- [ ] item` — actionable checkbox items
+ddd-auto treats fix-roadmap.md as a **flat ordered list of checkboxes** — each `- [ ]` item is one execution unit, dispatched individually to ddd-develop. Headings do not create a scope hierarchy:
+- `## N Wave N — [SEVERITY]` — human readability, plus Wave filtering: numeric scope tokens (`/ddd-auto --roadmap <path> 1 - 2`) select which waves' checkboxes enter the scope
+- `### N.M [Theme]` — human readability only
+- `- [ ] item` — the actionable execution unit
 
 ### After Generation
 

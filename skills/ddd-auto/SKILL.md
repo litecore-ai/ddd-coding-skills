@@ -139,6 +139,7 @@ Parse the user's arguments to extract:
 
 **Parsing rules:**
 - Scope tokens are `P` followed by digits and dots: `P[0-3]`, `P[0-3].[1-9]`, `P[0-3].[1-9].[1-9]`
+- Plain integer tokens (`1`, `1 - 2`) are valid only when `--roadmap` points to a `fix-roadmap.md` — they select audit Waves (see Step 2 Wave filtering). With a standard roadmap, report them as invalid scope
 - Ranges use ` - ` (space-hyphen-space) between two scope tokens
 - Commas or spaces separate enumerated items
 - `--roadmap` consumes the next token as a file or directory path
@@ -154,7 +155,8 @@ Parse the user's arguments to extract:
 1. Determine roadmap source:
    - If `--roadmap` points to a **directory**: read all `P[0-3]-*.md` files inside that directory
    - If `--roadmap` points to a **single file**: read that file only (treat it as a single-phase roadmap)
-   - **Fix-roadmap special case**: if the roadmap source is a file named `fix-roadmap.md` (from ddd-audit), read items as a flat ordered list of checkboxes in document order. Do not parse `## N Wave` headings as feature-area scope — iterate all `- [ ]` checkboxes sequentially. Store each unchecked item's full checkbox text (the content after `- [ ] `, trimmed) as its identifier in the `scope` list. Example: `"AUTH-CRIT-001 Fix input sanitization in UserController.create (\`src/auth/UserController.ts:45\`) — Effort: M"`.
+   - **Fix-roadmap special case**: if the roadmap source is a file named `fix-roadmap.md` (from ddd-audit), read items as a flat ordered list of checkboxes in document order. `## N Wave` headings do not create a feature-area hierarchy — iterate `- [ ]` checkboxes sequentially. Store each unchecked item's full checkbox text (the content after `- [ ] `, trimmed) as its identifier in the `scope` list. Example: `"AUTH-CRIT-001 Fix input sanitization in UserController.create (\`src/auth/UserController.ts:45\`) — Effort: M"`.
+   - **Wave filtering (fix-roadmap only)**: plain integer scope tokens (`1`) and integer ranges (`1 - 2`) select Wave sections by their `## N Wave ...` headings — only checkboxes under the selected waves enter the scope, still flat and in document order. With no numeric tokens, all waves are in scope. Example: `/ddd-auto --roadmap docs/audit/2026-07-10-001/fix-roadmap.md 1 - 2` executes only CRITICAL and HIGH findings.
    - If `--roadmap` not provided: read `docs/roadmap/P[0-3]-*.md` (default)
 2. For each file, extract the phase/feature-area/sub-feature hierarchy by parsing markdown headings:
    - `# P[N]: ...` → phase
