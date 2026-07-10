@@ -130,7 +130,7 @@ Dimensions:
 | D7 Performance | N+1 queries, caching, memory leaks |
 | D8 Observability | Logging, metrics, tracing |
 
-Supports incremental (diff) mode, configurable via `.audit-config.yml`, and generates scored reports with fix roadmaps.
+Supports incremental (diff) mode, configurable via `.audit-config.yml`, and generates reports with fix roadmaps (quantitative scoring available on request).
 
 ### ddd-auto
 

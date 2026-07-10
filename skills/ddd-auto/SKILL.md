@@ -428,7 +428,7 @@ Read the state file's Progress Log and the audit report to compile:
 
 ### Audit Results
 
-- **Score**: [overall score]%
+- **Score**: [overall score]% (only if scoring was computed — see ddd-audit's opt-in scoring rules)
 - **Verdict**: [READY / NOT READY]
 - **Findings**: CRITICAL: [N], HIGH: [N], MEDIUM: [N], LOW: [N]
 - **Full report**: [path to audit-report.md]

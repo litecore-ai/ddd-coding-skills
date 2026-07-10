@@ -10,7 +10,7 @@
       "name": "ddd-coding-skills",
       "source": "./",
       "description": "DDD development skill suite: project initialization, roadmap generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
-      "version": "1.26.0",
+      "version": "2.0.0",
       "license": "MIT",
       "homepage": "https://github.com/litecore-ai/ddd-coding-skills",
       "repository": "https://github.com/litecore-ai/ddd-coding-skills",

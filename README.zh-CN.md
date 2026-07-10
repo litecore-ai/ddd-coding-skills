@@ -139,7 +139,7 @@ ddd-init  →  ddd-roadmap   →  ddd-spec  →  ddd-develop  →  ddd-audit
 | MEDIUM | 可维护性问题 | 建议 — 安排上线后处理 |
 | LOW | 风格、小优化 | 备注 — 可选 |
 
-**特性**：支持增量（diff）模式、可通过 `.audit-config.yml` 配置、生成带评分的报告和修复路线图。
+**特性**：支持增量（diff）模式、可通过 `.audit-config.yml` 配置、生成审计报告与修复路线图（定量评分按需生成）。
 
 ### ddd-auto
 
