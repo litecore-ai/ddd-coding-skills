@@ -530,56 +530,16 @@ Projects can customize audit behavior via `.audit-config.yml` at project root. *
 
 ---
 
-## Audit Scoring
+## Audit Scoring (optional)
 
-Provide a quantitative score per dimension and overall, enabling cross-audit progress tracking.
+Scores are **opt-in**, not part of the default report. The formula normalizes weighted finding counts by the number of checklist items generated for that run — a denominator that varies run to run — so absolute scores and cross-audit deltas are indicative at best. The severity-count summary in the final report carries the actionable signal.
 
-### Scoring Formula
+Compute scores only when:
+- the user explicitly asks for scores, or
+- `.audit-config.yml` sets dimension weights (implies the project tracks scores), or
+- a previous audit report with a score table exists (continuity)
 
-For each dimension D:
-
-```
-raw_score(D) = 1 - (2×CRIT + 1.5×HIGH + 1×MED + 0.5×LOW) / total_checklist_items(D)
-score(D) = clamp(raw_score(D), 0, 1) × 100
-```
-
-Overall weighted score:
-
-```
-overall = Σ(score(D) × weight(D)) / Σ(weight(D))
-```
-
-### Score Table in Final Report
-
-Add to `audit-report.md`:
-
-```
-## Audit Score
-
-| Dimension | Items | CRIT | HIGH | MED | LOW | Score | Δ vs Previous |
-|-----------|-------|------|------|-----|-----|-------|---------------|
-| D1 Design | 45 | 1 | 3 | 8 | 5 | 72% | +8% |
-| D2 Architecture | 38 | 0 | 2 | 5 | 3 | 81% | +12% |
-| ... | | | | | | | |
-| **Overall (weighted)** | | | | | | **76%** | **+9%** |
-
-### Score History
-| Date | Overall | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 |
-|------|---------|----|----|----|----|----|----|----|----|
-| 2026-03-15 | 67% | 64% | 69% | ... |
-| 2026-04-08 | 76% | 72% | 81% | ... |
-```
-
-### Score Interpretation
-
-| Range | Label | Meaning |
-|-------|-------|---------|
-| 90-100% | Excellent | Production-ready, minor polish only |
-| 75-89% | Good | Deployable with known issues tracked |
-| 60-74% | Fair | Needs targeted fixes before production |
-| 40-59% | Poor | Significant rework needed |
-| 0-39% | Critical | Major architectural or security concerns |
-
+In those cases, **Read `references/audit-scoring.md`** in this skill's directory for the formula, score table format, history table, and interpretation bands.
 ---
 
 ## CI/CD Integration

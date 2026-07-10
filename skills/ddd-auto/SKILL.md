@@ -386,7 +386,7 @@ Let ddd-audit run its pipeline on the scoped area:
 3. Generate final report with scores
 4. Generate fix roadmap
 
-**Do NOT fix findings in this audit** — this is a final assessment, not the incremental audit-fix loop that ddd-develop does internally. The purpose is to verify integration quality across the items developed in this run.
+**Do NOT fix findings in this audit** — this is a final assessment. Findings land in the audit's `fix-roadmap.md`; the remediation path is a follow-up ddd-auto run over that file (see Step 9). Pay particular attention to D6 Integration findings — unwired modules and broken cross-module contracts are exactly what per-item development misses.
 
 ## Step 9: Generate Final Report & Set Phase to Done
 
@@ -433,6 +433,16 @@ Read the state file's Progress Log and the audit report to compile:
 - **Findings**: CRITICAL: [N], HIGH: [N], MEDIUM: [N], LOW: [N]
 - **Full report**: [path to audit-report.md]
 - **Fix roadmap**: [path to fix-roadmap.md]
+
+### Remediation
+
+[If the audit produced findings:]
+To fix CRITICAL + HIGH findings (integration issues live here):
+  /ddd-auto --roadmap [path to fix-roadmap.md] 1 - 2
+To fix everything:
+  /ddd-auto --roadmap [path to fix-roadmap.md]
+
+[If ddd-develop reported UNWIRED modules during the run, list them here with a reminder that each needs a consumer or an explicit scaffolding decision.]
 ```
 
 Present this report to the user. The loop will end naturally — the Stop hook sees `phase=done` and allows exit.
