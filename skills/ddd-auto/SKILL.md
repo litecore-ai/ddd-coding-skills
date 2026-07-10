@@ -286,6 +286,8 @@ spec_coverage: "[full|partial|skipped]"
 
 **session_id:** always write as `""`. The Stop hook claims ownership atomically on its first fire — it writes the real session ID into the state file so that concurrent sessions are excluded. Do not try to set this from the skill; the hook handles it.
 
+**.gitignore:** after creating the state file, ensure the project's `.gitignore` contains the line `.ddd-auto.local.md*` (covers the state file and the hook's `.lock` directory). Append it if missing. This prevents commits made during the loop (ddd-develop cycles, audit auto-fixes) from accidentally committing loop state.
+
 ## Step 6: Dispatch Agent for /ddd-develop
 
 Look at the `current` field in the state file. This is the sub-feature ID (e.g., `P0.1.1`) to develop next.

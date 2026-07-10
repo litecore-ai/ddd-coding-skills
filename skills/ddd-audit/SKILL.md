@@ -276,9 +276,10 @@ Phase 0 collects baseline metrics (lint, type check, test coverage, dead code, d
    - Formatting issues: [before] → [after] ([N] auto-fixed)
    - Remaining (require manual fix): [N]
    ```
-5. **Commit auto-fix changes** (if any files changed):
+5. **Commit auto-fix changes** (if any files changed). Stage ONLY the files the auto-fix tools modified — never `git add -A` or `git add -u`, which can sweep in unrelated files (including ddd-auto's `.ddd-auto.local.md` state file when this audit runs inside a batch loop):
    ```bash
-   git add -A
+   git diff --name-only
+   git add [paste the exact file list from the diff output above]
    git commit -m "fix: auto-fix lint and formatting issues (ddd-audit baseline)"
    ```
 
