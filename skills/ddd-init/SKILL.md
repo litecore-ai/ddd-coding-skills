@@ -422,7 +422,7 @@ Never write these permissions to the committed `.claude/settings.json` — `sett
 **Pipeline position:** Entry point — runs before all other skills.
 
 ```
-ddd-init → ddd-brief → ddd-roadmap → ddd-spec → ddd-develop/ddd-auto → ddd-audit
+ddd-init → ddd-roadmap (brief + roadmap) → ddd-spec → ddd-develop/ddd-auto → ddd-audit
 ```
 
 **Produces:**

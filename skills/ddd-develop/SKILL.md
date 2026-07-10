@@ -290,7 +290,7 @@ Before generating a plan, verify that a behavior contract (spec) exists for this
      A behavior contract is required before development to prevent direction drift.
 
      If docs/product-brief.md is also missing:
-       1. Run /ddd-brief to generate the product brief
+       1. Run /ddd-roadmap (its Goal Alignment step writes the product brief)
        2. Run /ddd-spec P0.1 to generate the spec
 
      If docs/product-brief.md exists:
