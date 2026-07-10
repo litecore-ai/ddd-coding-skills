@@ -174,6 +174,21 @@ If the existing spec has `status: draft`, regenerate and overwrite it.
 
 ---
 
+## Step 1.5 -- Shared Contracts (docs/specs/_shared.md)
+
+Per-area specs generated in parallel by isolated subagents cannot see each other — without a shared reference they invent incompatible data models, endpoint conventions, and error shapes, and the drift lands in code. Before any per-area generation, establish the shared contracts **sequentially in the main session**:
+
+1. **Identify shared surface** from Step 1 context: entities referenced by two or more feature areas in scope, cross-module interfaces (`app/internal/`), the common error envelope, pagination/ID/timestamp conventions
+2. **Write or update `docs/specs/_shared.md`** with: shared Data Models (same table format as per-area specs), cross-module interface signatures, error response shape, and naming conventions. Frontmatter: `scope: shared`, `status: draft`
+3. **Single-area invocations**: read `_shared.md` if it exists and conform to it; extend it first if this area introduces a model other areas will consume
+4. `_shared.md` is a reference document, not a feature spec — it has no ACs and does not count toward ddd-auto's spec coverage gate
+
+### Cross-Spec Consistency Pass
+
+After all per-area specs are generated (Step 2/3), before presenting to the user: compare every spec's field names, types, endpoint paths, and error shapes against `_shared.md` and against each other. Fix drift in the specs (or, if a spec revealed a better shape, update `_shared.md` and the other affected specs). Report: `Consistency pass: [N] conflicts resolved ([list])`.
+
+---
+
 ## Step 2 -- Dispatch Subagents
 
 When multiple feature areas are in scope, dispatch one Agent subagent per feature area for parallel generation. For a single feature area, generate the spec inline (no subagent needed).
