@@ -110,8 +110,8 @@ ddd-init  →  ddd-brief  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →
 1. **LOCATE** — 确定开发目标（命令参数 / 路线图 / 询问用户）
 1.5. **SPEC GATE** — 验证已批准的规格是否存在；缺失则阻塞
 2. **PLAN** — 生成锚定到规格验收标准的实现计划
-3. **IMPLEMENT** — 每个任务启动一个子智能体，按 RED-GREEN-REFACTOR 循环执行，配备规格审查员 + 代码质量审查员
-4. **AUDIT** — 以增量模式运行 ddd-audit，修复所有发现（所有严重级别）
+3. **IMPLEMENT** — 每个任务启动一个子智能体，按 RED-GREEN-REFACTOR 循环执行，配备规格审查员
+4. **AUDIT** — 以增量模式运行 ddd-audit，修复 CRITICAL/HIGH 发现，MEDIUM/LOW 记入 fix-roadmap 留待批量处理
 5. **VERIFY** — 运行 lint、类型检查、完整测试套件、规格合规检查，提供实际输出证据
 6. **COMPLETE** — 更新路线图（如适用）、提交代码、推送（需用户确认）
 
@@ -120,7 +120,7 @@ ddd-init  →  ddd-brief  →  ddd-roadmap  →  ddd-spec  →  ddd-develop  →
 - `/ddd-develop` — 选取路线图中下一个未完成条目
 - `/ddd-develop` — 交互模式（路线图已完成时主动询问）
 
-**内置能力**：TDD（RED-GREEN-REFACTOR）、实现计划生成、子智能体编排（实现者 + 规格审查员 + 质量审查员）、规格合规验证、完成前验证。
+**内置能力**：TDD（RED-GREEN-REFACTOR）、实现计划生成、子智能体编排（实现者 + 规格审查员）、规格合规验证、完成前验证。代码质量审查由每个 item 一次的增量审计承担，不再逐 task 审查。
 
 ### ddd-audit
 

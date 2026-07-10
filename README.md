@@ -111,7 +111,7 @@ Self-contained development workflow with 6 phases:
 1.5. **SPEC GATE** — Verify approved spec exists; block if missing
 2. **PLAN** — Generate implementation plan anchored to spec acceptance criteria
 3. **IMPLEMENT** — Subagent-per-task execution with spec + quality review loops
-4. **AUDIT** — Incremental DDD code review, fix ALL findings (all severity levels)
+4. **AUDIT** — Incremental DDD code review; fix CRITICAL/HIGH findings, defer MEDIUM/LOW to the fix-roadmap
 5. **VERIFY** — Lint, type check, full test suite, spec compliance check with evidence
 6. **COMPLETE** — Update roadmap (if applicable), commit, push (with user confirmation)
 
@@ -120,7 +120,7 @@ Three input modes:
 - `/ddd-develop` — pick next unchecked roadmap item
 - `/ddd-develop` — interactive (asks what to develop when no roadmap items remain)
 
-Built-in: TDD (RED-GREEN-REFACTOR), implementation planning, subagent orchestration (implementer + spec reviewer + quality reviewer), spec compliance verification, and verification-before-completion.
+Built-in: TDD (RED-GREEN-REFACTOR), implementation planning, subagent orchestration (implementer + spec reviewer), spec compliance verification, and verification-before-completion. Code-quality review happens once per item via the incremental audit, not per task.
 
 ### ddd-audit
 

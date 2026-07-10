@@ -1,6 +1,6 @@
 # ddd-develop Subagent Prompt Templates
 
-Full prompt templates for the Phase 3 (IMPLEMENT) subagent loop. Fill every placeholder before dispatching. Never make a subagent read the plan file — paste the full task text into the prompt.
+Full prompt templates for the Phase 3 (IMPLEMENT) subagent loop: Implementer and Spec Reviewer. Code quality is reviewed once per item by the Phase 4 incremental audit, not by a per-task reviewer. Fill every placeholder before dispatching. Never make a subagent read the plan file — paste the full task text into the prompt.
 
 ## Implementer Prompt Template
 
@@ -101,36 +101,3 @@ Report:
 - Issues found: [list specifically what's missing or extra, with file:line references]
 ```
 
-## Code Quality Reviewer Prompt Template
-
-**Only dispatch after spec compliance passes.**
-
-```
-You are reviewing code quality for Task N.
-
-## What Was Implemented
-[From implementer's report]
-
-## Changes to Review
-Files changed in commits [BASE_SHA..HEAD_SHA]
-
-## Review Checklist
-- [ ] Code is readable and well-named
-- [ ] Functions are focused (<50 lines)
-- [ ] Files are cohesive (<800 lines)
-- [ ] No deep nesting (>4 levels)
-- [ ] Errors handled explicitly
-- [ ] No hardcoded secrets or credentials
-- [ ] No console.log or debug statements
-- [ ] Tests exist for new functionality
-- [ ] Tests verify behavior, not mock behavior
-- [ ] Each file has one clear responsibility
-- [ ] Implementation follows DDD layer conventions
-- [ ] No mutation (immutable patterns used)
-- [ ] New files aren't already large
-
-Report:
-- **Strengths**: What's done well
-- **Issues**: Critical / Important / Minor with file:line references
-- **Assessment**: Approved / Changes Needed
-```

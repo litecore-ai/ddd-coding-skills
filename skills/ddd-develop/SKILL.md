@@ -505,9 +505,6 @@ digraph per_task {
   spec_review [label="Dispatch spec reviewer"];
   spec_pass [label="Spec compliant?"];
   spec_fix [label="Implementer fixes spec gaps"];
-  quality_review [label="Dispatch code quality reviewer"];
-  quality_pass [label="Quality approved?"];
-  quality_fix [label="Implementer fixes quality issues"];
   done [label="Mark task complete"];
 
   dispatch -> questions;
@@ -518,21 +515,18 @@ digraph per_task {
   spec_review -> spec_pass;
   spec_pass -> spec_fix [label="no"];
   spec_fix -> spec_review [label="re-review"];
-  spec_pass -> quality_review [label="yes"];
-  quality_review -> quality_pass;
-  quality_pass -> quality_fix [label="no"];
-  quality_fix -> quality_review [label="re-review"];
-  quality_pass -> done [label="yes"];
+  spec_pass -> done [label="yes"];
 }
 ```
 
 ### Subagent Prompt Templates
 
-**Before dispatching any subagent, Read `references/subagent-prompts.md` in this skill's directory.** It contains the full prompt templates for all three roles:
+**Before dispatching any subagent, Read `references/subagent-prompts.md` in this skill's directory.** It contains the full prompt templates for both roles:
 
 - **Implementer** — TDD rules, shell-safety rules (critical: no compound commands, no shell operators), code organization, escalation criteria, self-review, and the report format (`DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT`)
 - **Spec Reviewer** — verifies the implementation against task requirements by reading the actual code; never trusts the implementer's report
-- **Code Quality Reviewer** — quality checklist (function/file size, nesting, error handling, test validity, DDD layer conventions); **only dispatched after spec compliance passes**
+
+Code-quality concerns (function size, nesting, error handling, style) are NOT a separate per-task review — they are covered once per item by the Phase 4 incremental audit (D3 Quality dimension). One review layer per concern.
 
 Fill every placeholder (task text, context, commit range) before dispatching. Never make a subagent read the plan file — paste the full task text into the prompt.
 
@@ -555,12 +549,11 @@ Fill every placeholder (task text, context, commit range) before dispatching. Ne
 
 **Never:**
 - Start on main/master without user consent
-- Skip reviews (spec OR quality)
+- Skip spec review
 - Proceed with unfixed issues
 - Dispatch multiple implementers in parallel (conflicts)
 - Make subagent read plan file (provide full text)
 - Accept "close enough" on spec compliance
-- Start quality review before spec compliance passes
 
 ---
 
@@ -577,15 +570,15 @@ Invoke `/ddd-audit` via the **Skill tool** in incremental/diff mode:
 
 ### Audit-Fix Loop
 
-**ALL severity levels trigger fixes** — CRITICAL, HIGH, MEDIUM, and LOW:
+**CRITICAL and HIGH findings trigger fixes.** MEDIUM and LOW findings are recorded in the audit's fix-roadmap for later batch remediation (`/ddd-auto --roadmap <fix-roadmap path>`) — fixing style-level findings inline churns tokens and destabilizes just-written code for marginal gain.
 
 ```dot
 digraph audit_loop {
   audit [label="Run ddd-audit\n(incremental)" shape=box];
-  findings [label="Any findings?" shape=diamond];
-  fix [label="Fix ALL findings\n(CRIT → HIGH → MED → LOW)" shape=box];
+  findings [label="CRITICAL or HIGH\nfindings?" shape=diamond];
+  fix [label="Fix CRIT + HIGH" shape=box];
   reaudit [label="Re-audit fixed files" shape=box];
-  done [label="Audit clean\nProceed to Phase 5" shape=box];
+  done [label="No CRIT/HIGH remain\nMED/LOW -> fix-roadmap\nProceed to Phase 5" shape=box];
 
   audit -> findings;
   findings -> fix [label="yes"];
@@ -595,7 +588,7 @@ digraph audit_loop {
 }
 ```
 
-Fix order: CRITICAL first, then HIGH, MEDIUM, LOW. Re-audit after each fix round until zero findings.
+Fix order: CRITICAL first, then HIGH. Re-audit fixed files after each round until zero CRITICAL/HIGH findings remain. Report the count of deferred MEDIUM/LOW findings and the fix-roadmap path.
 
 ---
 
@@ -779,7 +772,7 @@ When scanning, check for `- [ ]` first, fall back to lines without ✅ in emoji-
 | 1.5. SPEC GATE | Verify approved spec exists for feature area; block if missing | Spec context (ACs, data models, API contracts) for Phase 2 |
 | 2. PLAN | Scope analysis (blast radius + iteration detection) → implementation plan | Plan doc with TDD tasks; frozen targets + completion condition if iterative |
 | 3. IMPLEMENT | Subagent TDD execution | Working code + tests + commits |
-| 4. AUDIT | ddd-audit (incremental) | Zero findings |
+| 4. AUDIT | ddd-audit (incremental) | Zero CRITICAL/HIGH findings; MED/LOW deferred to fix-roadmap |
 | 5. VERIFY | Lint + tests + build + spec compliance | Evidence of all passing + all ACs covered |
 | 6. COMPLETE | Update roadmap (if applicable) + commit + push | Updated roadmap (roadmap source) or clean commit (ad-hoc) |
 
