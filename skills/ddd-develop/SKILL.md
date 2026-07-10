@@ -328,6 +328,7 @@ Generate a detailed implementation plan for the confirmed development target (ro
 ### Planning Process
 
 1. **Read project context**: CLAUDE.md, existing code in relevant modules, test patterns, DDD layer structure
+1a. **Pick style anchors**: select 2-3 existing files from the same layer/module family that new code must mirror (naming, error handling, return shapes, test structure). Prefer the most recently audited files. In a fresh project with no candidates, the first implemented module BECOMES the anchor for everything after it — note this in the plan.
 2. **Map file structure**: which files to create/modify, one responsibility per file
 3. **Scope & iteration analysis** (see below)
 4. **Decompose into bite-sized tasks**: each task = one TDD cycle (2-5 minutes)
@@ -396,6 +397,7 @@ Save to `docs/plans/YYYY-MM-DD-<feature-name>.md`:
 **Source:** [Roadmap: Phase / Feature Area / Item reference] or [Ad-hoc: user requirement summary]
 **Spec Source:** [docs/specs/P{x}.{y}-{slug}.md] or [N/A — --skip-spec / fix-roadmap item]
 **Acceptance Criteria:** [AC-1, AC-2, AC-3 — from spec Coverage table for this item]
+**Style Anchors:** [2-3 existing file paths whose conventions this implementation must mirror; or "first module — becomes the anchor"]
 
 ---
 

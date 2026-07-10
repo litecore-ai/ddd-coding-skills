@@ -51,7 +51,7 @@ Reserve Bash for commands that have no dedicated tool equivalent: `npm test`, `n
 |---|-----------|-------|
 | D1 | **Design** | Functional completeness (cross-reference `docs/product-brief.md` Goals and Non-goals if present — check whether stated goals are implemented and out-of-scope items were not), optimal approach, interface clarity, over/under-engineering |
 | D2 | **Architecture** | DDD layer compliance, dependency direction, single responsibility, bounded context |
-| D3 | **Quality** | Dead code, duplication, complexity, function size (<50 LOC), file size (<800 LOC), naming |
+| D3 | **Quality** | Dead code, duplication, complexity, function size (<50 LOC), file size (<800 LOC), naming, **consistency with sibling modules** (same error-handling shape, naming scheme, and test structure as the module's peers — flag modules that invented their own style) |
 | D4 | **Security** | Vulnerabilities, edge cases, error handling, sensitive data, input validation |
 | D5 | **Testing** | Unit/integration/E2E coverage, test quality, boundary testing, mock validity |
 | D6 | **Integration** | Cross-module contracts, data flow, wiring correctness |

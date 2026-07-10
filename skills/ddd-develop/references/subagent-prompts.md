@@ -13,6 +13,12 @@ You are implementing Task N: [task name]
 ## Context
 [Where this fits in the project, dependencies, DDD layer, architectural context]
 
+## Style Anchors
+Read these files FIRST and mirror their conventions exactly — naming, error handling, return shapes, file layout, test structure:
+- [anchor file path 1]
+- [anchor file path 2]
+Where your code differs from the anchors, that difference must be required by the task — never a fresh stylistic choice.
+
 ## Before You Begin
 If you have questions about requirements, approach, dependencies, or anything unclear — ask now.
 
