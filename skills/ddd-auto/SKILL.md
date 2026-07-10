@@ -317,7 +317,7 @@ Context (do NOT include in the skill args — this is for your situational aware
 - Sub-feature title: [sub-feature title from roadmap]
 - This is part of an automated ddd-auto run: ddd-develop's Batch (Non-Interactive) Mode applies — skip all confirmations, never push, report BLOCKED instead of waiting on any gate.
 
-After ddd-develop completes (all 6 phases), report back with EXACTLY this format:
+After ddd-develop completes (all phases; Phase 4 AUDIT is skipped in batch mode), report back with EXACTLY this format:
 
 STATUS: [DONE or BLOCKED]
 ITEM: [item ID, e.g. P0.1.1]
@@ -326,7 +326,7 @@ DECISIONS: [key decisions made, one per line, or "none"]
 BLOCKED_REASON: [reason if BLOCKED, or "none"]
 ```
 
-**Do not interfere with the subagent's ddd-develop workflow.** It will execute the full 6-phase cycle (LOCATE → PLAN → IMPLEMENT → AUDIT → VERIFY → COMPLETE) independently.
+**Do not interfere with the subagent's ddd-develop workflow.** It will execute the cycle (LOCATE → PLAN → IMPLEMENT → VERIFY → COMPLETE) independently — Phase 4 (AUDIT) is skipped in batch mode because Step 8's scoped audit covers the whole batch once.
 
 ## Step 7: Update State File After Each Item
 
@@ -360,7 +360,7 @@ After the Agent returns its report (STATUS: DONE or BLOCKED), parse the structur
 
 When phase transitions to `audit`, the Stop hook will inject a prompt to run `/ddd-audit`.
 
-Execute `/ddd-audit` scoped to the **completed items only** — not the entire project. Each ddd-develop cycle already audits its own item; this final audit focuses on **cross-module integration** between the items developed in this run.
+Execute `/ddd-audit` scoped to the **completed items only** — not the entire project. In batch mode this is the **primary and only audit** for the batch (ddd-develop skips its per-item Phase 4 audit): it covers per-module quality (D1-D8) for the changed files AND **cross-module integration** between the items developed in this run.
 
 Construct the audit scope from the files changed since the pre-run baseline (`baseline_sha` in the state file). Compute the file list with:
 

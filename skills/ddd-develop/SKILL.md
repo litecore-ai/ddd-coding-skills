@@ -38,6 +38,7 @@ Supports three input modes:
 When this skill runs as part of an automated ddd-auto batch — the dispatch context states it (e.g., "This is part of an automated ddd-auto run") — apply these overrides to every phase:
 
 - **Skip all user confirmations.** Phase 1 target confirmation, plan approval in Phase 2, and any "Wait for user response" step proceed automatically. Apply the decision policy from the dispatch context for autonomous choices; log key decisions.
+- **Skip Phase 4 (AUDIT) entirely.** ddd-auto runs one scoped audit over the whole batch at the end — per-item audits in batch runs are redundant and triple the audit cost. Phase 5 (VERIFY) still runs in full.
 - **Never push.** Phase 6.4 is skipped entirely. Commit locally and report the commit SHA — ddd-auto's operator decides when to push.
 - **Never stall on a gate.** If a gate would normally wait for user input and no skip condition applies (e.g., spec missing and no `--skip-spec`), report `STATUS: BLOCKED` with the reason instead of waiting.
 - **Interactive mode is the default.** Without an explicit batch context, all confirmation points below apply as written.
