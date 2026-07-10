@@ -15,7 +15,7 @@ hooks:
       hooks:
         - type: command
           command: |
-            printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+            [ -f "${CLAUDE_PROJECT_DIR:-.}/.ddd-auto.local.md" ] && printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}' || true
 ---
 
 # DDD Develop
@@ -548,7 +548,7 @@ If you have questions about requirements, approach, dependencies, or anything un
 
 ## Shell Safety — Avoiding Permission Prompts
 
-Claude Code's permission system triggers prompts on shell operators (`&&`, `||`, `|`, `;`), which split compound commands into subcommands that are each independently checked. Even if each subcommand has an allow rule, the compound command itself gets blocked. Subagents (Agent tool) do NOT inherit `.claude/settings.json` permissions (known Bug #37730), so the only reliable strategy is to **never generate compound commands**.
+Claude Code's permission system triggers prompts on shell operators (`&&`, `||`, `|`, `;`), which split compound commands into subcommands that are each independently checked. Even if each subcommand has an allow rule, the compound command itself gets blocked. Subagent permission inheritance has historically been unreliable (improved in recent Claude Code versions, but don't depend on it), so the only reliable strategy is to **never generate compound commands**.
 
 Rules:
 - **Each Bash call = one simple command, no shell operators whatsoever**
@@ -556,7 +556,7 @@ Rules:
 - NEVER use redirections (`>`, `>>`, `<`, `2>/dev/null`, `2>&1`) — while not command separators, they can cause unpredictable matching
 - NEVER use `for`/`while` loops, subshells `$(...)`, or backticks in Bash commands
 - NEVER use brace expansion `{a,b,c}` or glob patterns `[...]`
-- NEVER use `source` to activate virtualenvs — invoke the venv binary directly: `.venv/bin/python -c "..."` (ensure `Bash(.venv/*)` is in the project's `.claude/settings.json`)
+- NEVER use `source` to activate virtualenvs — invoke the venv binary directly: `.venv/bin/python -c "..."` (ensure `Bash(.venv/*)` is in the project's `.claude/settings.local.json`)
 - NEVER put `#` comments inside `python -c "..."` strings — newline + `#` triggers Claude Code's "hide arguments from path validation" security prompt, blocking subagents. Either: (a) strip all comments from inline Python, or (b) write the script to a temp file with the Write tool then run `.venv/bin/python /tmp/verify.py`
 - NEVER use bash `grep`, `find`, `cat`, `wc` — use the **Grep**, **Glob**, **Read** tools instead
 - Create directories with separate Bash calls: `mkdir -p path1` then `mkdir -p path2`

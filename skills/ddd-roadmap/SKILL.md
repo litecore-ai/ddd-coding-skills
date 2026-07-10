@@ -14,7 +14,7 @@ hooks:
       hooks:
         - type: command
           command: |
-            printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+            [ -f "${CLAUDE_PROJECT_DIR:-.}/.ddd-auto.local.md" ] && printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}' || true
 ---
 
 # DDD Roadmap Generator

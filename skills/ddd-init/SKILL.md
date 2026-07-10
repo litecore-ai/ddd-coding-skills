@@ -14,7 +14,7 @@ hooks:
       hooks:
         - type: command
           command: |
-            printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+            [ -f "${CLAUDE_PROJECT_DIR:-.}/.ddd-auto.local.md" ] && printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}' || true
 ---
 
 # DDD Init
@@ -259,18 +259,17 @@ Infrastructure ← ACL, Repository  # Shared infra consumed by outer layers
 - Immutability: prefer immutable data structures in domain layer
 ````
 
-Also generate `.claude/settings.json` using the **Permissions Template** section below. Adapt the Bash allowlist based on the detected tech stack — only include entries relevant to the project's language and tooling. If the file already exists, merge the new `permissions.allow` entries into the existing array (deduplicate).
+Also generate `.claude/settings.local.json` using the **Permissions Template** section below. Adapt the Bash allowlist based on the detected tech stack — only include entries relevant to the project's language and tooling. If the file already exists, merge the new `permissions.allow` entries into the existing array (deduplicate). Never write these permissions to the committed `.claude/settings.json`.
 
 ### Step 7: Commit
 
 ```bash
-git add [list all created directories, .gitkeep files, CLAUDE.md, and .claude/settings.json explicitly]
+git add [list all created directories, .gitkeep files, and CLAUDE.md explicitly — never stage .claude/settings.local.json]
 git commit -m "feat: initialize DDD architecture structure
 
 - Created DDD layer directories ([template] template)
 - Created standardized docs/ structure
-- Added DDD Architecture section to CLAUDE.md
-- Configured permissions in .claude/settings.json"
+- Added DDD Architecture section to CLAUDE.md"
 ```
 
 ---
@@ -375,14 +374,13 @@ Same as scaffold mode.
 ### Step 9: Commit
 
 ```bash
-git add [list all created directories, .gitkeep files, CLAUDE.md, docs/roadmap/, and .claude/settings.json explicitly]
+git add [list all created directories, .gitkeep files, CLAUDE.md, and docs/roadmap/ explicitly — never stage .claude/settings.local.json]
 git commit -m "feat: add DDD architecture structure and refactoring roadmap
 
 - Created target DDD layer directories ([template] template)
 - Created standardized docs/ structure
 - Generated refactoring roadmap in docs/roadmap/
-- Added DDD Architecture section to CLAUDE.md
-- Configured permissions in .claude/settings.json"
+- Added DDD Architecture section to CLAUDE.md"
 ```
 
 ### Step 10: Suggest Next Step
@@ -465,14 +463,15 @@ docs/
 
 ## Permissions & Hooks Template
 
-When generating `.claude/settings.json`, use this template and adapt based on the detected tech stack. This file ensures ddd-auto and ddd-develop can execute build/test/lint commands without triggering permission prompts that block the automated loop.
+When generating `.claude/settings.local.json`, use this template and adapt based on the detected tech stack. This file ensures ddd-auto and ddd-develop can execute build/test/lint commands without triggering permission prompts that block the automated loop.
 
-**Defense in depth:** `permissions.allow` covers known command patterns. `hooks.PermissionRequest` catches anything that slips through — it intercepts ALL permission dialogs at the hook level and auto-approves them. Both layers are needed because:
+**Why `settings.local.json` and not `settings.json`:** the allowlist below is a convenience for THIS machine's automated runs. Writing it to the committed `settings.json` would silently grant the same broad permissions to every collaborator and every future session of the project — never do that. `settings.local.json` is gitignored by Claude Code by default.
+
+**Defense in depth:** `permissions.allow` covers known command patterns. `hooks.PermissionRequest` catches anything that slips through — but it is **conditional**: it only auto-approves while a ddd-auto loop is actually running (the `.ddd-auto.local.md` state file exists). Outside a loop, normal permission prompts apply and the user stays in control. Both layers are needed because:
 - `permissions.allow` is fast (no subprocess overhead) but pattern-based — it cannot cover every possible command
-- `hooks.PermissionRequest` is universal but fires as a subprocess — it adds ~50ms latency per prompt
-- Together they provide near-zero permission blocking
+- the conditional `hooks.PermissionRequest` is universal during unattended loops, and inert the rest of the time
 
-> **Known limitations (unfixed Claude Code bugs):** Subagents spawned via Agent tool do NOT inherit `permissions.allow` (Bug #37730) and PermissionRequest hooks may not fire for subagent permission requests (Bug #23983). The SKILL.md frontmatter hooks on each skill provide a third layer that applies within skill execution contexts.
+> **Deliberately excluded from the allowlist:** `Bash(bash:*)` and `Bash(source:*)` — either one lets any command run as `bash -c "..."`, which nullifies every other prefix rule in the list. If a project genuinely needs them, the user must add them manually and knowingly.
 
 Base template (always included):
 
@@ -500,8 +499,6 @@ Base template (always included):
       "Bash(sort:*)",
       "Bash(touch:*)",
       "Bash(chmod:*)",
-      "Bash(source:*)",
-      "Bash(bash:*)",
       "Bash(git:*)",
       "Bash(jq:*)",
       "Bash(grep:*)",
@@ -518,7 +515,7 @@ Base template (always included):
         "hooks": [
           {
             "type": "command",
-            "command": "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}'"
+            "command": "[ -f \"${CLAUDE_PROJECT_DIR:-.}/.ddd-auto.local.md\" ] && printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}' || true"
           }
         ]
       }
@@ -556,6 +553,6 @@ ddd-init → ddd-brief → ddd-roadmap → ddd-spec → ddd-develop/ddd-auto →
 - `docs/` structure (consumed by all skills for output)
 - CLAUDE.md architecture section (consumed by ddd-develop for plan generation, ddd-audit for compliance checking)
 - Refactoring roadmap in `docs/roadmap/` (consumed by ddd-develop/ddd-auto)
-- `.claude/settings.json` permissions configuration (prevents permission prompts during ddd-auto/ddd-develop)
+- `.claude/settings.local.json` permissions configuration (machine-local, uncommitted; prevents permission prompts during ddd-auto/ddd-develop)
 
 **Does NOT produce:** Any source code. Only directories, `.gitkeep` files, configuration, and documentation.

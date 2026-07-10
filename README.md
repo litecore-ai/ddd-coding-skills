@@ -424,36 +424,18 @@ You: /ddd-auto-cleanup
 
 **Symptom:** `ddd-auto` or `ddd-develop` pauses with "This command requires approval" for basic commands like `grep`, `find`, or `python`.
 
-**Cause:** Two Claude Code bugs prevent subagents from inheriting your project's permission settings:
-- **Bug #37442** — Subagents (Agent tool) do NOT inherit project-level `.claude/settings.json` permissions
-- **Bug #23983** — `PermissionRequest` hooks defined in skill frontmatter may not fire for subagent requests
+**Cause:** In older Claude Code versions, subagents (Agent tool) did not reliably inherit project permission settings, and skill-frontmatter `PermissionRequest` hooks did not always fire for subagent requests. Since `ddd-auto` dispatches subagents to run each `ddd-develop` cycle, those subagents could start with a blank permission slate. Recent Claude Code versions (v2.1.186+) surface subagent permission prompts in the main session instead of silently denying them, which makes the problem visible but can still pause an unattended loop.
 
-Since `ddd-auto` dispatches subagents to run each `ddd-develop` cycle, those subagents start with a blank permission slate.
+**Fix — scoped, machine-local permissions.** Run `/ddd-init` (or copy its Permissions Template) to generate `.claude/settings.local.json` in your project. It contains:
 
-**Fix — add permissions to global settings.** Project-level permissions don't reach subagents, but global-level ones do. Run this one-liner:
+- an allowlist of common build/test/git command prefixes for your tech stack, and
+- a **conditional** `PermissionRequest` hook that auto-approves prompts *only while a ddd-auto loop is running* (i.e., while `.ddd-auto.local.md` exists). Outside a loop, normal permission prompts apply.
 
-```bash
-python3 -c "
-import json, pathlib
-p = pathlib.Path.home() / '.claude' / 'settings.json'
-s = json.loads(p.read_text()) if p.exists() else {}
-s.setdefault('permissions', {}).setdefault('allow', [])
-for r in ['Bash(*)','Edit','Write','Read','Glob','Grep']:
-    if r not in s['permissions']['allow']: s['permissions']['allow'].append(r)
-p.write_text(json.dumps(s, indent=2) + '\n')
-print('Done:', p)
-"
-```
+`settings.local.json` is machine-local and gitignored, so the relaxed permissions never reach your collaborators.
 
-Or manually add to `~/.claude/settings.json`:
+If specific commands still prompt during a loop, add narrow rules for them (e.g. `Bash(npm run test:*)`) to `.claude/settings.local.json` and restart the session.
 
-```json
-"permissions": {
-  "allow": ["Bash(*)", "Edit", "Write", "Read", "Glob", "Grep"]
-}
-```
-
-> **Note:** This is a machine-wide setting — it applies to **all** Claude Code projects. Restart your session after editing. This workaround will be removed once Claude Code fixes the underlying bugs.
+> **Warning:** Avoid adding `Bash(*)` to your global `~/.claude/settings.json`. That disables command approval for **every** project on the machine, permanently — far more than ddd-auto needs.
 
 ## Requirements
 

@@ -432,36 +432,18 @@ You: /ddd-auto-cleanup
 
 **症状：** `ddd-auto` 或 `ddd-develop` 执行中弹出 "This command requires approval"，阻塞在 `grep`、`find`、`python` 等基础命令上。
 
-**原因：** Claude Code 存在两个已知 Bug，导致子智能体无法继承项目的权限设置：
-- **Bug #37730** — 通过 Agent 工具派生的子智能体不会继承项目级 `.claude/settings.json` 的权限
-- **Bug #23983** — 技能 SKILL.md 中定义的 `PermissionRequest` 钩子在子智能体中可能不触发
+**原因：** 旧版 Claude Code 中，子智能体（Agent 工具）不能可靠继承项目权限设置，技能 frontmatter 中的 `PermissionRequest` 钩子也可能对子智能体请求不触发。`ddd-auto` 通过子智能体运行每个 `ddd-develop` 周期，这些子智能体可能以空白权限启动。较新版本（v2.1.186+）会把子智能体的权限确认弹到主会话中——问题变得可见，但仍可能中断无人值守的循环。
 
-`ddd-auto` 通过子智能体运行每个 `ddd-develop` 周期，这些子智能体启动时权限表为空，几乎所有操作都会触发确认弹窗。
+**解决方法 — 使用限定范围的本机权限配置。** 运行 `/ddd-init`（或参考其 Permissions Template）在项目中生成 `.claude/settings.local.json`，其中包含：
 
-**解决方法 — 在全局设置中添加权限。** 项目级权限无法传递给子智能体，但全局级权限可以。运行以下一行命令：
+- 针对你技术栈的常用构建/测试/git 命令前缀白名单；
+- 一个**条件化**的 `PermissionRequest` 钩子：仅当 ddd-auto 循环运行中（`.ddd-auto.local.md` 存在）才自动批准权限请求。循环之外，正常的权限确认流程照常生效。
 
-```bash
-python3 -c "
-import json, pathlib
-p = pathlib.Path.home() / '.claude' / 'settings.json'
-s = json.loads(p.read_text()) if p.exists() else {}
-s.setdefault('permissions', {}).setdefault('allow', [])
-for r in ['Bash(*)','Edit','Write','Read','Glob','Grep']:
-    if r not in s['permissions']['allow']: s['permissions']['allow'].append(r)
-p.write_text(json.dumps(s, indent=2) + '\n')
-print('Done:', p)
-"
-```
+`settings.local.json` 是本机文件且默认被 gitignore，宽松权限不会影响协作者。
 
-或手动编辑 `~/.claude/settings.json`，添加：
+如果循环中仍有个别命令触发弹窗，在 `.claude/settings.local.json` 中为其添加窄范围规则（如 `Bash(npm run test:*)`）后重启会话。
 
-```json
-"permissions": {
-  "allow": ["Bash(*)", "Edit", "Write", "Read", "Glob", "Grep"]
-}
-```
-
-> **注意：** 这是机器级设置，对所有 Claude Code 项目生效。编辑后需重启会话。待 Claude Code 修复底层 Bug 后，此临时方案将移除。
+> **警告：** 不要在全局 `~/.claude/settings.json` 中添加 `Bash(*)`——那会永久关闭本机**所有**项目的命令审批，远超 ddd-auto 所需。
 
 ## 要求
 
