@@ -310,7 +310,7 @@ You are executing a single ddd-develop cycle as part of a ddd-auto batch run.
 Context (do NOT include in the skill args — this is for your situational awareness only):
 - Roadmap file: [roadmap_path]
 - Sub-feature title: [sub-feature title from roadmap]
-- This is part of an automated ddd-auto run; do not prompt the user for confirmations.
+- This is part of an automated ddd-auto run: ddd-develop's Batch (Non-Interactive) Mode applies — skip all confirmations, never push, report BLOCKED instead of waiting on any gate.
 
 After ddd-develop completes (all 6 phases), report back with EXACTLY this format:
 

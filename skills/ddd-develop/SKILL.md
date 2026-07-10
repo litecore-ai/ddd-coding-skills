@@ -32,6 +32,15 @@ Supports three input modes:
 - If roadmap item found: "Using ddd-develop to implement the next roadmap feature."
 - If asking user: "Using ddd-develop — no pending roadmap items found. What would you like to develop?"
 
+## Batch (Non-Interactive) Mode
+
+When this skill runs as part of an automated ddd-auto batch — the dispatch context states it (e.g., "This is part of an automated ddd-auto run") — apply these overrides to every phase:
+
+- **Skip all user confirmations.** Phase 1 target confirmation, plan approval in Phase 2, and any "Wait for user response" step proceed automatically. Apply the decision policy from the dispatch context for autonomous choices; log key decisions.
+- **Never push.** Phase 6.4 is skipped entirely. Commit locally and report the commit SHA — ddd-auto's operator decides when to push.
+- **Never stall on a gate.** If a gate would normally wait for user input and no skip condition applies (e.g., spec missing and no `--skip-spec`), report `STATUS: BLOCKED` with the reason instead of waiting.
+- **Interactive mode is the default.** Without an explicit batch context, all confirmation points below apply as written.
+
 ## Execution Flow
 
 ```dot
@@ -850,6 +859,8 @@ git commit -m "feat: [description of what was implemented]
 ```
 
 ### 6.4 Push (User Confirmation Required)
+
+**Skip this step entirely in Batch (Non-Interactive) Mode** — report the commit SHA and let ddd-auto's operator push.
 
 ```
 All changes committed. Ready to push to remote?
