@@ -50,9 +50,11 @@ digraph ddd_spec {
   read_ctx [label="Step 1: Read Context\nproduct-brief.md, roadmap,\nCLAUDE.md, existing code & specs"];
   skip_check [label="Spec exists with\nstatus: approved?" shape=diamond];
   skip [label="Skip: already approved\nReport to user"];
+  shared [label="Step 1.5: Shared Contracts\ndocs/specs/_shared.md"];
   multi_check [label="Multiple feature areas?" shape=diamond];
   dispatch [label="Step 2: Dispatch Subagents\nOne Agent per feature area"];
   single [label="Generate spec inline\n(single feature area)"];
+  consistency [label="Cross-spec\nconsistency pass"];
   write [label="Step 3: Write Spec Files\ndocs/specs/P{phase}.{area}-{slug}.md\nstatus: draft"];
   review [label="Step 4: User Review\nPresent specs for approval"];
   revise [label="Revise specs\nper user feedback"];
@@ -69,11 +71,12 @@ digraph ddd_spec {
   confirm -> read_ctx;
   read_ctx -> skip_check;
   skip_check -> skip [label="yes\n(per feature area)"];
-  skip -> multi_check [label="continue with\nremaining areas"];
-  skip_check -> multi_check [label="no"];
+  skip -> shared [label="continue with\nremaining areas"];
+  skip_check -> shared [label="no"];
+  shared -> multi_check;
   multi_check -> dispatch [label="yes"];
   multi_check -> single [label="no"];
-  dispatch -> write;
+  dispatch -> consistency -> write;
   single -> write;
   write -> review;
   review -> revise [label="changes requested"];
@@ -200,6 +203,14 @@ You are generating a behavior contract (spec) for a single feature area.
 
 ## Product Brief
 [FULL TEXT of docs/product-brief.md — paste verbatim, never make subagent read this file]
+
+## Shared Contracts (BINDING)
+[FULL TEXT of docs/specs/_shared.md — paste verbatim]
+
+Rules:
+- Data models defined in Shared Contracts are used AS-IS — reference them, never redefine or rename their fields
+- New models specific to this feature area are defined in your spec; if a model clearly belongs to multiple areas, flag it in your report as SHARED_CANDIDATE instead of defining it locally
+- Endpoint paths, error response shape, and naming conventions MUST follow Shared Contracts
 
 ## Feature Area
 **Identifier**: P{phase}.{area}
@@ -356,8 +367,11 @@ Every row must show "Covered" status. If a roadmap item cannot be covered, expla
 - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
 - What you generated
 - Coverage summary: N roadmap items covered by M acceptance criteria
+- SHARED_CANDIDATE: [models that belong in _shared.md, or "none"]
 - Any gaps or concerns
 ```
+
+After collecting subagent reports, promote any SHARED_CANDIDATE models into `docs/specs/_shared.md` and run the Cross-Spec Consistency Pass (Step 1.5).
 
 ---
 
