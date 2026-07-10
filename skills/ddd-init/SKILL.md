@@ -109,7 +109,7 @@ If tech stack matches a built-in template, recommend it. Otherwise, ask the user
 
 ### If `--template fastlayer`:
 
-Use the built-in fastlayer template defined below in the "Built-in Template: fastlayer" section.
+Use the built-in fastlayer template — Read `references/fastlayer-template.md` in this skill's directory for the full structure and conventions.
 
 ### If `--ref <path>`:
 
@@ -400,144 +400,20 @@ Or execute items one at a time:
 
 ## Built-in Template: fastlayer
 
-**Tech Stack:** TypeScript / Next.js
-**Reference:** https://github.com/RealMatrix-PTE-LTD/fastlayer
-
-### Directory Structure
-
-```
-server/
-├── handler/                    # Presentation layer
-│   └── <domain>/               # Grouped by domain
-├── infras/                     # Shared infrastructure
-│   ├── orm/
-│   │   ├── schema/             # Database schemas (Drizzle)
-│   │   └── data-preset/        # Seed data
-│   ├── auth/                   # Auth infrastructure
-│   ├── utils/                  # Shared utilities
-│   └── shared/                 # Shared types/constants
-└── modules/                    # Bounded contexts
-    └── <module>/
-        ├── acl/                # Anti-Corruption Layer
-        │   └── <service>/      # One subdir per external service
-        ├── app/
-        │   ├── dto/            # Data Transfer Objects
-        │   ├── service/        # Application services
-        │   │   └── __tests__/
-        │   └── internal/       # Cross-module interfaces
-        ├── domain/
-        │   ├── bo/             # Business Objects
-        │   │   └── __tests__/
-        │   └── model/
-        │       ├── entity/     # Entities
-        │       ├── vo/         # Value Objects
-        │       └── qo/         # Query Objects
-        ├── repo/
-        │   ├── dao/            # Data Access Objects
-        │   │   └── __tests__/
-        │   └── po/             # Persistent Objects
-        └── utils/
-```
-
-### Conventions
-
-- Request flow: `Middleware → API Route → Handler → Service → BO → DAO → Database`
-- Tuple return: `[data, error]` for all async functions
-- Error handling: `ServiceError` objects, never `new Error()` for 4xx
-- Type system: `DTO (API) ↔ Entity (Domain) ↔ PO (Database)`
-- PO to Entity: `convertNullToUndefined<Entity>(po)`
-- Entity to PO: `entity.field ?? null`
-- Cross-module communication: via `app/internal/` interfaces
-- Tests: colocated in `__tests__/` within each layer
-
-### Standardized docs/ Structure
-
-```
-docs/
-├── roadmap/                    # ddd-roadmap output
-├── audit/                      # ddd-audit output
-├── architecture/               # Architecture documentation
-└── plans/                      # Implementation plans
-```
+**Tech Stack:** TypeScript / Next.js. When this template is selected (Step 3) or its structure needs to be presented (Step 4), **Read `references/fastlayer-template.md`** in this skill's directory — it contains the full directory structure, conventions, and the standardized `docs/` layout.
 
 ---
 
 ## Permissions & Hooks Template
 
-When generating `.claude/settings.local.json`, use this template and adapt based on the detected tech stack. This file ensures ddd-auto and ddd-develop can execute build/test/lint commands without triggering permission prompts that block the automated loop.
+When generating `.claude/settings.local.json` (Scaffold Step 6 / Refactor Step 8), **Read `references/permissions-template.md`** in this skill's directory. It contains:
 
-**Why `settings.local.json` and not `settings.json`:** the allowlist below is a convenience for THIS machine's automated runs. Writing it to the committed `settings.json` would silently grant the same broad permissions to every collaborator and every future session of the project — never do that. `settings.local.json` is gitignored by Claude Code by default.
+- the base `permissions.allow` template and tech-stack-specific additions
+- the **conditional** `PermissionRequest` hook — auto-approves only while a ddd-auto loop is active (`.ddd-auto.local.md` exists)
+- permission pattern-syntax rules (`Bash(X:*)` vs `Bash(path/*)`)
+- the rationale for deliberately excluding `Bash(bash:*)` and `Bash(source:*)`
 
-**Defense in depth:** `permissions.allow` covers known command patterns. `hooks.PermissionRequest` catches anything that slips through — but it is **conditional**: it only auto-approves while a ddd-auto loop is actually running (the `.ddd-auto.local.md` state file exists). Outside a loop, normal permission prompts apply and the user stays in control. Both layers are needed because:
-- `permissions.allow` is fast (no subprocess overhead) but pattern-based — it cannot cover every possible command
-- the conditional `hooks.PermissionRequest` is universal during unattended loops, and inert the rest of the time
-
-> **Deliberately excluded from the allowlist:** `Bash(bash:*)` and `Bash(source:*)` — either one lets any command run as `bash -c "..."`, which nullifies every other prefix rule in the list. If a project genuinely needs them, the user must add them manually and knowingly.
-
-Base template (always included):
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Write",
-      "Edit",
-      "Read",
-      "Glob",
-      "Grep",
-      "Bash(mkdir:*)",
-      "Bash(cp:*)",
-      "Bash(mv:*)",
-      "Bash(rm:*)",
-      "Bash(ls:*)",
-      "Bash(cat:*)",
-      "Bash(echo:*)",
-      "Bash(find:*)",
-      "Bash(sed:*)",
-      "Bash(wc:*)",
-      "Bash(head:*)",
-      "Bash(tail:*)",
-      "Bash(sort:*)",
-      "Bash(touch:*)",
-      "Bash(chmod:*)",
-      "Bash(git:*)",
-      "Bash(jq:*)",
-      "Bash(grep:*)",
-      "Bash(curl:*)",
-      "Bash(make:*)",
-      "Bash(.venv/*)",
-      "Bash(node_modules/.bin/*)"
-    ]
-  },
-  "hooks": {
-    "PermissionRequest": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -f \"${CLAUDE_PROJECT_DIR:-.}/.ddd-auto.local.md\" ] && printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}' || true"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-> **Important — pattern syntax:** `Bash(X:*)` uses `:*` as a word-boundary suffix equivalent to `Bash(X *)` — it requires `X` followed by a space. To match path prefixes like `.venv/bin/python`, use `Bash(.venv/*)` (no colon) where `*` is a plain glob matching any characters. `Bash(.venv/*)` covers `.venv/bin/python -m pytest`, `.venv/bin/pip install`, etc.
-
-Append tech-stack-specific entries based on tech stack detection from Step 2:
-
-| Detected Stack | Additional Entries |
-|----------------|-------------------|
-| Python | `Bash(python:*)`, `Bash(python3:*)`, `Bash(pip:*)`, `Bash(pip3:*)` |
-| Node.js / TypeScript | `Bash(node:*)`, `Bash(npm:*)`, `Bash(npx:*)`, `Bash(pnpm:*)`, `Bash(yarn:*)`, `Bash(bun:*)` |
-| Go | `Bash(go:*)` |
-| Java / Kotlin | `Bash(mvn:*)`, `Bash(gradle:*)` |
-| Rust | `Bash(cargo:*)` |
-
-Also add `Bash(gh:*)` if GitHub CLI is available.
+Never write these permissions to the committed `.claude/settings.json` — `settings.local.json` only.
 
 ---
 

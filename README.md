@@ -463,7 +463,8 @@ ddd-coding-skills/
 │   ├── ddd-auto-cleanup/
 │   │   └── SKILL.md         # Clean up after interrupting ddd-auto
 │   ├── ddd-init/
-│   │   └── SKILL.md         # DDD project initialization
+│   │   ├── SKILL.md         # DDD project initialization
+│   │   └── references/      # fastlayer + permissions templates (loaded on demand)
 │   ├── ddd-brief/
 │   │   └── SKILL.md         # Product intent capture → product-brief.md
 │   ├── ddd-roadmap/
@@ -471,11 +472,13 @@ ddd-coding-skills/
 │   ├── ddd-spec/
 │   │   └── SKILL.md         # Behavior contract generation
 │   ├── ddd-develop/
-│   │   └── SKILL.md         # Development workflow
+│   │   ├── SKILL.md         # Development workflow
+│   │   └── references/      # Subagent prompt templates (loaded on demand)
 │   ├── ddd-auto/
 │   │   └── SKILL.md         # Automated roadmap execution
 │   └── ddd-audit/
-│       └── SKILL.md         # 8-dimension audit
+│       ├── SKILL.md         # 8-dimension audit
+│       └── references/      # Audit config schema, CI/CD integration (loaded on demand)
 ├── LICENSE                  # MIT
 ├── package.json
 └── README.md

@@ -471,7 +471,8 @@ ddd-coding-skills/
 │   ├── ddd-auto-cleanup/
 │   │   └── SKILL.md         # 中断 ddd-auto 后清理状态
 │   ├── ddd-init/
-│   │   └── SKILL.md         # DDD 项目初始化
+│   │   ├── SKILL.md         # DDD 项目初始化
+│   │   └── references/      # fastlayer 模板 + 权限模板（按需加载）
 │   ├── ddd-brief/
 │   │   └── SKILL.md         # 产品意图提炼 → product-brief.md
 │   ├── ddd-roadmap/
@@ -479,11 +480,13 @@ ddd-coding-skills/
 │   ├── ddd-spec/
 │   │   └── SKILL.md         # 行为契约生成
 │   ├── ddd-develop/
-│   │   └── SKILL.md         # 开发工作流
+│   │   ├── SKILL.md         # 开发工作流
+│   │   └── references/      # 子代理 prompt 模板（按需加载）
 │   ├── ddd-auto/
 │   │   └── SKILL.md         # 自动化路线图执行
 │   └── ddd-audit/
-│       └── SKILL.md         # 8 维度审计
+│       ├── SKILL.md         # 8 维度审计
+│       └── references/      # 审计配置 schema、CI/CD 集成（按需加载）
 ├── LICENSE                  # MIT
 ├── package.json
 └── README.md
