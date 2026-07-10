@@ -61,14 +61,16 @@ ddd-init  →  ddd-roadmap   →  ddd-spec  →  ddd-develop  →  ddd-audit
 
 ### ddd-roadmap
 
-扫描项目结构，**自动发现产品文档**（PRD、规格说明、需求文档）并提取愿景与约束，对齐产品目标（已有文档时验证提取上下文，无文档时走完整问答），将功能分解为可执行条目，按优先级归入各阶段。
+扫描项目结构，**自动发现产品文档**（PRD、规格说明、需求文档）并提取愿景与约束，对齐产品目标（已有文档时验证提取上下文，无文档时走完整问答），**将对齐后的理解写入 `docs/product-brief.md`**，再将功能分解为可执行条目，按优先级归入各阶段。
 
 三种输入模式：
 - `/ddd-roadmap <范围>` — 针对特定功能领域生成范围化路线图
-- `/ddd-roadmap` — 全项目路线图（项目方向明确时）
-- `/ddd-roadmap` — 交互模式（范围不明确时主动询问）
+- `/ddd-roadmap <prd文件> [补充说明]` — 以 PRD/设计文档为主要产品来源
+- `/ddd-roadmap` — 全项目路线图（项目方向明确时），范围不明确时进入交互模式
 
-**输出**：标准化 checkbox 格式路线图，存放于 `docs/roadmap/`。
+支持仅更新简报：`/ddd-roadmap 更新产品简报` 会刷新 `docs/product-brief.md` 而不重新规划。
+
+**输出**：`docs/product-brief.md` + 标准化 checkbox 格式路线图（存放于 `docs/roadmap/`）。
 
 ### ddd-spec
 

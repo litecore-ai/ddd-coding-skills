@@ -260,6 +260,8 @@ Product
 3. Items should take **1-4 hours** to implement (not days)
 4. Dependencies between items must be noted
 5. Each item includes enough context for ddd-develop to generate a plan
+6. **Every item names its consumer** — the existing or same-phase code that will call it (e.g., "... (called by BillingService.charge)"). An item nothing calls is a stub waiting to happen; if the consumer genuinely arrives later, suffix the item `(scaffolding — consumed by P1.2.1)` so ddd-develop's wiring check knows it is intentional
+7. **Every sub-feature ends with a wiring item** — "Integrate [component] into [caller]; end-to-end test [scenario]". A sub-feature whose parts all exist but were never connected is not complete
 
 ---
 
@@ -276,11 +278,13 @@ Organize items into phases by priority:
 
 ### Ordering Rules
 
-1. **Dependencies first** — If B depends on A, A goes in an earlier phase
-2. **Domain layer first** — Domain models and business rules before infrastructure
-3. **Backend before frontend** — API before UI (unless UI is the product)
+1. **Walking skeleton first** — P0.1.1 is always the thinnest end-to-end slice through all layers (one route → one service → one domain rule → one persisted record), wired and testable. Everything after it thickens a working system instead of assembling parts that only meet at the end
+2. **Vertical slices** — each sub-feature delivers a feature end-to-end (its domain + application + presentation pieces together in one sub-feature), NOT a layer at a time. Layer-by-layer ordering ("all domain models first, then all services") is forbidden — it produces stub modules that never integrate
+3. **Dependencies first** — If B depends on A, A goes in an earlier phase
 4. **Happy path first** — Core flow before edge cases and error handling
 5. **Cross-cutting last** — Logging, monitoring, i18n after features work
+
+Within a single slice, build inside-out (domain rule → application service → presentation endpoint) — but all inside the same sub-feature, wired before the sub-feature closes.
 
 ---
 
