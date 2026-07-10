@@ -37,7 +37,7 @@ Enable DDD coding skills in Codex via native skill discovery. Clone and symlink.
 
 4. **Restart Codex** to discover the skills.
 
-> **Note:** The `ddd-auto` skill uses a Stop hook (`hooks/stop-hook.sh`) and slash commands (`commands/`) for reliable looping. These are automatically available when using the plugin via Claude Code's plugin system. In Codex CLI, the Stop hook mechanism is not supported — `ddd-auto` will fall back to skill-level instructions for looping, which may be less reliable.
+> **Note:** The `ddd-auto` skill uses a Stop hook (`hooks/stop-hook.sh`) for reliable looping. It is automatically available when using the plugin via Claude Code's plugin system. In Codex CLI, the Stop hook mechanism is not supported — `ddd-auto` will fall back to skill-level instructions for looping, which may be less reliable.
 
 ## Verify
 

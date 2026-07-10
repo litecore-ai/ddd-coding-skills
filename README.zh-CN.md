@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向编码智能体的完整领域驱动设计（DDD）开发工作流。七个可组合的技能覆盖完整生命周期：初始化、产品意图提炼、规划、规格生成、实现、审计和自动化批量执行。
+面向编码智能体的完整领域驱动设计（DDD）开发工作流。七个可组合的流水线技能（外加一个清理辅助技能 `ddd-auto-cleanup`）覆盖完整生命周期：初始化、产品意图提炼、规划、规格生成、实现、审计和自动化批量执行。
 
 ## 工作原理
 
@@ -233,7 +233,9 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
 cp -r /tmp/ddd-coding-skills/skills/ddd-auto .claude/skills/ddd-auto
 ```
 
-> **注意：** 手动安装不包含 `ddd-auto` 所需的 Stop hook。如需完整的 `ddd-auto` 支持（可靠循环），请使用方式 A 或 B，或额外将 `hooks/` 和 `commands/` 目录复制到 `.claude/` 配置中。
+> **注意：** 手动安装不包含 `ddd-auto` 所需的 Stop hook。如需完整的 `ddd-auto` 支持（可靠循环），请使用方式 A 或 B，或参照 `hooks/hooks.json` 的格式将 `hooks/stop-hook.sh` 注册为 `.claude/settings.json` 中的 Stop hook。
+
+> **首次使用：** 在 frontmatter 中声明了 `allowed-tools` 或 `hooks` 的技能（所有 DDD 技能都是）在 Claude Code（≥2.1.19）中首次运行前需要一次性批准。
 
 ### Codex CLI
 
@@ -462,10 +464,6 @@ ddd-coding-skills/
 │   └── plugin.json          # Claude Code 插件清单
 ├── .codex/
 │   └── INSTALL.md           # Codex CLI 安装指南
-├── docs/
-│   └── superpowers/         # 设计规格与实现计划
-│       ├── plans/           # 技能功能的实现计划
-│       └── specs/           # PRD 级别的设计规格
 ├── hooks/
 │   ├── hooks.json           # Stop hook 注册
 │   └── stop-hook.sh         # ddd-auto 循环引擎

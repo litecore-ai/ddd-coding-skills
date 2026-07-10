@@ -2,7 +2,7 @@
 
 English | [中文](README.zh-CN.md)
 
-A complete Domain-Driven Design development workflow for coding agents. Seven composable skills that cover the full lifecycle: initialization, product intent capture, planning, spec generation, implementing, auditing, and automated batch execution.
+A complete Domain-Driven Design development workflow for coding agents. Seven composable pipeline skills — plus a cleanup helper (`ddd-auto-cleanup`) — cover the full lifecycle: initialization, product intent capture, planning, spec generation, implementing, auditing, and automated batch execution.
 
 ## How It Works
 
@@ -224,7 +224,9 @@ cp -r /tmp/ddd-coding-skills/skills/ddd-audit .claude/skills/ddd-audit
 cp -r /tmp/ddd-coding-skills/skills/ddd-auto .claude/skills/ddd-auto
 ```
 
-> **Note:** Manual skill installation does not include the Stop hook required by `ddd-auto`. For full `ddd-auto` support (reliable looping), use Option A or B instead, or additionally copy the `hooks/` and `commands/` directories to your `.claude/` config.
+> **Note:** Manual skill installation does not include the Stop hook required by `ddd-auto`. For full `ddd-auto` support (reliable looping), use Option A or B instead, or additionally register `hooks/stop-hook.sh` as a Stop hook in your `.claude/settings.json` (see `hooks/hooks.json` for the shape).
+
+> **First use:** skills that declare `allowed-tools` or `hooks` in their frontmatter (all DDD skills do) require a one-time approval in Claude Code (≥2.1.19) before they first run.
 
 ### Codex CLI
 
@@ -454,10 +456,6 @@ ddd-coding-skills/
 │   └── plugin.json          # Claude Code plugin manifest
 ├── .codex/
 │   └── INSTALL.md           # Codex CLI installation guide
-├── docs/
-│   └── superpowers/         # Design specs & implementation plans
-│       ├── plans/           # Implementation plans for skill features
-│       └── specs/           # PRD-level design specs
 ├── hooks/
 │   ├── hooks.json           # Stop hook registration
 │   └── stop-hook.sh         # Loop engine for ddd-auto
