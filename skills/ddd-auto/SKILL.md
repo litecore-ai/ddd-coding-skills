@@ -337,6 +337,7 @@ After the Agent returns its report (STATUS: DONE or BLOCKED), parse the structur
 1. Add the current item to `completed` list in frontmatter
 2. Append to Progress Log: `- [YYYY-MM-DD HH:MM] [item ID] — DONE (commit: [short SHA])`
 3. Record any key decisions: `  - Decision: [what was decided] (policy: [rationale])`
+3a. If DECISIONS contains `UNWIRED:` entries, record each: `  - UNWIRED: [module] — no consumer yet`. Carry these into the final report (Step 9) so isolated modules are visible before the batch ends.
 4. **Sync the roadmap checkbox** (mandatory, see procedure below) — ddd-auto owns this, since the subagent's Phase 6.1 only runs when it classified as roadmap mode and cannot be relied on.
 
 **Roadmap sync procedure:**

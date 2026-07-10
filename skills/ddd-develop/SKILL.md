@@ -671,6 +671,16 @@ After all technical verifications pass, check implementation against the spec:
 
 **Skip this check if** `skip_spec = true`, `roadmap_override` is set, or no spec exists for the feature area.
 
+### Wiring Check (integration verification)
+
+Modules that pass all their own tests but are never called are the single most common failure mode of isolated per-item development. After spec compliance, verify the new code is actually wired into the system:
+
+1. **Consumer-side test** — if the item exposes an interface, endpoint, or cross-module contract (per the spec's DDD Layer Mapping or the plan), at least one test must exercise it **from the consumer side**: an import + call from outside the module's own directory (via `app/internal/` interface, HTTP route, or the actual calling service). Tests inside the module's own `__tests__/` do not count.
+2. **Import check** — use the **Grep tool** to verify at least one non-test file outside the new module imports it.
+3. **If nothing consumes it** and the roadmap item is not explicitly marked `(scaffolding)`:
+   - **Interactive mode**: report to the user — "This module is currently unwired: nothing imports [module]. Add a wiring task now, or confirm it is intentional scaffolding for a later item." Wait for the user's choice.
+   - **Batch mode**: complete the item but flag it — include `UNWIRED: [module] — no consumer yet` in the report's DECISIONS field so ddd-auto's Progress Log and final report surface it.
+
 ### Red Flags — STOP
 
 - Using "should", "probably", "seems to"
@@ -790,7 +800,7 @@ When scanning, check for `- [ ]` first, fall back to lines without ✅ in emoji-
 | 2. PLAN | Scope analysis (blast radius + iteration detection) → implementation plan | Plan doc with TDD tasks; frozen targets + completion condition if iterative |
 | 3. IMPLEMENT | Subagent TDD execution | Working code + tests + commits |
 | 4. AUDIT | ddd-audit (incremental) | Zero CRITICAL/HIGH findings; MED/LOW deferred to fix-roadmap |
-| 5. VERIFY | Lint + tests + build + spec compliance | Evidence of all passing + all ACs covered |
+| 5. VERIFY | Lint + tests + build + spec compliance + wiring check | Evidence of all passing + all ACs covered + module actually consumed (or flagged UNWIRED) |
 | 6. COMPLETE | Update roadmap (if applicable) + commit + push | Updated roadmap (roadmap source) or clean commit (ad-hoc) |
 
 ## Integration
