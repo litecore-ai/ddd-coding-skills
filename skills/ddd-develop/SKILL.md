@@ -331,7 +331,7 @@ Generate a detailed implementation plan for the confirmed development target (ro
 2. **Map file structure**: which files to create/modify, one responsibility per file
 3. **Scope & iteration analysis** (see below)
 4. **Decompose into bite-sized tasks**: each task = one TDD cycle (2-5 minutes)
-5. **Write complete plan**: exact file paths, full code blocks, test commands with expected output
+5. **Write the plan**: exact file paths always; **full code blocks only for the first task of each pattern** — subsequent tasks that apply the same pattern reference the exemplar task and specify only the differences (target files, names, fields). Test commands with expected output for every task.
 
 ### Scope & Iteration Analysis
 
@@ -443,16 +443,32 @@ Expected: PASS
 
 - [ ] **Step 5: Commit**
 `git commit -m "feat: [description]"`
+
+---
+
+### Task 2: [Component Name] [AC-2] — Pattern: Task 1
+
+**Files:**
+- Create: `exact/path/to/other-file.ts`
+- Test: `tests/exact/path/to/other-test.ts`
+
+**Differences from Task 1:**
+- Entity: `Invoice` instead of `User`
+- Fields: `amount: Money`, `dueDate: Date` (see spec Data Models)
+- Extra edge case: reject `amount <= 0` with `ServiceError("INVALID_AMOUNT")`
+
+Same TDD steps as Task 1. Run: `[exact test command]`
 ```
 
 **AC Reference Rule:** When a spec is available, every task heading must list which acceptance criteria it implements in square brackets (e.g., `[AC-1, AC-3]`). The union of all task AC references must cover all ACs mapped to this roadmap item in the spec's Coverage table.
 
 ### Plan Quality Rules
 
-- **No placeholders**: Every step has actual code, actual commands, actual expected output
-- **No "TBD"**: If you don't know, research first
-- **No "similar to Task N"**: Repeat the code — tasks may execute out of context
-- **No vague steps**: "Add error handling" is not a step; show the error handling code
+- **Exemplar-first code**: the FIRST task of each new pattern carries full code blocks (test + implementation). Subsequent same-pattern tasks state `Pattern: Task N` plus an explicit differences list (target file, names, fields, edge cases) — no full code repetition. Writing the entire implementation twice (once in the plan, once in code) doubles token cost and the pre-written code goes stale as earlier tasks change reality.
+- **Dispatch rule for pattern tasks**: subagents never read the plan file, so when dispatching a `Pattern: Task N` task, paste the exemplar task's code into the Context section of the prompt alongside the differences list.
+- **Exception — iterative migrations**: batch tasks under a Frozen Targets section stay fully mechanical: exact code or a formalized codemod command per batch (see Iteration-over-N rules). Migration batches may execute far from their exemplar; "apply the equivalent transformation" is still forbidden there.
+- **No placeholders / no "TBD"**: interfaces, signatures, and test intent must be concrete in every task; if you don't know, research first
+- **No vague steps**: "Add error handling" is not a step — name the error cases and expected behavior
 - **Exact file paths always**
 - **No brace expansion or globs in shell commands**: `mkdir -p a/b a/c` not `mkdir -p a/{b,c}`. Claude Code blocks brace expansion and `[...]` patterns in write operations. For paths containing brackets (e.g. Next.js `[slug]`, `[...all]`), use the Write tool to create files directly instead of mkdir.
 - **DRY, YAGNI, TDD, frequent commits**
