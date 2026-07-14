@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { constants } from 'node:fs';
 import * as fileSystem from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { canonicalStringify } from './canonical-json.mjs';
@@ -42,8 +43,7 @@ async function quarantineTemporary(temporaryPath, wasCreated, fs) {
   }
 }
 
-export async function readJson(path, parser, { fs = fileSystem } = {}) {
-  const source = await fs.readFile(path, 'utf8');
+function parseJson(source, path, parser) {
   let value;
   try {
     value = JSON.parse(source);
@@ -54,6 +54,40 @@ export async function readJson(path, parser, { fs = fileSystem } = {}) {
     });
   }
   return parser(value);
+}
+
+export async function readJson(path, parser, { fs = fileSystem } = {}) {
+  return parseJson(await fs.readFile(path, 'utf8'), path, parser);
+}
+
+function sameIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+function unsafeStatePath(path) {
+  return new RoadmapError('STATE_PATH_UNSAFE', `State path is not a stable regular file: ${path}`, { path });
+}
+
+export async function readJsonRegular(path, parser, { fs = fileSystem } = {}) {
+  let handle;
+  try {
+    const before = await fs.lstat(path, { bigint: true });
+    if (!before.isFile() || before.isSymbolicLink()) throw unsafeStatePath(path);
+    handle = await fs.open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || !sameIdentity(before, opened)) throw unsafeStatePath(path);
+    const source = await handle.readFile({ encoding: 'utf8' });
+    const after = await fs.lstat(path, { bigint: true });
+    if (!after.isFile() || after.isSymbolicLink() || !sameIdentity(opened, after)) {
+      throw unsafeStatePath(path);
+    }
+    return parseJson(source, path, parser);
+  } catch (error) {
+    if (error.code === 'ELOOP') throw unsafeStatePath(path);
+    throw error;
+  } finally {
+    if (handle) await handle.close();
+  }
 }
 
 export async function writeJsonAtomic(path, value, {
@@ -91,6 +125,15 @@ export async function writeJsonAtomic(path, value, {
 
 export async function mutateRevision(path, parser, expectedRevision, mutator, options = {}) {
   const current = await readJson(path, parser, options);
+  return mutateLoadedRevision(path, parser, current, expectedRevision, mutator, options);
+}
+
+export async function mutateRevisionRegular(path, parser, expectedRevision, mutator, options = {}) {
+  const current = await readJsonRegular(path, parser, options);
+  return mutateLoadedRevision(path, parser, current, expectedRevision, mutator, options);
+}
+
+async function mutateLoadedRevision(path, parser, current, expectedRevision, mutator, options) {
   if (current.revision !== expectedRevision) {
     throw new RoadmapError(
       'REVISION_CONFLICT',

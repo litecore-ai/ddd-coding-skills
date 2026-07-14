@@ -29,8 +29,9 @@ export function parseGlobalArgs(argv) {
   }
   if (command === 'scope' && tokens.length !== 1) usage('scope requires exactly one selector');
   if (command === 'start') {
-    if (tokens.length < 1 || tokens.length > 2) usage('start requires one selector and an optional authorization flag');
-    if (tokens.length === 2 && tokens[1] !== '--manifest-approved') usage('start accepts only --manifest-approved');
+    if (tokens.length !== 2 || !['--manifest-approved', '--sandboxed'].includes(tokens[1])) {
+      usage('start requires one selector and exactly one authorization mode');
+    }
   }
   if (command === 'next' && tokens.length !== 1) usage('next requires exactly one run id');
   if (command === 'record') {
@@ -69,6 +70,7 @@ export function parseGlobalArgs(argv) {
     args: tokens,
     options: {
       manifestApproved: command === 'start' && tokens[1] === '--manifest-approved',
+      sandboxed: command === 'start' && tokens[1] === '--sandboxed',
       commit: command === 'record' ? tokens[3] : null,
       acIds: command === 'record' ? tokens.slice(5).filter((_, index) => index % 2 === 0) : [],
       active: ['status', 'resume'].includes(command) && tokens[0] === '--active',

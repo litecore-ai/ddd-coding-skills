@@ -4,17 +4,26 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 
 import { canonicalStringify, sha256 } from './canonical-json.mjs';
 import { RoadmapError } from './errors.mjs';
-import { assertImplementationCommit, changedFiles, commitGenerated, prepareRunBranch, repositoryState } from './git.mjs';
+import { assertImplementationCommit, changedFiles, commitGenerated, git, prepareRunBranch, repositoryState } from './git.mjs';
 import { blockersFor, validateGraph } from './graph.mjs';
 import { acquireRunLock } from './lock.mjs';
 import { buildRunReport, renderRoadmap, writeImmutableReport } from './render.mjs';
-import { parseRoadmap, parseRun, parseSpec } from './schema.mjs';
+import { parseReport, parseRoadmap, parseRun, parseSpec } from './schema.mjs';
 import { expandScope } from './scope.mjs';
 import { deriveAggregate, readyItems } from './state.mjs';
-import { beginTransaction, commitTransaction, mutateRevision, readJson, writeJsonAtomic } from './store.mjs';
+import {
+  beginTransaction,
+  commitTransaction,
+  mutateRevision,
+  mutateRevisionRegular,
+  readJson,
+  readJsonRegular,
+  writeJsonAtomic
+} from './store.mjs';
 import { evaluateCompletion, gateManifestHash, runGate, validateAttestation, validateGateCommand } from './verify.mjs';
 
 const EMPTY_DIGEST = `sha256:${createHash('sha256').update('').digest('hex')}`;
+const LIFECYCLE_RUN_ID = /^\d{8}T\d{6}Z-[0-9a-f]{8}$/;
 
 async function writeTextAtomic(path, contents, fs = fileSystem) {
   const temporaryPath = `${path}.tmp-${randomUUID()}`;
@@ -47,6 +56,13 @@ async function realParentPath(root, path, fs) {
 
 function lifecycleError(code, message, details = {}) {
   return new RoadmapError(code, message, details);
+}
+
+function assertLifecycleRunId(runId) {
+  if (typeof runId !== 'string' || !LIFECYCLE_RUN_ID.test(runId)) {
+    throw lifecycleError('RUN_ID_INVALID', 'run id does not match the controller-issued format');
+  }
+  return runId;
 }
 
 function runIdAt(value, createId) {
@@ -119,6 +135,22 @@ function exactObjectKeys(value, keys) {
     && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 }
 
+function parseActivePointer(pointer) {
+  if (!exactObjectKeys(pointer, ['schemaVersion', 'runId', 'journal'])
+      || pointer.schemaVersion !== 1 || typeof pointer.runId !== 'string'
+      || !LIFECYCLE_RUN_ID.test(pointer.runId)
+      || pointer.journal !== `.ddd/runs/${pointer.runId}.json`) {
+    throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer is invalid');
+  }
+  return Object.freeze({ ...pointer });
+}
+
+function expectedRunHead(run) {
+  return run.pendingTransaction?.state === 'committed' && run.pendingTransaction.bookkeepingSha
+    ? run.pendingTransaction.bookkeepingSha
+    : run.baselineSha;
+}
+
 export class RoadmapController {
   static async open(root, options = {}) {
     const fs = options.fs ?? fileSystem;
@@ -158,18 +190,52 @@ export class RoadmapController {
     this.now = options.now ?? (() => Date.now());
     this.createId = options.randomUUID ?? randomUUID;
     this.maxAttemptsPerItem = options.maxAttemptsPerItem ?? 3;
+    this.stateRoot = null;
   }
 
   runPath(runId) {
-    return join(this.root, '.ddd/runs', `${runId}.json`);
+    if (!this.stateRoot) throw lifecycleError('STATE_ROOT_INVALID', 'controller state root is not initialized');
+    return join(this.stateRoot, 'runs', `${assertLifecycleRunId(runId)}.json`);
   }
 
   lockPath(runId) {
-    return join(this.root, '.ddd/locks', `${runId}.lock`);
+    if (!this.stateRoot) throw lifecycleError('STATE_ROOT_INVALID', 'controller state root is not initialized');
+    return join(this.stateRoot, 'locks', `${assertLifecycleRunId(runId)}.lock`);
   }
 
   activeRunPath() {
-    return join(this.root, '.ddd/active-run.json');
+    if (!this.stateRoot) throw lifecycleError('STATE_ROOT_INVALID', 'controller state root is not initialized');
+    return join(this.stateRoot, 'active-run.json');
+  }
+
+  async ensureStateRoot() {
+    if (!this.stateRoot) {
+      this.stateRoot = await ensureContainedDirectory(this.root, join(this.root, '.ddd'), this.fs);
+    }
+    await ensureContainedDirectory(this.root, join(this.stateRoot, 'runs'), this.fs);
+    await ensureContainedDirectory(this.root, join(this.stateRoot, 'locks'), this.fs);
+    return this.stateRoot;
+  }
+
+  async activeJournals() {
+    await this.ensureStateRoot();
+    const directory = join(this.stateRoot, 'runs');
+    const active = [];
+    for (const name of await this.fs.readdir(directory)) {
+      const match = /^(\d{8}T\d{6}Z-[0-9a-f]{8})\.json$/.exec(name);
+      if (!match) continue;
+      const path = join(directory, name);
+      const metadata = await this.fs.lstat(path);
+      if (!metadata.isFile() || metadata.isSymbolicLink()) throw lifecycleError('STATE_PATH_UNSAFE', 'run journal is not a regular file');
+      const run = await readJsonRegular(path, parseRun, { fs: this.fs });
+      if (run.runId !== match[1]) throw lifecycleError('STATE_CORRUPT', 'run journal file name and run id differ');
+      if (run.status === 'active') active.push(run.runId);
+    }
+    return active.sort();
+  }
+
+  async readActivePointer(path = this.activeRunPath()) {
+    return readJsonRegular(path, parseActivePointer, { fs: this.fs });
   }
 
   timestamp() {
@@ -203,6 +269,8 @@ export class RoadmapController {
   }
 
   async withRunLock(runId, action) {
+    await this.ensureStateRoot();
+    assertLifecycleRunId(runId);
     const journalPath = this.runPath(runId);
     const lock = await acquireRunLock(this.lockPath(runId), {
       fs: this.fs,
@@ -216,6 +284,29 @@ export class RoadmapController {
     } finally {
       await lock.release();
     }
+  }
+
+  async withActivePointerLock(action) {
+    await this.ensureStateRoot();
+    const lock = await acquireRunLock(join(this.stateRoot, 'locks', 'active-run.lock'), {
+      fs: this.fs,
+      runId: 'active-run',
+      validateJournal: () => true,
+      randomUUID: this.createId
+    });
+    try {
+      return await action();
+    } finally {
+      await lock.release();
+    }
+  }
+
+  async assertRunRepository(run, expectedHead = expectedRunHead(run)) {
+    const state = await repositoryState(this.root);
+    if (!state.clean || state.branch !== run.runBranch || state.head !== expectedHead) {
+      throw lifecycleError('RUN_BRANCH_CONFLICT', 'the run branch, HEAD, and worktree must match recorded state');
+    }
+    return state;
   }
 
   validate() {
@@ -237,72 +328,104 @@ export class RoadmapController {
     };
   }
 
-  async start(selector, { manifestApproved = false } = {}) {
-    try {
-      await this.fs.lstat(this.activeRunPath());
-      throw lifecycleError('ACTIVE_RUN_CONFLICT', 'an active roadmap run already exists');
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
+  async start(selector, { manifestApproved = false, sandboxed = false } = {}) {
+    if (manifestApproved === sandboxed) {
+      throw lifecycleError('MANIFEST_AUTHORIZATION_REQUIRED', 'start requires exactly one authorization mode');
     }
-
-    const { scope } = await this.validateLifecycleScope(selector);
-    const before = await repositoryState(this.root);
-    if (!before.clean) throw lifecycleError('DIRTY_WORKTREE', 'a roadmap run requires a clean worktree');
-    if (before.branch === null) throw lifecycleError('DETACHED_HEAD', 'a roadmap run requires a branch');
-
-    const runId = runIdAt(typeof this.now === 'function' ? this.now() : this.now, this.createId);
-    const prepared = await prepareRunBranch(this.root, runId);
-    const runBranch = prepared.branch;
-    const at = this.timestamp();
-    const run = parseRun({
-      schemaVersion: 1,
-      revision: 0,
-      runId,
-      selector,
-      scope,
-      status: 'active',
-      originalBranch: before.branch,
-      runBranch,
-      baselineSha: before.head,
-      manifestAuthorization: {
-        mode: manifestApproved ? 'approved' : 'sandboxed',
-        hash: gateManifestHash(this.roadmap.gates)
-      },
-      maxAttemptsPerItem: this.maxAttemptsPerItem,
-      currentItemId: null,
-      attempts: {},
-      events: [{ sequence: 1, at, type: 'run-started', itemId: null, details: {} }],
-      pendingTransaction: null
+    await this.ensureStateRoot();
+    const startLock = await acquireRunLock(join(this.stateRoot, 'locks', 'active-run.lock'), {
+      fs: this.fs,
+      runId: 'active-run',
+      validateJournal: () => true,
+      randomUUID: this.createId
     });
-
-    await this.withRunLock(runId, async journalPath => {
-      await writeJsonAtomic(journalPath, run, { fs: this.fs, randomUUID: this.createId });
+    try {
+      let existingPointer = null;
       try {
-        await writeExclusiveJson(this.activeRunPath(), { schemaVersion: 1, runId, journal: `.ddd/runs/${runId}.json` }, this.fs);
+        existingPointer = await this.readActivePointer();
       } catch (error) {
-        if (error.code === 'EEXIST') throw lifecycleError('ACTIVE_RUN_CONFLICT', 'an active roadmap run already exists');
-        throw error;
+        if (error.code !== 'ENOENT') throw error;
       }
-    });
-    return { runId, scope: [...scope], status: 'active', runBranch };
+      if (existingPointer) {
+        const pointedRun = await readJsonRegular(this.runPath(existingPointer.runId), parseRun, { fs: this.fs });
+        if (pointedRun.status === 'active') {
+          throw lifecycleError('ACTIVE_RUN_CONFLICT', 'an active roadmap run already exists');
+        }
+        await this.clearActivePointer(existingPointer.runId, { activeLockHeld: true });
+      }
+      if ((await this.activeJournals()).length > 0) {
+        throw lifecycleError('ACTIVE_RUN_CONFLICT', 'an active roadmap journal already exists');
+      }
+
+      const { scope } = await this.validateLifecycleScope(selector);
+      const before = await repositoryState(this.root);
+      if (!before.clean) throw lifecycleError('DIRTY_WORKTREE', 'a roadmap run requires a clean worktree');
+      if (before.branch === null) throw lifecycleError('DETACHED_HEAD', 'a roadmap run requires a branch');
+
+      const runId = runIdAt(typeof this.now === 'function' ? this.now() : this.now, this.createId);
+      const prepared = await prepareRunBranch(this.root, runId);
+      const runBranch = prepared.branch;
+      const at = this.timestamp();
+      const run = parseRun({
+        schemaVersion: 1,
+        revision: 0,
+        runId,
+        selector,
+        scope,
+        status: 'active',
+        originalBranch: before.branch,
+        runBranch,
+        baselineSha: before.head,
+        manifestAuthorization: {
+          mode: manifestApproved ? 'approved' : 'sandboxed',
+          hash: gateManifestHash(this.roadmap.gates)
+        },
+        maxAttemptsPerItem: this.maxAttemptsPerItem,
+        currentItemId: null,
+        attempts: {},
+        events: [{ sequence: 1, at, type: 'run-started', itemId: null, details: {} }],
+        pendingTransaction: null
+      });
+
+      await this.withRunLock(runId, async journalPath => {
+        await writeJsonAtomic(journalPath, run, { fs: this.fs, randomUUID: this.createId });
+        try {
+          await writeExclusiveJson(this.activeRunPath(), { schemaVersion: 1, runId, journal: `.ddd/runs/${runId}.json` }, this.fs);
+        } catch (error) {
+          if (error.code === 'EEXIST') throw lifecycleError('ACTIVE_RUN_CONFLICT', 'an active roadmap run already exists');
+          throw error;
+        }
+      });
+      return { runId, scope: [...scope], status: 'active', runBranch };
+    } finally {
+      await startLock.release();
+    }
   }
 
   async next(runId) {
     return this.withRunLock(runId, async journalPath => {
-      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const run = await this.readRunRecovering(journalPath);
       if (run.status !== 'active') throw lifecycleError('RUN_CLOSED', 'the roadmap run is closed');
       if (run.currentItemId !== null) {
         throw lifecycleError('ACTIVE_ITEM_CONFLICT', 'the roadmap run already has an active item', { itemId: run.currentItemId });
       }
       const candidates = readyItems(this.roadmap, run.scope, run);
-      if (candidates.length === 0) return { runId, item: null, terminal: true };
+      if (candidates.length === 0) {
+        const status = this.statusSnapshot(run);
+        return {
+          runId,
+          item: null,
+          terminal: true,
+          action: status.action,
+          blockers: status.blockers,
+          remaining: status.remaining,
+          outcome: this.runOutcome(run)
+        };
+      }
 
       const item = this.roadmap.nodes.find(node => node.id === candidates[0]);
       const spec = await this.readSpec(item);
-      const state = await repositoryState(this.root);
-      if (!state.clean || state.branch !== run.runBranch) {
-        throw lifecycleError('RUN_BRANCH_CONFLICT', 'the run branch is not clean and current');
-      }
+      const state = await this.assertRunRepository(run);
       const attemptNumber = (run.attempts[item.id]?.length ?? 0) + 1;
       if (attemptNumber > run.maxAttemptsPerItem) {
         throw lifecycleError('ATTEMPT_CAP_REACHED', 'the item attempt budget is exhausted', { itemId: item.id });
@@ -320,7 +443,7 @@ export class RoadmapController {
         startedAt: at,
         finishedAt: null
       };
-      const updated = await mutateRevision(journalPath, parseRun, run.revision, current => ({
+      const updated = await mutateRevisionRegular(journalPath, parseRun, run.revision, current => ({
         ...current,
         currentItemId: item.id,
         attempts: { ...current.attempts, [item.id]: [...(current.attempts[item.id] ?? []), attempt] },
@@ -337,7 +460,7 @@ export class RoadmapController {
 
   async record(runId, itemId, { commit, acIds }) {
     return this.withRunLock(runId, async journalPath => {
-      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const run = await this.readRunRecovering(journalPath);
       const { attempt } = activeAttempt(run, itemId, 'in_progress');
       const item = this.roadmap.nodes.find(node => node.kind === 'item' && node.id === itemId);
       if (!item || !run.scope.includes(itemId)) throw lifecycleError('ITEM_OUT_OF_SCOPE', 'item is outside the run scope');
@@ -364,7 +487,7 @@ export class RoadmapController {
         changedFiles: paths,
         acIds: [...acIds]
       };
-      const updated = await mutateRevision(journalPath, parseRun, run.revision, current => ({
+      const updated = await mutateRevisionRegular(journalPath, parseRun, run.revision, current => ({
         ...current,
         attempts: replaceLastAttempt(current, itemId, nextAttempt),
         events: addEvent(current, at, 'implementation-recorded', itemId, { changedFiles: paths })
@@ -393,13 +516,14 @@ export class RoadmapController {
 
   async verify(runId, itemId) {
     return this.withRunLock(runId, async journalPath => {
-      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const run = await this.readRunRecovering(journalPath);
       const { attempt } = activeAttempt(run, itemId, 'verifying');
       const item = this.roadmap.nodes.find(node => node.kind === 'item' && node.id === itemId);
       if (!item || attempt.implementationSha === null) {
         throw lifecycleError('ATTEMPT_STATE_INVALID', 'verification requires a recorded implementation');
       }
       const { bindings } = await this.evidenceContext(run, item, attempt);
+      await this.assertRunRepository(run, attempt.implementationSha);
       const at = this.timestamp();
       const evidence = {
         ...attempt.evidence,
@@ -433,8 +557,9 @@ export class RoadmapController {
         }, gateName, gate);
         executed.push(gateName);
       }
+      await this.assertRunRepository(run, attempt.implementationSha);
       const nextAttempt = { ...attempt, evidence };
-      const updated = await mutateRevision(journalPath, parseRun, run.revision, current => ({
+      const updated = await mutateRevisionRegular(journalPath, parseRun, run.revision, current => ({
         ...current,
         attempts: replaceLastAttempt(current, itemId, nextAttempt),
         events: addEvent(current, this.timestamp(), 'gates-verified', itemId, { gates: executed })
@@ -445,7 +570,7 @@ export class RoadmapController {
 
   async attest(runId, itemId, gateName, reportPath) {
     return this.withRunLock(runId, async journalPath => {
-      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const run = await this.readRunRecovering(journalPath);
       const { attempt } = activeAttempt(run, itemId, 'verifying');
       const item = this.roadmap.nodes.find(node => node.kind === 'item' && node.id === itemId);
       const gate = this.roadmap.gates[gateName];
@@ -462,9 +587,10 @@ export class RoadmapController {
         throw lifecycleError('ATTESTATION_INVALID', 'attestation report is not valid JSON', { causeCode: error.code });
       }
       const { bindings } = await this.evidenceContext(run, item, attempt);
+      await this.assertRunRepository(run, attempt.implementationSha);
       const normalized = validateAttestation({ bindings, gateName }, gate, report);
       const nextAttempt = { ...attempt, evidence: { ...attempt.evidence, [gateName]: normalized } };
-      const updated = await mutateRevision(journalPath, parseRun, run.revision, current => ({
+      const updated = await mutateRevisionRegular(journalPath, parseRun, run.revision, current => ({
         ...current,
         attempts: replaceLastAttempt(current, itemId, nextAttempt),
         events: addEvent(current, this.timestamp(), 'attestation-recorded', itemId, { gate: gateName })
@@ -473,8 +599,168 @@ export class RoadmapController {
     });
   }
 
+  assertTransactionPaths(transaction, expectedPaths) {
+    if (transaction.allowedPaths.length !== expectedPaths.length
+        || transaction.allowedPaths.some((path, index) => path !== expectedPaths[index])) {
+      throw lifecycleError('TRANSACTION_CONFLICT', 'prepared transaction paths do not match controller-owned paths');
+    }
+  }
+
+  async controllerCommitAtHead(run, transaction, subject) {
+    const state = await repositoryState(this.root);
+    if (state.branch !== run.runBranch) {
+      throw lifecycleError('RUN_BRANCH_CONFLICT', 'prepared transaction is not on its run branch');
+    }
+    const expectedParent = transaction.implementationSha;
+    if (expectedParent === null) {
+      throw lifecycleError('TRANSACTION_CONFLICT', 'prepared transaction has no exact Git parent');
+    }
+    if (state.head === expectedParent) return null;
+    if (!state.clean) {
+      throw lifecycleError('TRANSACTION_CONFLICT', 'prepared transaction diverged from its exact Git parent');
+    }
+    const actualSubject = (await git(this.root, ['show', '-s', '--format=%s', state.head])).stdout.trim();
+    const actualParents = (await git(this.root, ['show', '-s', '--format=%P', state.head])).stdout.trim();
+    if (actualSubject !== subject || actualParents !== expectedParent) {
+      throw lifecycleError('TRANSACTION_CONFLICT', 'prepared transaction head is not the exact controller commit');
+    }
+    const paths = await changedFiles(this.root, expectedParent, state.head);
+    const allowed = new Set(transaction.allowedPaths);
+    if (paths.length === 0 || paths.some(path => !allowed.has(path))) {
+      throw lifecycleError('TRANSACTION_CONFLICT', 'prepared transaction head changes paths outside its allowlist');
+    }
+    return state.head;
+  }
+
+  async roadmapAtCommit(commit) {
+    const roadmapPath = relative(this.root, this.roadmapPath).split('\\').join('/');
+    try {
+      const source = (await git(this.root, ['show', `${commit}:${roadmapPath}`])).stdout;
+      return { roadmap: parseRoadmap(JSON.parse(source)), source };
+    } catch (error) {
+      throw lifecycleError('TRANSACTION_CONFLICT', 'prepared transaction cannot reconstruct its exact roadmap parent', {
+        causeCode: error.code
+      });
+    }
+  }
+
+  async recoverPrepared(journalPath, run) {
+    const transaction = run.pendingTransaction;
+    if (!transaction || transaction.state !== 'prepared') return run;
+
+    if (transaction.type === 'settle-item') {
+      const { roadmap: baseRoadmap, source: baseRoadmapSource } = await this.roadmapAtCommit(transaction.implementationSha);
+      const item = baseRoadmap.nodes.find(node => node.id === transaction.itemId && node.kind === 'item');
+      if (!item) throw lifecycleError('TRANSACTION_CONFLICT', 'prepared settlement item no longer exists');
+      const expectedPaths = [
+        relative(this.root, this.roadmapPath).split('\\').join('/'),
+        relative(this.root, this.markdownPath).split('\\').join('/')
+      ];
+      this.assertTransactionPaths(transaction, expectedPaths);
+      const subject = `chore(roadmapctl): settle ${item.id} as ${transaction.targetState}`;
+      await this.controllerCommitAtHead(run, transaction, subject);
+      if (baseRoadmap.revision !== transaction.expectedRoadmapRevision) {
+        throw lifecycleError('TRANSACTION_CONFLICT', 'prepared settlement parent has the wrong roadmap revision');
+      }
+      const roadmap = parseRoadmap({
+        ...baseRoadmap,
+        revision: baseRoadmap.revision + 1,
+        nodes: baseRoadmap.nodes.map(node => node.id === item.id
+          ? { ...node, status: transaction.targetState }
+          : node)
+      });
+      const currentSource = await this.fs.readFile(this.roadmapPath, 'utf8');
+      parseRoadmap(JSON.parse(currentSource));
+      if (currentSource !== baseRoadmapSource
+          && currentSource !== canonicalStringify(roadmap)) {
+        throw lifecycleError('TRANSACTION_CONFLICT', 'roadmap differs from both exact prepared transaction states');
+      }
+      await writeJsonAtomic(this.roadmapPath, roadmap, { fs: this.fs, randomUUID: this.createId });
+      this.roadmap = roadmap;
+      await writeTextAtomic(this.markdownPath, renderRoadmap(roadmap, { ...run, currentItemId: null }), this.fs);
+      let bookkeepingSha = await this.controllerCommitAtHead(run, transaction, subject);
+      if (!bookkeepingSha) {
+        bookkeepingSha = await commitGenerated(this.root, { paths: transaction.allowedPaths, message: subject });
+      }
+      const { attempt } = activeAttempt(run, item.id);
+      const finishedAt = this.timestamp();
+      const settledAttempt = {
+        ...attempt,
+        state: transaction.targetState,
+        reason: attempt.reason,
+        finishedAt
+      };
+      const withSha = parseRun({
+        ...run,
+        pendingTransaction: { ...transaction, bookkeepingSha }
+      });
+      const committed = commitTransaction(withSha, transaction.id);
+      return mutateRevisionRegular(journalPath, parseRun, run.revision, () => ({
+        ...committed,
+        currentItemId: null,
+        attempts: replaceLastAttempt(committed, item.id, settledAttempt),
+        events: addEvent(committed, finishedAt, 'item-settled', item.id, {
+          state: transaction.targetState,
+          recovered: true
+        })
+      }), { fs: this.fs, randomUUID: this.createId });
+    }
+
+    const { roadmap, source: roadmapSource } = await this.roadmapAtCommit(transaction.implementationSha);
+    if (roadmap.revision !== transaction.expectedRoadmapRevision) {
+      throw lifecycleError('TRANSACTION_CONFLICT', 'roadmap revision does not match the prepared close');
+    }
+    const currentRoadmapSource = await this.fs.readFile(this.roadmapPath, 'utf8');
+    parseRoadmap(JSON.parse(currentRoadmapSource));
+    if (currentRoadmapSource !== roadmapSource) {
+      throw lifecycleError('TRANSACTION_CONFLICT', 'roadmap differs from the exact prepared close parent');
+    }
+    this.roadmap = roadmap;
+    const outcome = this.runOutcome(run);
+    const reportPath = join(this.root, 'docs/runs', `${run.runId}.json`);
+    await ensureContainedDirectory(this.root, dirname(reportPath), this.fs);
+    const expectedPaths = [
+      relative(this.root, this.markdownPath).split('\\').join('/'),
+      relative(this.root, reportPath).split('\\').join('/')
+    ];
+    this.assertTransactionPaths(transaction, expectedPaths);
+    const subject = `chore(roadmapctl): close ${run.runId} as ${outcome}`;
+    await this.controllerCommitAtHead(run, transaction, subject);
+    const closingRun = { ...run, status: outcome };
+    const report = parseReport(buildRunReport(roadmap, closingRun));
+    await writeImmutableReport(reportPath, report, { fs: this.fs, randomUUID: this.createId });
+    await writeTextAtomic(this.markdownPath, renderRoadmap(roadmap, closingRun), this.fs);
+    let bookkeepingSha = await this.controllerCommitAtHead(run, transaction, subject);
+    if (!bookkeepingSha) {
+      bookkeepingSha = await commitGenerated(this.root, { paths: transaction.allowedPaths, message: subject });
+    }
+    const withSha = parseRun({
+      ...run,
+      pendingTransaction: { ...transaction, bookkeepingSha }
+    });
+    const committed = commitTransaction(withSha, transaction.id);
+    const at = this.timestamp();
+    const finalized = await mutateRevisionRegular(journalPath, parseRun, run.revision, () => ({
+      ...committed,
+      status: outcome,
+      events: addEvent(committed, at, 'run-closed', null, { status: outcome, recovered: true })
+    }), { fs: this.fs, randomUUID: this.createId });
+    await this.clearActivePointer(run.runId);
+    return finalized;
+  }
+
+  async readRunRecovering(journalPath) {
+    const run = await readJsonRegular(journalPath, parseRun, { fs: this.fs });
+    const recovered = await this.recoverPrepared(journalPath, run);
+    if (recovered.status !== 'active') {
+      await this.clearActivePointer(recovered.runId, { missingOk: true });
+    }
+    return recovered;
+  }
+
   async settleItem(journalPath, run, item, attempt, targetState, reason) {
     const roadmap = await readJson(this.roadmapPath, parseRoadmap, { fs: this.fs });
+    const repository = await this.assertRunRepository(run, attempt.implementationSha ?? expectedRunHead(run));
     const id = transactionId(this.createId);
     const allowedPaths = [
       relative(this.root, this.roadmapPath).split('\\').join('/'),
@@ -487,11 +773,17 @@ export class RoadmapController {
       expectedRoadmapRevision: roadmap.revision,
       itemId: item.id,
       targetState,
-      implementationSha: attempt.implementationSha,
+      implementationSha: repository.head,
       allowedPaths,
       bookkeepingSha: null
     };
-    const prepared = await mutateRevision(journalPath, parseRun, run.revision, current => beginTransaction(current, transaction), {
+    const prepared = await mutateRevisionRegular(journalPath, parseRun, run.revision, current => {
+      const begun = beginTransaction(current, transaction);
+      return {
+        ...begun,
+        attempts: replaceLastAttempt(begun, item.id, { ...attempt, reason })
+      };
+    }, {
       fs: this.fs,
       randomUUID: this.createId
     });
@@ -512,7 +804,7 @@ export class RoadmapController {
       pendingTransaction: { ...prepared.pendingTransaction, bookkeepingSha }
     });
     const committed = commitTransaction(withSha, id);
-    const finalized = await mutateRevision(journalPath, parseRun, prepared.revision, () => ({
+    const finalized = await mutateRevisionRegular(journalPath, parseRun, prepared.revision, () => ({
       ...committed,
       currentItemId: null,
       attempts: replaceLastAttempt(committed, item.id, settledAttempt),
@@ -524,18 +816,18 @@ export class RoadmapController {
 
   async finish(runId, itemId) {
     return this.withRunLock(runId, async journalPath => {
-      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const run = await this.readRunRecovering(journalPath);
       const { attempt } = activeAttempt(run, itemId, 'verifying');
       const item = this.roadmap.nodes.find(node => node.kind === 'item' && node.id === itemId);
       if (!item) throw lifecycleError('ITEM_OUT_OF_SCOPE', 'item is outside the run scope');
       const { bindings } = await this.evidenceContext(run, item, attempt);
-      const repository = await repositoryState(this.root);
+      await this.assertRunRepository(run, attempt.implementationSha);
       const decision = evaluateCompletion({
         item,
         evidence: attempt.evidence,
         bindings: {
           ...bindings,
-          hasUnrecordedRelevantChanges: !repository.clean || repository.head !== attempt.implementationSha
+          hasUnrecordedRelevantChanges: false
         }
       });
       const state = decision.accepted ? 'done' : decision.state;
@@ -552,21 +844,26 @@ export class RoadmapController {
     });
   }
 
-  async resolveRunId(runId) {
-    if (runId !== null) return runId;
+  async resolveRunId(runId, { allowClosedPointer = false } = {}) {
+    await this.ensureStateRoot();
+    if (runId !== null) return assertLifecycleRunId(runId);
     let pointer;
     try {
-      pointer = JSON.parse(await this.fs.readFile(this.activeRunPath(), 'utf8'));
+      pointer = await this.readActivePointer();
     } catch (error) {
+      if (error.code === 'STATE_PATH_UNSAFE') throw error;
       throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer is missing or corrupt', { causeCode: error.code });
     }
-    if (!exactObjectKeys(pointer, ['schemaVersion', 'runId', 'journal'])
-        || pointer.schemaVersion !== 1 || typeof pointer.runId !== 'string'
-        || pointer.journal !== `.ddd/runs/${pointer.runId}.json`) {
-      throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer is invalid');
+    const active = await this.activeJournals();
+    if (active.length === 0 && allowClosedPointer) {
+      const closed = await readJsonRegular(this.runPath(pointer.runId), parseRun, { fs: this.fs });
+      if (closed.status !== 'active') return pointer.runId;
+    }
+    if (active.length !== 1 || active[0] !== pointer.runId) {
+      throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer does not identify the only active journal');
     }
     try {
-      const run = await readJson(this.runPath(pointer.runId), parseRun, { fs: this.fs });
+      const run = await readJsonRegular(this.runPath(pointer.runId), parseRun, { fs: this.fs });
       if (run.status !== 'active') throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer references a closed run');
     } catch (error) {
       if (error instanceof RoadmapError && error.code === 'ACTIVE_POINTER_STALE') throw error;
@@ -619,21 +916,21 @@ export class RoadmapController {
 
   async status(runId) {
     const resolved = await this.resolveRunId(runId);
-    const run = await readJson(this.runPath(resolved), parseRun, { fs: this.fs });
+    const run = await readJsonRegular(this.runPath(resolved), parseRun, { fs: this.fs });
     return this.statusSnapshot(run);
   }
 
   async resume(runId) {
-    const resolved = await this.resolveRunId(runId);
+    const resolved = await this.resolveRunId(runId, { allowClosedPointer: true });
     return this.withRunLock(resolved, async journalPath => {
-      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const run = await this.readRunRecovering(journalPath);
       return this.statusSnapshot(run);
     });
   }
 
   async retry(runId, itemId, reasonText) {
     return this.withRunLock(runId, async journalPath => {
-      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const run = await this.readRunRecovering(journalPath);
       if (run.status !== 'active' || run.currentItemId !== null) {
         throw lifecycleError('RETRY_INVALID', 'retry requires an active run with no active item');
       }
@@ -648,10 +945,7 @@ export class RoadmapController {
       if (typeof reasonText !== 'string' || reasonText.trim().length === 0) {
         throw lifecycleError('RETRY_INVALID', 'retry requires a non-empty reason');
       }
-      const repository = await repositoryState(this.root);
-      if (!repository.clean || repository.branch !== run.runBranch) {
-        throw lifecycleError('RUN_BRANCH_CONFLICT', 'the run branch is not clean and current');
-      }
+      const repository = await this.assertRunRepository(run);
       const at = this.timestamp();
       const attempt = {
         number: previous.length + 1,
@@ -665,7 +959,7 @@ export class RoadmapController {
         startedAt: at,
         finishedAt: null
       };
-      const updated = await mutateRevision(journalPath, parseRun, run.revision, current => ({
+      const updated = await mutateRevisionRegular(journalPath, parseRun, run.revision, current => ({
         ...current,
         currentItemId: itemId,
         attempts: { ...current.attempts, [itemId]: [...previous, attempt] },
@@ -685,90 +979,119 @@ export class RoadmapController {
     return 'blocked';
   }
 
-  async clearActivePointer(runId) {
+  async clearActivePointer(runId, { missingOk = false, activeLockHeld = false } = {}) {
+    if (!activeLockHeld) {
+      return this.withActivePointerLock(() => this.clearActivePointer(runId, {
+        missingOk,
+        activeLockHeld: true
+      }));
+    }
+    let expected;
+    try {
+      expected = await this.readActivePointer();
+    } catch (error) {
+      if (missingOk && error.code === 'ENOENT') return false;
+      if (error.code === 'STATE_PATH_UNSAFE') throw error;
+      throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer is missing or corrupt', { causeCode: error.code });
+    }
+    if (expected.runId !== runId) {
+      throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer identifies another run');
+    }
     const diagnostic = `${this.activeRunPath()}.closed-${this.createId()}`;
     try {
       await this.fs.rename(this.activeRunPath(), diagnostic);
     } catch (error) {
+      if (missingOk && error.code === 'ENOENT') return false;
       throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer could not be cleared', { causeCode: error.code });
     }
     let pointer;
     try {
-      pointer = JSON.parse(await this.fs.readFile(diagnostic, 'utf8'));
+      pointer = await this.readActivePointer(diagnostic);
     } catch (error) {
+      if (error.code === 'STATE_PATH_UNSAFE') throw error;
       throw lifecycleError('ACTIVE_POINTER_STALE', 'the moved active-run pointer is corrupt', { causeCode: error.code });
     }
-    if (pointer.runId !== runId) throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer changed during close');
+    if (canonicalStringify(pointer) !== canonicalStringify(expected)) {
+      throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer changed during close');
+    }
+    return true;
   }
 
-  async close(runId, { requireSuccess = false } = {}) {
+  async closeLocked(journalPath, run, { requireSuccess = false } = {}) {
+    const runId = run.runId;
+    if (run.status !== 'active') throw lifecycleError('RUN_CLOSED', 'the roadmap run is already closed');
+    if (run.currentItemId !== null) throw lifecycleError('ACTIVE_ITEM_CONFLICT', 'an active item must settle before close');
+    const repository = await this.assertRunRepository(run);
+    const outcome = this.runOutcome(run);
+    if (requireSuccess && outcome !== 'successful') {
+      throw lifecycleError('RUN_NOT_SUCCESSFUL', 'the run still contains incomplete items', {
+        remaining: run.scope.filter(id => this.roadmap.nodes.find(node => node.id === id).status !== 'done')
+      });
+    }
+    const reportPath = join(this.root, 'docs/runs', `${runId}.json`);
+    await ensureContainedDirectory(this.root, dirname(reportPath), this.fs);
+    const relativeReport = relative(this.root, reportPath).split('\\').join('/');
+    const relativeMarkdown = relative(this.root, this.markdownPath).split('\\').join('/');
+    const id = transactionId(this.createId);
+    const transaction = {
+      id,
+      type: 'close-run',
+      state: 'prepared',
+      expectedRoadmapRevision: this.roadmap.revision,
+      itemId: null,
+      targetState: null,
+      implementationSha: repository.head,
+      allowedPaths: [relativeMarkdown, relativeReport],
+      bookkeepingSha: null
+    };
+    const prepared = await mutateRevisionRegular(journalPath, parseRun, run.revision, current => beginTransaction(current, transaction), {
+      fs: this.fs,
+      randomUUID: this.createId
+    });
+    const closingRun = { ...prepared, status: outcome };
+    const report = parseReport(buildRunReport(this.roadmap, closingRun));
+    await writeImmutableReport(reportPath, report, { fs: this.fs, randomUUID: this.createId });
+    await writeTextAtomic(this.markdownPath, renderRoadmap(this.roadmap, closingRun), this.fs);
+    const bookkeepingSha = await commitGenerated(this.root, {
+      paths: [relativeMarkdown, relativeReport],
+      message: `chore(roadmapctl): close ${runId} as ${outcome}`
+    });
+    const withSha = parseRun({
+      ...prepared,
+      pendingTransaction: { ...prepared.pendingTransaction, bookkeepingSha }
+    });
+    const committed = commitTransaction(withSha, id);
+    const at = this.timestamp();
+    const finalized = await mutateRevisionRegular(journalPath, parseRun, prepared.revision, () => ({
+      ...committed,
+      status: outcome,
+      events: addEvent(committed, at, 'run-closed', null, { status: outcome })
+    }), { fs: this.fs, randomUUID: this.createId });
+    await this.clearActivePointer(runId);
+    return { runId, status: outcome, report: relativeReport, bookkeepingSha, revision: finalized.revision };
+  }
+
+  async close(runId, options = {}) {
     return this.withRunLock(runId, async journalPath => {
-      const run = await readJson(journalPath, parseRun, { fs: this.fs });
-      if (run.status !== 'active') throw lifecycleError('RUN_CLOSED', 'the roadmap run is already closed');
-      if (run.currentItemId !== null) throw lifecycleError('ACTIVE_ITEM_CONFLICT', 'an active item must settle before close');
-      const outcome = this.runOutcome(run);
-      if (requireSuccess && outcome !== 'successful') {
-        throw lifecycleError('RUN_NOT_SUCCESSFUL', 'the run still contains incomplete items', {
-          remaining: run.scope.filter(id => this.roadmap.nodes.find(node => node.id === id).status !== 'done')
-        });
-      }
-      const reportPath = join(this.root, 'docs/roadmap/runs', runId, 'report.json');
-      await ensureContainedDirectory(this.root, dirname(reportPath), this.fs);
-      const relativeReport = relative(this.root, reportPath).split('\\').join('/');
-      const relativeMarkdown = relative(this.root, this.markdownPath).split('\\').join('/');
-      const id = transactionId(this.createId);
-      const transaction = {
-        id,
-        type: 'close-run',
-        state: 'prepared',
-        expectedRoadmapRevision: this.roadmap.revision,
-        itemId: null,
-        targetState: null,
-        implementationSha: null,
-        allowedPaths: [relativeMarkdown, relativeReport],
-        bookkeepingSha: null
-      };
-      const prepared = await mutateRevision(journalPath, parseRun, run.revision, current => beginTransaction(current, transaction), {
-        fs: this.fs,
-        randomUUID: this.createId
-      });
-      const closingRun = { ...prepared, status: outcome };
-      const report = buildRunReport(this.roadmap, closingRun);
-      await writeImmutableReport(reportPath, report, { fs: this.fs, randomUUID: this.createId });
-      await writeTextAtomic(this.markdownPath, renderRoadmap(this.roadmap, closingRun), this.fs);
-      const bookkeepingSha = await commitGenerated(this.root, {
-        paths: [relativeMarkdown, relativeReport],
-        message: `chore(roadmapctl): close ${runId} as ${outcome}`
-      });
-      const withSha = parseRun({
-        ...prepared,
-        pendingTransaction: { ...prepared.pendingTransaction, bookkeepingSha }
-      });
-      const committed = commitTransaction(withSha, id);
-      const at = this.timestamp();
-      const finalized = await mutateRevision(journalPath, parseRun, prepared.revision, () => ({
-        ...committed,
-        status: outcome,
-        events: addEvent(committed, at, 'run-closed', null, { status: outcome })
-      }), { fs: this.fs, randomUUID: this.createId });
-      await this.clearActivePointer(runId);
-      return { runId, status: outcome, report: relativeReport, bookkeepingSha, revision: finalized.revision };
+      const run = await this.readRunRecovering(journalPath);
+      return this.closeLocked(journalPath, run, options);
     });
   }
 
   async abort(runId, { confirmed = false } = {}) {
     if (!confirmed) throw lifecycleError('ABORT_CONFIRMATION_REQUIRED', 'abort requires explicit confirmation');
-    await this.withRunLock(runId, async journalPath => {
-      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+    return this.withRunLock(runId, async journalPath => {
+      const run = await this.readRunRecovering(journalPath);
       if (run.status !== 'active' || run.currentItemId === null) {
         throw lifecycleError('ABORT_INVALID', 'abort requires one active item');
       }
       const itemId = run.currentItemId;
       const { attempt } = activeAttempt(run, itemId);
+      await this.assertRunRepository(run, attempt.implementationSha ?? expectedRunHead(run));
       const item = this.roadmap.nodes.find(node => node.id === itemId);
       const reason = { code: 'USER_ABORTED', message: 'the user cancelled the active attempt', details: {} };
-      await this.settleItem(journalPath, run, item, attempt, 'cancelled', reason);
+      const { finalized } = await this.settleItem(journalPath, run, item, attempt, 'cancelled', reason);
+      return this.closeLocked(journalPath, finalized);
     });
-    return this.close(runId);
   }
 }

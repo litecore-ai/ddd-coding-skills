@@ -285,7 +285,16 @@ test('spec rejects legacy Markdown input', () => {
 
 for (const [name, parse, create] of [
   ['run', parseRun, overrides => validRun(overrides)],
-  ['report', parseReport, overrides => ({ schemaVersion: 1, revision: 3, runId: 'run-001', status: 'running', ...overrides })]
+  ['report', parseReport, overrides => ({
+    schemaVersion: 1,
+    revision: 3,
+    runId: 'run-001',
+    status: 'successful',
+    selector: 'P1.1.1',
+    scope: ['P1.1.1'],
+    items: { 'P1.1.1': { attempts: [], id: 'P1.1.1', status: 'done' } },
+    ...overrides
+  })]
 ]) {
   test(`${name} parser validates and deeply freezes the common envelope`, () => {
     const value = create({ revision: 3 });
@@ -310,7 +319,15 @@ for (const [name, parse, create] of [
 test('revision counters accept MAX_SAFE_INTEGER and reject unsafe integers', () => {
   const maximum = Number.MAX_SAFE_INTEGER;
   const unsafe = maximum + 1;
-  const report = { schemaVersion: 1, revision: maximum, runId: 'run-001', status: 'running' };
+  const report = {
+    schemaVersion: 1,
+    revision: maximum,
+    runId: 'run-001',
+    status: 'successful',
+    selector: 'P1.1.1',
+    scope: ['P1.1.1'],
+    items: { 'P1.1.1': { attempts: [], id: 'P1.1.1', status: 'done' } }
+  };
 
   assert.equal(parseRoadmap(validRoadmap({ revision: maximum })).revision, maximum);
   assert.equal(parseRun(validRun({ revision: maximum })).revision, maximum);

@@ -17,6 +17,12 @@ test('rendered parent remains in progress while any leaf is incomplete', () => {
   assert.doesNotMatch(markdown, /\[[ xX]\]/);
 });
 
+test('rendered evidence references the canonical final report path', () => {
+  const markdown = renderRoadmap(twoLeafRoadmap(), validRun({ runId: 'r1' }));
+  assert.match(markdown, /docs\/runs\/r1\.json/);
+  assert.doesNotMatch(markdown, /docs\/roadmap\/runs/);
+});
+
 test('rendering is byte-identical and escapes Markdown content', () => {
   const roadmap = twoLeafRoadmap({ first: 'done', second: 'done' });
   roadmap.nodes[1].title = 'Profile [public] *API*';

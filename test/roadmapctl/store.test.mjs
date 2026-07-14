@@ -12,6 +12,7 @@ import {
   commitTransaction,
   mutateRevision,
   readJson,
+  readJsonRegular,
   writeJsonAtomic
 } from '../../src/roadmapctl/store.mjs';
 import { validRun, validTransaction } from './helpers.mjs';
@@ -288,6 +289,19 @@ test('corrupt JSON is rejected without modifying or removing the journal', async
   );
 
   assert.equal(await fs.readFile(file, 'utf8'), corrupt);
+});
+
+test('regular JSON reads reject a symlink without reading its target', async t => {
+  const directory = await temporaryDirectory(t);
+  const outside = join(directory, 'outside.json');
+  const linked = join(directory, 'linked.json');
+  await fs.writeFile(outside, canonicalStringify({ revision: 0 }));
+  await fs.symlink(outside, linked);
+
+  await assert.rejects(
+    readJsonRegular(linked, value => value),
+    error => error.code === 'STATE_PATH_UNSAFE'
+  );
 });
 
 test('revision mutation validates, increments exactly once, and persists the parsed document', async t => {
@@ -746,7 +760,7 @@ for (const movedOwner of ['corrupt', 'token-mismatch']) {
   });
 }
 
-test('release preserves a foreign diagnostic replacement installed after moved owner read', async t => {
+test('release fails closed on a foreign diagnostic replacement installed after moved owner read', async t => {
   const directory = await temporaryDirectory(t);
   const lockPath = join(directory, 'run.lock');
   const diagnosticPath = `${lockPath}.release-${OWNER_TOKEN}-${NEXT_TOKEN}`;
@@ -759,23 +773,34 @@ test('release preserves a foreign diagnostic replacement installed after moved o
   await seedLock(lockPath, owner);
   const injected = {
     ...fs,
-    async readFile(path, ...args) {
-      const source = await fs.readFile(path, ...args);
-      if (!replaced && path === diagnosticOwnerPath) {
-        replaced = true;
-        await fs.rm(diagnosticPath, { recursive: true });
-        await fs.mkdir(diagnosticPath);
-        await fs.writeFile(diagnosticOwnerPath, foreignOwnerBytes);
-        await fs.writeFile(join(diagnosticPath, 'marker'), foreignMarkerBytes);
-      }
-      return source;
+    async open(path, ...args) {
+      const handle = await fs.open(path, ...args);
+      if (path !== diagnosticOwnerPath) return handle;
+      return {
+        stat: options => handle.stat(options),
+        async readFile(options) {
+          const source = await handle.readFile(options);
+          if (!replaced) {
+            replaced = true;
+            await fs.rm(diagnosticPath, { recursive: true });
+            await fs.mkdir(diagnosticPath);
+            await fs.writeFile(diagnosticOwnerPath, foreignOwnerBytes);
+            await fs.writeFile(join(diagnosticPath, 'marker'), foreignMarkerBytes);
+          }
+          return source;
+        },
+        close: () => handle.close()
+      };
     }
   };
 
-  await releaseRunLock(lockPath, owner, { fs: injected, randomUUID: () => NEXT_TOKEN });
+  await assert.rejects(
+    releaseRunLock(lockPath, owner, { fs: injected, randomUUID: () => NEXT_TOKEN }),
+    error => error.code === 'LOCK_CORRUPT' && error.details.reservationCreated === true
+  );
 
   assert.equal(replaced, true, 'the fault must replace the moved diagnostic after its real owner read');
-  await assert.rejects(fs.stat(lockPath), error => error.code === 'ENOENT');
+  assert.deepEqual(await fs.readdir(lockPath), []);
   assert.equal(await fs.readFile(diagnosticOwnerPath, 'utf8'), foreignOwnerBytes);
   assert.equal(await fs.readFile(join(diagnosticPath, 'marker'), 'utf8'), foreignMarkerBytes);
 });
@@ -826,7 +851,7 @@ test('absent same-host PID is recovered only after its journal validates', async
   await acquired.release();
 });
 
-test('stale recovery preserves a foreign diagnostic replacement installed after moved owner read', async t => {
+test('stale recovery fails closed on a foreign diagnostic replacement installed after moved owner read', async t => {
   const directory = await temporaryDirectory(t);
   const lockPath = join(directory, 'run.lock');
   const diagnosticPath = `${lockPath}.stale-${OWNER_TOKEN}-${NEXT_TOKEN}`;
@@ -839,28 +864,38 @@ test('stale recovery preserves a foreign diagnostic replacement installed after 
   await seedLock(lockPath);
   const injected = {
     ...fs,
-    async readFile(path, ...args) {
-      const source = await fs.readFile(path, ...args);
-      if (!replaced && path === diagnosticOwnerPath) {
-        replaced = true;
-        await fs.rm(diagnosticPath, { recursive: true });
-        await fs.mkdir(diagnosticPath);
-        await fs.writeFile(diagnosticOwnerPath, foreignOwnerBytes);
-        await fs.writeFile(join(diagnosticPath, 'marker'), foreignMarkerBytes);
-      }
-      return source;
+    async open(path, ...args) {
+      const handle = await fs.open(path, ...args);
+      if (path !== diagnosticOwnerPath) return handle;
+      return {
+        stat: options => handle.stat(options),
+        async readFile(options) {
+          const source = await handle.readFile(options);
+          if (!replaced) {
+            replaced = true;
+            await fs.rm(diagnosticPath, { recursive: true });
+            await fs.mkdir(diagnosticPath);
+            await fs.writeFile(diagnosticOwnerPath, foreignOwnerBytes);
+            await fs.writeFile(join(diagnosticPath, 'marker'), foreignMarkerBytes);
+          }
+          return source;
+        },
+        close: () => handle.close()
+      };
     }
   };
 
-  const acquired = await acquireRunLock(lockPath, lockOptions({
-    fs: injected,
-    journalPath,
-    journalParser: parseRun
-  }));
+  await assert.rejects(
+    acquireRunLock(lockPath, lockOptions({
+      fs: injected,
+      journalPath,
+      journalParser: parseRun
+    })),
+    error => error.code === 'LOCK_CORRUPT' && error.details.reservationCreated === true
+  );
 
   assert.equal(replaced, true, 'the fault must replace the stale diagnostic after its real owner read');
-  assert.equal((await readJson(join(lockPath, 'owner.json'), value => value)).token, acquired.owner.token);
-  assert.equal(acquired.owner.token, NEXT_TOKEN);
+  assert.deepEqual(await fs.readdir(lockPath), []);
   assert.equal(await fs.readFile(diagnosticOwnerPath, 'utf8'), foreignOwnerBytes);
   assert.equal(await fs.readFile(join(diagnosticPath, 'marker'), 'utf8'), foreignMarkerBytes);
 });

@@ -66,6 +66,61 @@ function list(values) {
   return values.length === 0 ? 'none' : values.map(markdown).join(', ');
 }
 
+function reportEvidence(evidence) {
+  const normalized = {};
+  for (const gateName of Object.keys(evidence ?? {}).sort()) {
+    const record = evidence[gateName];
+    if (!record || typeof record !== 'object' || Array.isArray(record)) continue;
+    const safe = {
+      gate: record.gate,
+      status: record.status,
+      bindings: record.bindings
+    };
+    if (record.type === 'attestation') {
+      Object.assign(safe, {
+        type: record.type,
+        producer: record.producer,
+        schema: record.schema,
+        auditRange: record.auditRange,
+        auditCounts: record.auditCounts
+      });
+    } else {
+      Object.assign(safe, {
+        processClass: record.processClass,
+        exitCode: record.exitCode,
+        signal: record.signal,
+        startedAt: record.startedAt,
+        finishedAt: record.finishedAt,
+        durationMs: record.durationMs,
+        artifacts: record.artifacts,
+        acIds: record.acIds,
+        stdoutDigest: record.stdoutDigest,
+        stderrDigest: record.stderrDigest
+      });
+      if (record.internal === true) safe.internal = true;
+      if (typeof record.diagnostic === 'string') safe.diagnostic = record.diagnostic;
+      if (typeof record.placeholder === 'boolean') safe.placeholder = record.placeholder;
+    }
+    normalized[gateName] = safe;
+  }
+  return normalized;
+}
+
+function reportAttempt(attempt) {
+  return {
+    acIds: [...attempt.acIds],
+    changedFiles: [...attempt.changedFiles],
+    evidence: reportEvidence(attempt.evidence),
+    finishedAt: attempt.finishedAt,
+    implementationSha: attempt.implementationSha,
+    itemBaselineSha: attempt.itemBaselineSha,
+    number: attempt.number,
+    reason: attempt.reason,
+    startedAt: attempt.startedAt,
+    state: attempt.state
+  };
+}
+
 export function renderRoadmap(roadmap, run = null) {
   const nodes = [...roadmap.nodes].sort((left, right) => compareIds(left.id, right.id));
   const lines = [
@@ -75,7 +130,7 @@ export function renderRoadmap(roadmap, run = null) {
     '',
     `Revision: ${roadmap.revision}`,
     '',
-    `Evidence report: ${run?.runId ? `docs/roadmap/runs/${markdown(run.runId)}/report.json` : 'not available'}`,
+    `Evidence report: ${run?.runId ? `docs/runs/${markdown(run.runId)}.json` : 'not available'}`,
     ''
   ];
 
@@ -90,7 +145,7 @@ export function renderRoadmap(roadmap, run = null) {
       `- Outcome: ${markdown(node.outcome)}`,
       `- Consumers: ${list(node.consumers)}`,
       `- Required gates: ${list(node.requiredGates)}`,
-      `- Evidence report: ${run?.runId ? `docs/roadmap/runs/${markdown(run.runId)}/report.json#${node.id}` : 'not available'}`,
+      `- Evidence report: ${run?.runId ? `docs/runs/${markdown(run.runId)}.json#${node.id}` : 'not available'}`,
       ''
     );
   }
@@ -125,10 +180,20 @@ export function renderSpec(spec) {
 }
 
 export function buildRunReport(roadmap, run) {
+  const itemMap = new Map(roadmap.nodes.filter(node => node.kind === 'item').map(node => [node.id, node]));
+  const scope = Array.isArray(run.scope) ? [...run.scope] : [];
+  const items = Object.fromEntries(scope.map(itemId => [itemId, {
+    attempts: (run.attempts?.[itemId] ?? []).map(reportAttempt),
+    id: itemId,
+    status: itemMap.get(itemId)?.status ?? 'planned'
+  }]));
   return {
+    items,
     revision: roadmap.revision,
     runId: run.runId,
     schemaVersion: 1,
+    scope,
+    selector: run.selector,
     status: run.status
   };
 }

@@ -8,9 +8,10 @@ const NODE_KEYS = Object.freeze({
 });
 const ITEM_STATES = ['planned', 'blocked', 'failed', 'cancelled', 'done'];
 const SPEC_KEYS = ['schemaVersion', 'id', 'title', 'status', 'acceptanceCriteria', 'sharedContracts', 'consumers'];
-const REPORT_KEYS = ['schemaVersion', 'revision', 'runId', 'status'];
+const COMMON_ENVELOPE_KEYS = ['schemaVersion', 'revision', 'runId', 'status'];
+const REPORT_KEYS = [...COMMON_ENVELOPE_KEYS, 'selector', 'scope', 'items'];
 const RUN_KEYS = [
-  ...REPORT_KEYS,
+  ...COMMON_ENVELOPE_KEYS,
   'selector',
   'scope',
   'originalBranch',
@@ -36,6 +37,12 @@ const ATTEMPT_KEYS = [
   'finishedAt'
 ];
 const EVENT_KEYS = ['sequence', 'at', 'type', 'itemId', 'details'];
+const REPORT_ITEM_KEYS = ['attempts', 'id', 'status'];
+const REPORT_EVIDENCE_KEYS = [
+  'gate', 'status', 'bindings', 'type', 'producer', 'schema', 'auditRange', 'auditCounts',
+  'processClass', 'exitCode', 'signal', 'startedAt', 'finishedAt', 'durationMs', 'artifacts',
+  'acIds', 'stdoutDigest', 'stderrDigest', 'internal', 'diagnostic', 'placeholder'
+];
 const TRANSACTION_KEYS = [
   'id',
   'type',
@@ -366,6 +373,40 @@ function validateRun(run) {
   });
 }
 
+function validateReport(report) {
+  enumValue(report.status, ['successful', 'blocked', 'failed', 'cancelled', 'capped'], '$.status');
+  string(report.selector, '$.selector');
+  stringArray(report.scope, '$.scope', { minLength: 1 });
+  uniqueStrings(report.scope, '$.scope', 'item id');
+  report.scope.forEach((id, index) => pattern(id, ITEM_ID, `$.scope[${index}]`, 'must be an item id'));
+  object(report.items, '$.items');
+  const itemIds = Object.keys(report.items);
+  if (itemIds.length !== report.scope.length || itemIds.some(id => !report.scope.includes(id))) {
+    fail('$.items', 'must contain exactly the report scope item IDs');
+  }
+  for (const itemId of report.scope) {
+    const path = `$.items.${itemId}`;
+    const item = report.items[itemId];
+    object(item, path);
+    rejectUnknown(item, REPORT_ITEM_KEYS, path);
+    if (item.id !== itemId) fail(`${path}.id`, 'must match the report item key');
+    enumValue(item.status, ITEM_STATES, `${path}.status`);
+    array(item.attempts, `${path}.attempts`);
+    item.attempts.forEach((attempt, index) => {
+      validateAttempt(attempt, `${path}.attempts[${index}]`, index + 1);
+      for (const [gateName, evidence] of Object.entries(attempt.evidence)) {
+        const evidencePath = `${path}.attempts[${index}].evidence.${gateName}`;
+        object(evidence, evidencePath);
+        rejectUnknown(evidence, REPORT_EVIDENCE_KEYS, evidencePath);
+      }
+    });
+  }
+  if (report.status === 'successful'
+      && report.scope.some(itemId => report.items[itemId].status !== 'done')) {
+    fail('$.items', 'a successful report requires every scoped item to be done');
+  }
+}
+
 function validateTransaction(transaction, path) {
   object(transaction, path);
   rejectUnknown(transaction, TRANSACTION_KEYS, path);
@@ -465,5 +506,6 @@ export function parseRun(value) {
 export function parseReport(value) {
   const report = cloneDocument(value);
   validateCommonEnvelope(report, REPORT_KEYS);
+  validateReport(report);
   return deepFreeze(report);
 }

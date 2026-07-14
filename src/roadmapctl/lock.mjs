@@ -3,7 +3,7 @@ import * as fileSystem from 'node:fs/promises';
 import { hostname as systemHostname } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { RoadmapError } from './errors.mjs';
-import { readJson, writeJsonAtomic } from './store.mjs';
+import { readJsonRegular, writeJsonAtomic } from './store.mjs';
 
 const OWNER_KEYS = new Set(['runId', 'pid', 'hostname', 'createdAt', 'leaseExpiresAt', 'token']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -46,7 +46,7 @@ function parseOwner(value) {
 
 async function readOwner(lockPath, fs) {
   try {
-    return await readJson(join(lockPath, 'owner.json'), parseOwner, { fs });
+    return await readJsonRegular(join(lockPath, 'owner.json'), parseOwner, { fs });
   } catch (error) {
     if (error.code === 'LOCK_CORRUPT') throw error;
     throw lockError('LOCK_CORRUPT', `Cannot validate lock owner at ${lockPath}`, {
@@ -77,7 +77,7 @@ async function validateStaleJournal(options, owner, fs) {
       const journalPath = typeof options.journalPath === 'function'
         ? options.journalPath(owner)
         : options.journalPath;
-      const journal = await readJson(journalPath, options.journalParser, { fs });
+      const journal = await readJsonRegular(journalPath, options.journalParser, { fs });
       if (journal.runId !== owner.runId) {
         throw lockError('LOCK_RECOVERY_UNSAFE', 'Stale lock and journal run IDs do not match', {
           ownerRunId: owner.runId,
