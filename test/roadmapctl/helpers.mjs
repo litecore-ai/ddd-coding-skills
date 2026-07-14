@@ -1,3 +1,40 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+
+export async function gitFixture() {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roadmapctl-git-')));
+  const environment = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  const runGit = async args => execFileAsync('git', args, {
+    cwd: root,
+    env: environment,
+    encoding: 'utf8'
+  });
+
+  await runGit(['init', '--initial-branch=main']);
+  await runGit(['config', '--local', 'user.name', 'Roadmap Fixture']);
+  await runGit(['config', '--local', 'user.email', 'roadmap-fixture@example.invalid']);
+  await writeFile(join(root, 'README.md'), '# fixture\n');
+  await runGit(['add', '--', 'README.md']);
+  await runGit(['commit', '-m', 'test: initial commit']);
+
+  return {
+    root,
+    git: runGit,
+    write: async (path, contents) => {
+      const destination = join(root, path);
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, contents);
+    },
+    read: path => readFile(join(root, path), 'utf8'),
+    cleanup: () => rm(root, { recursive: true, force: true })
+  };
+}
+
 export function validSpec(overrides = {}) {
   return {
     schemaVersion: 1,
