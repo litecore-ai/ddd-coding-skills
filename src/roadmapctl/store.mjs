@@ -23,6 +23,20 @@ async function synchronizeDirectory(directory, fs) {
   }
 }
 
+function identityOf(stat) {
+  return { dev: stat.dev, ino: stat.ino };
+}
+
+async function pathHasIdentity(path, identity, fs) {
+  if (!identity) return false;
+  try {
+    const current = await fs.lstat(path, { bigint: true });
+    return current.dev === identity.dev && current.ino === identity.ino;
+  } catch {
+    return false;
+  }
+}
+
 export async function readJson(path, parser, { fs = fileSystem } = {}) {
   const source = await fs.readFile(path, 'utf8');
   let value;
@@ -44,18 +58,18 @@ export async function writeJsonAtomic(path, value, {
   const directory = dirname(path);
   const temporaryPath = join(directory, `${basename(path)}.tmp-${createId()}`);
   let handle;
-  let ownsTemporary = false;
+  let temporaryIdentity;
 
   await fs.mkdir(directory, { recursive: true });
   try {
     handle = await fs.open(temporaryPath, 'wx', 0o600);
-    ownsTemporary = true;
+    temporaryIdentity = identityOf(await handle.stat({ bigint: true }));
     await handle.writeFile(canonicalStringify(value), 'utf8');
     await handle.sync();
     await handle.close();
     handle = undefined;
     await fs.rename(temporaryPath, path);
-    ownsTemporary = false;
+    temporaryIdentity = undefined;
     await synchronizeDirectory(directory, fs);
   } catch (error) {
     if (handle) {
@@ -65,7 +79,7 @@ export async function writeJsonAtomic(path, value, {
         // Preserve the primary persistence failure.
       }
     }
-    if (ownsTemporary) {
+    if (await pathHasIdentity(temporaryPath, temporaryIdentity, fs)) {
       try {
         await fs.rm(temporaryPath, { force: true });
       } catch {
@@ -86,8 +100,17 @@ export async function mutateRevision(path, parser, expectedRevision, mutator, op
     );
   }
 
+  const nextRevision = current.revision + 1;
+  if (!Number.isSafeInteger(nextRevision)) {
+    throw new RoadmapError(
+      'REVISION_OVERFLOW',
+      `Revision ${current.revision} for ${path} cannot be incremented safely`,
+      { path, revision: current.revision }
+    );
+  }
+
   const proposed = await mutator(current);
-  const updated = parser({ ...proposed, revision: current.revision + 1 });
+  const updated = parser({ ...proposed, revision: nextRevision });
   await writeJsonAtomic(path, updated, options);
   return updated;
 }
@@ -101,6 +124,9 @@ function transactionConflict(message, details = {}) {
 }
 
 export function beginTransaction(run, transaction) {
+  if (transaction === null || transaction === undefined) {
+    throw new RoadmapError('TRANSACTION_INVALID', 'Transaction must be a defined object');
+  }
   const parsedRun = parseRun(run);
   const validated = parseRun({ ...parsedRun, pendingTransaction: transaction }).pendingTransaction;
   const current = parsedRun.pendingTransaction;

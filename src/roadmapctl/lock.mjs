@@ -105,6 +105,24 @@ async function restoreMovedLock(diagnosticPath, lockPath, fs) {
   }
 }
 
+function identityOf(stat) {
+  return { dev: stat.dev, ino: stat.ino };
+}
+
+async function pathIdentity(path, fs) {
+  return identityOf(await fs.lstat(path, { bigint: true }));
+}
+
+async function pathHasIdentity(path, identity, fs) {
+  if (!identity) return false;
+  try {
+    const current = await fs.lstat(path, { bigint: true });
+    return current.dev === identity.dev && current.ino === identity.ino;
+  } catch {
+    return false;
+  }
+}
+
 async function quarantineStaleLock(lockPath, owner, fs, createId) {
   const diagnosticPath = `${lockPath}.stale-${owner.token}-${createId()}`;
   try {
@@ -133,11 +151,16 @@ async function quarantineStaleLock(lockPath, owner, fs, createId) {
   return true;
 }
 
-async function cleanFailedAcquisition(lockPath, token, fs, createId) {
+async function cleanFailedAcquisition(lockPath, token, identity, fs, createId) {
+  if (!await pathHasIdentity(lockPath, identity, fs)) return;
   const diagnosticPath = `${lockPath}.failed-${token}-${createId()}`;
   try {
     await fs.rename(lockPath, diagnosticPath);
   } catch {
+    return;
+  }
+  if (!await pathHasIdentity(diagnosticPath, identity, fs)) {
+    await restoreMovedLock(diagnosticPath, lockPath, fs);
     return;
   }
   try {
@@ -161,9 +184,11 @@ export async function acquireRunLock(lockPath, options = {}) {
 
   for (let race = 0; race < MAX_ACQUIRE_RACES; race += 1) {
     let created = false;
+    let createdIdentity;
     try {
       await fs.mkdir(lockPath, { mode: 0o700 });
       created = true;
+      createdIdentity = await pathIdentity(lockPath, fs);
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
     }
@@ -186,7 +211,7 @@ export async function acquireRunLock(lockPath, options = {}) {
           release: () => releaseRunLock(lockPath, owner, { fs, randomUUID: createId })
         };
       } catch (error) {
-        await cleanFailedAcquisition(lockPath, token, fs, createId);
+        await cleanFailedAcquisition(lockPath, token, createdIdentity, fs, createId);
         throw error;
       }
     }

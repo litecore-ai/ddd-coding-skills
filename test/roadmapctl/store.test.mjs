@@ -133,6 +133,32 @@ test('rename failure preserves the destination and cleans the completed temporar
   assert.deepEqual(await fs.readdir(directory), ['run.json']);
 });
 
+test('rename failure preserves a foreign temporary replacement with a different inode', async t => {
+  const directory = await temporaryDirectory(t);
+  const file = join(directory, 'run.json');
+  const original = validRun();
+  const temporaryPath = join(directory, `${basename(file)}.tmp-replaced`);
+  const fault = errorWithCode('EIO', 'injected rename replacement failure');
+  await writeJsonAtomic(file, original);
+  const injected = {
+    ...fs,
+    async rename(source) {
+      assert.equal(source, temporaryPath);
+      await fs.rm(source);
+      await fs.writeFile(source, 'foreign temporary bytes');
+      throw fault;
+    }
+  };
+
+  await assert.rejects(
+    writeJsonAtomic(file, { ...original, status: 'failed' }, { fs: injected, randomUUID: () => 'replaced' }),
+    error => error === fault
+  );
+
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), original);
+  assert.equal(await fs.readFile(temporaryPath, 'utf8'), 'foreign temporary bytes');
+});
+
 test('exclusive-open collision never removes a temporary file owned by another writer', async t => {
   const directory = await temporaryDirectory(t);
   const file = join(directory, 'run.json');
@@ -195,6 +221,26 @@ test('revision mismatch preserves the original document and never invokes the mu
   assert.equal((await readJson(file, parseRun)).status, 'active');
 });
 
+test('revision overflow fails before mutation and preserves the original document', async t => {
+  const directory = await temporaryDirectory(t);
+  const file = join(directory, 'run.json');
+  const original = validRun({ revision: Number.MAX_SAFE_INTEGER });
+  await writeJsonAtomic(file, original);
+  let invoked = false;
+
+  await assert.rejects(
+    mutateRevision(file, parseRun, Number.MAX_SAFE_INTEGER, run => {
+      invoked = true;
+      return { ...run, status: 'failed' };
+    }),
+    error => error.code === 'REVISION_OVERFLOW'
+      && error.details.revision === Number.MAX_SAFE_INTEGER
+  );
+
+  assert.equal(invoked, false);
+  assert.deepEqual(await readJson(file, parseRun), parseRun(original));
+});
+
 test('run schema validates the exact pending transaction envelope', () => {
   const parsed = parseRun(validRun({ pendingTransaction: validTransaction() }));
   assert.equal(parsed.pendingTransaction.type, 'settle-item');
@@ -229,6 +275,15 @@ test('prepared transaction markers are idempotent and conflicting prepares are r
     () => beginTransaction(prepared, validTransaction({ id: `tx-${randomUUID()}` })),
     error => error.code === 'TRANSACTION_CONFLICT'
   );
+});
+
+test('null and undefined transactions fail with an explicit typed error', () => {
+  for (const transaction of [null, undefined]) {
+    assert.throws(
+      () => beginTransaction(validRun(), transaction),
+      error => error.code === 'TRANSACTION_INVALID'
+    );
+  }
 });
 
 test('transaction commit is idempotent and a later transaction can replace a committed marker', () => {
@@ -298,6 +353,34 @@ test('owner temporary-file collision reports the original failure and removes th
     error => error === collision
   );
   await assert.rejects(fs.stat(lockPath), error => error.code === 'ENOENT');
+});
+
+test('failed acquisition never removes a foreign lock that replaced its created directory', async t => {
+  const directory = await temporaryDirectory(t);
+  const lockPath = join(directory, 'run.lock');
+  const foreign = fixedOwner({ token: FOREIGN_TOKEN, pid: 6262 });
+  const fault = errorWithCode('EIO', 'injected owner write failure after replacement');
+  let replaced = false;
+  const injected = {
+    ...fs,
+    async open(path, flags, mode) {
+      if (!replaced && flags === 'wx' && basename(path).startsWith('owner.json.tmp-')) {
+        replaced = true;
+        await fs.rm(lockPath, { recursive: true });
+        await fs.mkdir(lockPath);
+        await fs.writeFile(join(lockPath, 'owner.json'), canonicalStringify(foreign));
+        throw fault;
+      }
+      return fs.open(path, flags, mode);
+    }
+  };
+
+  await assert.rejects(
+    acquireRunLock(lockPath, lockOptions({ fs: injected })),
+    error => error === fault
+  );
+
+  assert.deepEqual(await readJson(join(lockPath, 'owner.json'), value => value), foreign);
 });
 
 test('foreign lock cannot be released and remains byte-for-byte unchanged', async t => {

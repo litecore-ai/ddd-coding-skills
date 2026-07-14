@@ -72,7 +72,9 @@ function rejectUnknown(value, allowed, path) {
 }
 
 function nonNegativeInteger(value, path) {
-  if (!Number.isInteger(value) || value < 0) fail(path, 'must be a non-negative integer');
+  if (!Number.isSafeInteger(value) || value < 0) {
+    fail(path, 'must be a non-negative integer within the safe range');
+  }
   return value;
 }
 

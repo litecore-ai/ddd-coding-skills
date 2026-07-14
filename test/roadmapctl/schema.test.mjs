@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canonicalStringify, sha256 } from '../../src/roadmapctl/canonical-json.mjs';
 import { parseReport, parseRoadmap, parseRun, parseSpec } from '../../src/roadmapctl/schema.mjs';
-import { validRoadmap, validSpec } from './helpers.mjs';
+import { validRoadmap, validRun, validSpec, validTransaction } from './helpers.mjs';
 
 function expectSchemaError(operation, path, message) {
   assert.throws(operation, error => {
@@ -294,3 +294,24 @@ for (const [name, parse] of [['run', parseRun], ['report', parseReport]]) {
     expectSchemaError(() => parse(value), '$.revision', /non-negative integer/);
   });
 }
+
+test('revision counters accept MAX_SAFE_INTEGER and reject unsafe integers', () => {
+  const maximum = Number.MAX_SAFE_INTEGER;
+  const unsafe = maximum + 1;
+  const report = { schemaVersion: 1, revision: maximum, runId: 'run-001', status: 'running' };
+
+  assert.equal(parseRoadmap(validRoadmap({ revision: maximum })).revision, maximum);
+  assert.equal(parseRun(validRun({ revision: maximum })).revision, maximum);
+  assert.equal(parseReport(report).revision, maximum);
+  assert.equal(parseRun(validRun({ pendingTransaction: validTransaction({ expectedRoadmapRevision: maximum }) }))
+    .pendingTransaction.expectedRoadmapRevision, maximum);
+
+  expectSchemaError(() => parseRoadmap(validRoadmap({ revision: unsafe })), '$.revision', /safe range/);
+  expectSchemaError(() => parseRun(validRun({ revision: unsafe })), '$.revision', /safe range/);
+  expectSchemaError(() => parseReport({ ...report, revision: unsafe }), '$.revision', /safe range/);
+  expectSchemaError(
+    () => parseRun(validRun({ pendingTransaction: validTransaction({ expectedRoadmapRevision: unsafe }) })),
+    '$.pendingTransaction.expectedRoadmapRevision',
+    /safe range/
+  );
+});
