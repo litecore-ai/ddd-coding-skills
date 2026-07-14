@@ -147,7 +147,8 @@ async function quarantineStaleLock(lockPath, owner, fs, createId) {
     });
   }
 
-  await fs.rm(diagnosticPath, { recursive: true, force: true });
+  // The moved name can be replaced after revalidation. Retain every diagnostic
+  // so automated recovery never deletes an entry whose identity is unproven.
   return true;
 }
 
@@ -163,11 +164,8 @@ async function cleanFailedAcquisition(lockPath, token, identity, fs, createId) {
     await restoreMovedLock(diagnosticPath, lockPath, fs);
     return;
   }
-  try {
-    await fs.rm(diagnosticPath, { recursive: true, force: true });
-  } catch {
-    // Preserve cleanup diagnostics without touching a replacement at lockPath.
-  }
+  // Matching identity authorizes removal from the active path, not deletion of
+  // the diagnostic name, which can be replaced immediately after this check.
 }
 
 export async function acquireRunLock(lockPath, options = {}) {
@@ -284,5 +282,6 @@ export async function releaseRunLock(lockPath, owner, options = {}) {
       actualToken: moved.token
     });
   }
-  await fs.rm(diagnosticPath, { recursive: true, force: true });
+  // Successful release frees lockPath atomically but retains the moved entry.
+  // A future lock-protected maintenance operation may remove diagnostics.
 }

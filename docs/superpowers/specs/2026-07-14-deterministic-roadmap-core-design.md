@@ -417,6 +417,8 @@ Each document includes a schema version and monotonically increasing revision. M
 
 A run lock records the run ID, process ID, hostname, creation time, and random owner token. Mutations fail when another live owner holds the lock. A stale lock can be recovered only when its process is absent or its lease expired and the journal passes validation. Recovery is recorded as an event.
 
+Release, failed-acquisition cleanup, and stale recovery first atomically rename the active lock path to an unpredictable diagnostic name, then revalidate the moved token or filesystem identity. A successful revalidation authorizes only removal from the active path: the diagnostic entry is retained, because its name can be concurrently replaced after any owner read or identity check. Token/identity mismatch and corrupt metadata continue to use no-overwrite restoration and fail safely. Automated lock operations never call `rm`, `rmdir`, or unlink on a diagnostic entry; inspection and cleanup are reserved for a future explicit, lock-protected maintenance operation.
+
 ### Write-ahead Finalization
 
 Every settled-state mutation first records its expected roadmap revision, target state, implementation HEAD, and permitted generated paths in the journal. `finish` then applies the leaf update, regenerates the roadmap view, creates the isolated bookkeeping commit, records its SHA, and marks that item transaction committed. Recovery detects which steps already occurred and never duplicates the commit.
