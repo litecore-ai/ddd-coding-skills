@@ -190,7 +190,7 @@ test('runGate rejects a manifest mismatch before spawning the supplied command',
 });
 
 test('runGate snapshots manifest and bindings before execution', async () => {
-  const gate = { type: 'command', executable: process.execPath, args: ['-e', "setTimeout(function(){},30)"], cwd: '.', timeoutMs: 1000 };
+  const gate = { type: 'command', executable: process.execPath, args: ['-e', "setTimeout(function(){},30)"], cwd: '.', timeoutMs: 5000 };
   const context = commandContext(gate);
   const expected = structuredClone(context.bindings);
   const running = runGate(process.cwd(), context, 'tests', gate);

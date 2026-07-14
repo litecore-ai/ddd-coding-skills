@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { canonicalStringify } from '../src/roadmapctl/canonical-json.mjs';
 import { RoadmapController } from '../src/roadmapctl/controller.mjs';
@@ -41,14 +42,23 @@ export async function main(argv, io = { stdout: process.stdout, stderr: process.
 
 function normalizeError(error) {
   if (error instanceof RoadmapError) {
-    if (error.code === 'USAGE') return { code: 'USAGE', exitCode: EXIT_CODES.USAGE, message: error.message };
-    if (/CONFLICT/.test(error.code)) return { code: error.code, exitCode: EXIT_CODES.CONFLICT, message: error.message };
-    return { code: 'INVALID', exitCode: EXIT_CODES.INVALID, message: error.message };
+    if (error.code === 'USAGE') return { code: 'USAGE', exitCode: EXIT_CODES.USAGE, message: 'invalid command usage' };
+    if (/CONFLICT/.test(error.code)) return { code: 'CONFLICT', exitCode: EXIT_CODES.CONFLICT, message: 'operation conflicts with existing state' };
+    return { code: 'INVALID', exitCode: EXIT_CODES.INVALID, message: 'invalid roadmap input' };
   }
   return { code: 'INTERNAL', exitCode: EXIT_CODES.INTERNAL, message: 'internal error' };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isDirectEntry() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectEntry()) {
   try {
     process.exitCode = await main(process.argv.slice(2));
   } catch (error) {

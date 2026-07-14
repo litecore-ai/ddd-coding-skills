@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { constants } from 'node:fs';
 import * as fileSystem from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
@@ -8,7 +9,50 @@ import { compareIds } from './ids.mjs';
 import { deriveAggregate } from './state.mjs';
 
 function markdown(value) {
-  return String(value).replace(/([\\`*{}\[\]()#+.!_|>-])/g, '\\$1');
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/([`*{}\[\]()#+.!_|~\-])/g, '\\$1');
+}
+
+function unsafeReport(path, causeCode = null) {
+  return new RoadmapError('UNSAFE_REPORT_PATH', 'immutable report path is not a regular file', {
+    causeCode,
+    path
+  });
+}
+
+async function readImmutableRegular(path, fs) {
+  let handle;
+  try {
+    handle = await fs.open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  } catch (error) {
+    if (['ELOOP', 'EMLINK'].includes(error.code)) throw unsafeReport(path, error.code);
+    throw error;
+  }
+  try {
+    const handleStat = await handle.stat({ bigint: true });
+    if (!handleStat.isFile()) throw unsafeReport(path);
+    const pathStat = await fs.lstat(path, { bigint: true });
+    if (!pathStat.isFile() || pathStat.isSymbolicLink()
+        || pathStat.dev !== handleStat.dev || pathStat.ino !== handleStat.ino) {
+      throw unsafeReport(path);
+    }
+    const contents = await handle.readFile({ encoding: 'utf8' });
+    const after = await fs.lstat(path, { bigint: true });
+    if (!after.isFile() || after.isSymbolicLink()
+        || after.dev !== handleStat.dev || after.ino !== handleStat.ino) {
+      throw unsafeReport(path);
+    }
+    return contents;
+  } finally {
+    await handle.close();
+  }
 }
 
 function attemptState(run, item) {
@@ -101,7 +145,7 @@ export async function writeImmutableReport(path, report, { fs = fileSystem, rand
       return { created: true };
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
-      const existing = await fs.readFile(path, 'utf8');
+      const existing = await readImmutableRegular(path, fs);
       if (existing !== desired) {
         throw new RoadmapError('REPORT_CONFLICT', `immutable report differs: ${path}`, { path });
       }
