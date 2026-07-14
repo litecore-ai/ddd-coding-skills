@@ -177,6 +177,28 @@ test('one done leaf never completes its parent', () => {
   assert.equal(deriveAggregate(roadmap, 'P1.1', { currentItemId: null, attempts: {} }), 'in_progress');
 });
 
+test('done leaves plus only cancelled incomplete leaves aggregate as cancelled', () => {
+  const roadmap = validRoadmap();
+  roadmap.nodes.push({ ...roadmap.nodes[2], id: 'P1.1.2', title: 'Cancelled flow', status: 'cancelled' });
+  roadmap.nodes[2].status = 'done';
+
+  assert.equal(deriveAggregate(roadmap, 'P1.1', { currentItemId: null, attempts: {} }), 'cancelled');
+});
+
+test('a real active leaf keeps a done-and-cancelled aggregate in progress', () => {
+  const roadmap = validRoadmap();
+  roadmap.nodes.push(
+    { ...roadmap.nodes[2], id: 'P1.1.2', title: 'Cancelled flow', status: 'cancelled' },
+    { ...roadmap.nodes[2], id: 'P1.1.3', title: 'Active flow' }
+  );
+  roadmap.nodes[2].status = 'done';
+
+  assert.equal(deriveAggregate(roadmap, 'P1.1', {
+    currentItemId: 'P1.1.3',
+    attempts: { 'P1.1.3': [{ number: 1, state: 'in_progress' }] }
+  }), 'in_progress');
+});
+
 test('aggregate state follows done, failed, blocked, active, cancelled, then planned semantics', () => {
   const roadmap = validRoadmap();
   addDependentItem(roadmap);

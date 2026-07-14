@@ -68,7 +68,10 @@ export function deriveAggregate(roadmap, nodeId, run) {
       && blockersFor(roadmap, leaf.id).some(blocker => ['blocked', 'failed', 'cancelled'].includes(blocker.state))
   );
   if (states.includes('blocked') || hasTerminalDependencyBlocker) return 'blocked';
-  if (states.some(state => ACTIVE_STATES.includes(state) || state === 'done')) return 'in_progress';
-  if (states.every(state => state === 'cancelled')) return 'cancelled';
+  if (states.some(state => ACTIVE_STATES.includes(state))) return 'in_progress';
+
+  const incompleteStates = states.filter(state => state !== 'done');
+  if (incompleteStates.length > 0 && incompleteStates.every(state => state === 'cancelled')) return 'cancelled';
+  if (states.includes('done')) return 'in_progress';
   return 'planned';
 }

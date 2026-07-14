@@ -1,25 +1,11 @@
 import { RoadmapError } from './errors.mjs';
 import { topologicalOrder } from './graph.mjs';
+import { ROADMAP_ID_PATTERN, compareIds, idSegments } from './ids.mjs';
 
-const ID_PATTERN = /^P\d+(?:\.\d+){0,2}$/;
+export { compareIds } from './ids.mjs';
 
 function fail(message, details = {}) {
   throw new RoadmapError('SELECTOR_INVALID', message, details);
-}
-
-function segments(id) {
-  return id.slice(1).split('.').map(Number);
-}
-
-export function compareIds(a, b) {
-  const left = segments(a);
-  const right = segments(b);
-  const length = Math.min(left.length, right.length);
-
-  for (let index = 0; index < length; index += 1) {
-    if (left[index] !== right[index]) return left[index] - right[index];
-  }
-  return left.length - right.length;
 }
 
 export function parseSelector(text) {
@@ -30,7 +16,7 @@ export function parseSelector(text) {
   return text.split(',').map(part => {
     const token = part.trim();
     const match = /^(P\d+(?:\.\d+){0,2})(?:\s*-\s*(P\d+(?:\.\d+){0,2}))?$/.exec(token);
-    if (!match || !ID_PATTERN.test(match[1]) || (match[2] && !ID_PATTERN.test(match[2]))) {
+    if (!match || !ROADMAP_ID_PATTERN.test(match[1]) || (match[2] && !ROADMAP_ID_PATTERN.test(match[2]))) {
       fail(`invalid selector expression ${JSON.stringify(token)}`, { selector: text, expression: token });
     }
     return match[2]
@@ -57,8 +43,8 @@ export function expandScope(roadmap, text) {
 
     knownNode(selection.start);
     knownNode(selection.end);
-    const startSegments = segments(selection.start);
-    const endSegments = segments(selection.end);
+    const startSegments = idSegments(selection.start);
+    const endSegments = idSegments(selection.end);
     if (startSegments.length !== endSegments.length) {
       fail(`range endpoints must be at the same level: ${selection.start} - ${selection.end}`, {
         selector: text,
@@ -71,7 +57,7 @@ export function expandScope(roadmap, text) {
       ? [selection.start, selection.end]
       : [selection.end, selection.start];
     roadmap.nodes
-      .filter(node => segments(node.id).length === startSegments.length)
+      .filter(node => idSegments(node.id).length === startSegments.length)
       .filter(node => compareIds(node.id, start) >= 0 && compareIds(node.id, end) <= 0)
       .forEach(node => selectedNodes.add(node.id));
   }

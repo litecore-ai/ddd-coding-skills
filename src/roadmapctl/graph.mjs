@@ -1,5 +1,5 @@
 import { RoadmapError } from './errors.mjs';
-import { compareIds } from './scope.mjs';
+import { compareIds } from './ids.mjs';
 
 function itemMap(roadmap) {
   return new Map(roadmap.nodes.filter(node => node.kind === 'item').map(node => [node.id, node]));
