@@ -29,11 +29,18 @@ function string(value, path) {
   return value;
 }
 
+function rejectSparse(value, path) {
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index)) fail(`${path}[${index}]`, 'sparse array hole is not allowed');
+  }
+}
+
 function stringArray(value, path, { minLength = 0 } = {}) {
   if (value === undefined) fail(path, 'is required and must be an array of strings');
   if (!Array.isArray(value)) fail(path, 'must be an array of strings');
+  rejectSparse(value, path);
   if (value.length < minLength) fail(path, `must contain at least ${minLength === 1 ? 'one' : minLength} string${minLength === 1 ? '' : 's'}`);
-  value.forEach((entry, index) => string(entry, `${path}[${index}]`));
+  for (let index = 0; index < value.length; index += 1) string(value[index], `${path}[${index}]`);
   return value;
 }
 
@@ -58,6 +65,7 @@ function nonNegativeInteger(value, path) {
 function array(value, path, { minLength = 0 } = {}) {
   if (value === undefined) fail(path, 'is required and must be an array');
   if (!Array.isArray(value)) fail(path, 'must be an array');
+  rejectSparse(value, path);
   if (value.length < minLength) fail(path, `must contain at least ${minLength === 1 ? 'one' : minLength} item${minLength === 1 ? '' : 's'}`);
   return value;
 }

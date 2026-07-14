@@ -40,6 +40,11 @@ test('roadmap parser returns a deeply frozen validated copy', () => {
   assert.throws(() => { parsed.nodes[2].title = 'changed'; }, TypeError);
 });
 
+test('roadmap rejects a sparse nodes array at the missing index', () => {
+  const value = validRoadmap({ nodes: new Array(1) });
+  expectSchemaError(() => parseRoadmap(value), '$.nodes[0]', /sparse array hole/);
+});
+
 test('roadmap rejects unknown root keys with their full JSON path', () => {
   expectSchemaError(() => parseRoadmap(validRoadmap({ legacy: true })), '$.legacy', /unknown key legacy/);
 });
@@ -93,6 +98,18 @@ test('roadmap dependencies must exist', () => {
   expectSchemaError(() => parseRoadmap(value), '$.nodes[2].dependsOn[0]', /does not exist/);
 });
 
+test('roadmap rejects sparse item dependencies at the missing index', () => {
+  const value = validRoadmap();
+  value.nodes[2].dependsOn = new Array(1);
+  expectSchemaError(() => parseRoadmap(value), '$.nodes[2].dependsOn[0]', /sparse array hole/);
+});
+
+test('roadmap rejects sparse spec acceptance-criterion references at the missing index', () => {
+  const value = validRoadmap();
+  value.nodes[2].spec.acceptanceCriteria = new Array(1);
+  expectSchemaError(() => parseRoadmap(value), '$.nodes[2].spec.acceptanceCriteria[0]', /sparse array hole/);
+});
+
 test('roadmap items require an outcome', () => {
   const value = validRoadmap();
   delete value.nodes[2].outcome;
@@ -103,6 +120,12 @@ test('roadmap items require consumers', () => {
   const value = validRoadmap();
   delete value.nodes[2].consumers;
   expectSchemaError(() => parseRoadmap(value), '$.nodes[2].consumers', /required/);
+});
+
+test('roadmap rejects sparse item consumers at the missing index', () => {
+  const value = validRoadmap();
+  value.nodes[2].consumers = new Array(1);
+  expectSchemaError(() => parseRoadmap(value), '$.nodes[2].consumers[0]', /sparse array hole/);
 });
 
 test('user-visible item requires consumer and integration gates', () => {
@@ -130,6 +153,12 @@ test('roadmap items require a gate list', () => {
   expectSchemaError(() => parseRoadmap(value), '$.nodes[2].requiredGates', /required/);
 });
 
+test('roadmap rejects sparse required gates at the missing index', () => {
+  const value = validRoadmap();
+  value.nodes[2].requiredGates = new Array(1);
+  expectSchemaError(() => parseRoadmap(value), '$.nodes[2].requiredGates[0]', /sparse array hole/);
+});
+
 test('required gates must be built in or defined by the roadmap', () => {
   const value = validRoadmap();
   value.nodes[2].requiredGates.push('security');
@@ -140,6 +169,12 @@ test('command gates require an exact structured definition', () => {
   const value = validRoadmap();
   delete value.gates.tests.cwd;
   expectSchemaError(() => parseRoadmap(value), '$.gates.tests.cwd', /required/);
+});
+
+test('command gates reject sparse argument arrays at the missing index', () => {
+  const value = validRoadmap();
+  value.gates.tests.args = new Array(1);
+  expectSchemaError(() => parseRoadmap(value), '$.gates.tests.args[0]', /sparse array hole/);
 });
 
 test('attestation gates require exact producer and schema IDs', () => {
@@ -209,6 +244,30 @@ test('spec requires exact Given/When/Then string fields', () => {
 
 test('spec requires stable acceptance-criterion coverage', () => {
   expectSchemaError(() => parseSpec(validSpec({ acceptanceCriteria: [] })), '$.acceptanceCriteria', /at least one/);
+});
+
+test('spec rejects sparse acceptance criteria at the missing index', () => {
+  expectSchemaError(
+    () => parseSpec(validSpec({ acceptanceCriteria: new Array(1) })),
+    '$.acceptanceCriteria[0]',
+    /sparse array hole/
+  );
+});
+
+test('spec rejects sparse shared contracts at the missing index', () => {
+  expectSchemaError(
+    () => parseSpec(validSpec({ sharedContracts: new Array(1) })),
+    '$.sharedContracts[0]',
+    /sparse array hole/
+  );
+});
+
+test('spec rejects sparse consumers at the missing index', () => {
+  expectSchemaError(
+    () => parseSpec(validSpec({ consumers: new Array(1) })),
+    '$.consumers[0]',
+    /sparse array hole/
+  );
 });
 
 test('spec rejects legacy Markdown input', () => {
