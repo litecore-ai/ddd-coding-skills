@@ -1,7 +1,8 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -99,4 +100,42 @@ export function validRun(overrides = {}) {
     pendingTransaction: null,
     ...overrides
   };
+}
+
+export function twoLeafRoadmap({ first = 'planned', second = 'planned' } = {}) {
+  const roadmap = validRoadmap();
+  roadmap.nodes[2].status = first;
+  roadmap.nodes.push({
+    ...roadmap.nodes[2],
+    id: 'P1.1.2',
+    title: 'Profile update',
+    outcome: 'A user can update a profile',
+    status: second
+  });
+  return roadmap;
+}
+
+export async function roadmapFixture(roadmap = validRoadmap()) {
+  const repo = await gitFixture();
+  await repo.write('docs/roadmap/roadmap.json', `${JSON.stringify(roadmap, null, 2)}\n`);
+  await repo.write('docs/specs/P1.1-profile.json', `${JSON.stringify(validSpec(), null, 2)}\n`);
+  return repo;
+}
+
+export function runCli(root, args) {
+  const bin = fileURLToPath(new URL('../../bin/roadmapctl.mjs', import.meta.url));
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [bin, '--root', root, ...args], {
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.once('error', reject);
+    child.once('close', exitCode => resolve({ exitCode, stdout, stderr }));
+  });
 }
