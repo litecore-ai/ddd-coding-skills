@@ -106,6 +106,7 @@ Modules communicate with plain JavaScript objects and return structured result o
 | `docs/specs/*.json` | Machine-readable behavior contracts and stable acceptance criteria | Generated/reviewed by `ddd-spec` |
 | `docs/specs/*.md` | Optional generated spec view | Never parsed for state or coverage |
 | `.ddd/runs/<run-id>.json` | Active write-ahead run journal and detailed local logs | Mutable, atomic, Git-ignored |
+| `.ddd/active-run.json` | Controller-owned pointer used by platform liveness adapters | Mutable, atomic, Git-ignored |
 | `docs/runs/<run-id>.json` | Redacted immutable final evidence report | Write-once, committed locally |
 
 `roadmap.json` is the roadmap truth. It stores settled leaf states (`planned`, `blocked`, `failed`, `cancelled`, and `done`). `ready` is derived from the graph, while `in_progress` and `verifying` belong to one active run journal. The controller combines those documents to calculate the effective state, but the journal cannot redefine hierarchy or claim completion. If a settled-state update is interrupted, recovery replays its write-ahead transaction idempotently.
@@ -158,9 +159,33 @@ The roadmap uses a flat hierarchy so every selector and dependency references a 
   ],
   "gates": {
     "tests": {
+      "type": "command",
       "executable": "npm",
       "args": ["test"],
       "cwd": "."
+    },
+    "build": {
+      "type": "command",
+      "executable": "npm",
+      "args": ["run", "build"],
+      "cwd": "."
+    },
+    "consumer": {
+      "type": "command",
+      "executable": "node",
+      "args": ["--test", "test/profile-consumer.test.mjs"],
+      "cwd": "."
+    },
+    "e2e": {
+      "type": "command",
+      "executable": "node",
+      "args": ["--test", "test/profile-e2e.test.mjs"],
+      "cwd": "."
+    },
+    "audit": {
+      "type": "attestation",
+      "producer": "ddd-audit",
+      "schema": "ddd-audit/v1"
     }
   }
 }
@@ -177,6 +202,8 @@ Validation rejects:
 - User-visible outcomes without consumer and integration evidence requirements.
 - Shell command strings in place of structured executable and argument fields.
 
+`spec` is the built-in internal gate. Test, build, consumer, and E2E gates are normally `command` gates. AI-driven `ddd-audit` is an `attestation` gate: the audit skill submits a schema-valid, commit-bound report through the controller; it is never represented as a fictitious project executable.
+
 No legacy Markdown import path is provided. A project with only Markdown roadmaps receives a clear validation error directing the user to regenerate its roadmap and specs.
 
 ## Spec Binding and Coverage
@@ -186,10 +213,11 @@ Specs use stable acceptance-criterion IDs that do not depend on heading position
 Before an item becomes `in_progress`, the controller verifies that:
 
 1. The spec exists and passes schema validation.
-2. The current canonical spec hash matches the roadmap reference.
-3. Every acceptance-criterion ID referenced by the item exists exactly once.
-4. Shared-contract hashes referenced by the spec remain current.
-5. Required gates can collectively map evidence to every referenced criterion.
+2. The spec status is `approved`.
+3. The current canonical spec hash matches the roadmap reference.
+4. Every acceptance-criterion ID referenced by the item exists exactly once.
+5. Shared-contract hashes referenced by the spec remain current.
+6. Required gates can collectively map evidence to every referenced criterion.
 
 Any mismatch returns the item to `blocked` with a machine-readable reason. Text searching is never used for coverage.
 
@@ -242,14 +270,17 @@ Commands emit machine-readable JSON on stdout and diagnostics on stderr. Success
 |---------|----------------|
 | `validate` | Validate roadmap, specs, graph, gates, paths, and Git prerequisites |
 | `scope <selector>` | Expand selectors and ranges to an ordered leaf list without mutation |
+| `bind-spec <feature-id> <spec-path>` | Canonically bind a reviewed spec hash and stable AC coverage to roadmap items |
 | `start <selector>` | Require a clean tree, create a run journal, capture baseline SHA, and establish the local run branch |
 | `next <run-id>` | Return exactly one ready item or a structured terminal/blockage result |
 | `record <run-id> <item-id>` | Bind the implementation commit, changed files, decisions, and AC mapping |
 | `verify <run-id> <item-id>` | Execute declared gates and record normalized evidence |
+| `attest <run-id> <item-id> <gate> <report-path>` | Validate and bind a non-command evidence report such as `ddd-audit/v1` |
 | `finish <run-id> <item-id>` | Apply the only legal transition to `done`, or persist blocked/failed reasons |
-| `status <run-id>` | Report effective item, aggregate, and run state without mutation |
-| `resume <run-id>` | Recover an interrupted journal and return the deterministic next action |
+| `status <run-id>` | Report effective item, aggregate, and run state without mutation; `--active` resolves the controller pointer |
+| `resume <run-id>` | Recover an interrupted journal and return the deterministic next action; `--active` resolves the controller pointer |
 | `retry <run-id> <item-id>` | Start a new bounded attempt for blocked/failed work with a recorded reason and remaining attempt budget |
+| `abort <run-id>` | Cancel the active attempt with explicit confirmation and close unsuccessfully without deleting evidence |
 | `close <run-id>` | Finalize a run only when no item is active and emit its immutable report |
 | `render` | Regenerate human-readable roadmap and spec views from JSON |
 
@@ -259,15 +290,16 @@ An item cannot be assigned twice concurrently. `next` records the current HEAD a
 
 1. `validate` rejects malformed inputs and unsafe gate commands.
 2. `scope` expands the requested selector and topologically sorts leaves, using lexical stable IDs as the tie-breaker.
-3. `start` requires a clean Git worktree and captures the original branch and baseline SHA. In a normal checkout it creates a local `ddd/run/<run-id>` branch; in a platform-managed linked worktree it validates and retains the already-isolated branch. It then writes the initial journal.
+3. `start` requires a clean Git worktree and captures the original branch and baseline SHA. In a normal checkout it creates a local `ddd/run/<run-id>` branch; in a platform-managed linked worktree it validates and retains the already-isolated branch. It then writes the initial journal and `.ddd/active-run.json` pointer atomically.
 4. `next` records the current HEAD as the item baseline and returns one ready leaf as JSON. If none is ready, it returns exact blockers or a closeable terminal state.
 5. The platform adapter gives the leaf, its bounded spec context, and controller rules to the AI implementer.
 6. The implementer changes only project-scoped files and creates a local commit.
 7. `record` binds that commit and its diff from the item baseline to the item.
-8. `verify` runs each required structured gate and records results.
-9. `finish` checks the full evidence set. It either finalizes `done` or stores a specific `blocked` or `failed` reason. It commits only controller-owned roadmap and generated-view changes in a separate local bookkeeping commit before another leaf can start.
-10. The adapter requests `next` again. It never infers remaining work from prose or Markdown checkboxes.
-11. `close` writes the immutable report, updates the generated roadmap view, creates a controller-owned final local bookkeeping commit, and ends the run. It never merges or pushes.
+8. `verify` runs each required command gate and records internal and process evidence.
+9. The read-only audit adapter inspects the exact item commit range and submits its structured report with `attest`.
+10. `finish` checks the full evidence set. It either finalizes `done` or stores a specific `blocked` or `failed` reason. It commits only controller-owned roadmap and generated-view changes in a separate local bookkeeping commit before another leaf can start.
+11. The adapter requests `next` again. It never infers remaining work from prose or Markdown checkboxes.
+12. `close` writes the immutable report, updates the generated roadmap view, creates a controller-owned final local bookkeeping commit, ends the run, and clears the active-run pointer only after the close transaction commits. It never merges or pushes.
 
 One leaf is the atomic delivery boundary. Composite scopes are batches of those boundaries, not a larger completion unit.
 
@@ -275,8 +307,8 @@ One leaf is the atomic delivery boundary. Composite scopes are batches of those 
 
 Every gate result records:
 
-- Gate name and type.
-- Structured executable, arguments, and working directory.
+- Gate name.
+- Gate type; command gates also record the structured executable, arguments, and working directory.
 - Start and end timestamps.
 - Exit code or spawn error.
 - Implementation commit SHA and item baseline SHA.
@@ -284,7 +316,9 @@ Every gate result records:
 - Acceptance-criterion IDs covered by the gate.
 - Relevant changed files or declared evidence artifacts.
 - Full stdout/stderr digest and a controller-generated diagnostic class. Raw process output remains only in the Git-ignored journal unless the user explicitly exports it.
-- Audit severity counts when the gate type is `audit`.
+- Audit severity counts when the gate schema is `ddd-audit/v1`.
+
+Attestations additionally record their producer and schema ID. The controller validates their exact item baseline, implementation SHA, spec hash, and audit commit range before accepting them.
 
 Completion is rejected when:
 
@@ -305,7 +339,7 @@ The controller verifies evidence identity and process success, not semantic test
 The Codex skills explicitly run the controller loop:
 
 ```text
-next → bounded implementation → local commit → record → verify → finish
+next → bounded implementation → local commit → record → verify commands → audit → attest → finish
 ```
 
 Codex does not emulate a Stop hook. A skill may delegate bounded implementation work, but the parent adapter retains the run ID and calls the controller between every item. The controller response, not subagent prose, determines whether the loop continues.
@@ -409,6 +443,7 @@ An existing report with different content is a hard integrity failure.
 ### ddd-roadmap
 
 - Generate schema-valid `roadmap.json` with stable IDs, outcomes, dependencies, consumers, and gates.
+- Generate schema-valid draft spec JSON alongside the roadmap so every item has stable AC IDs and a current initial hash before the roadmap is persisted.
 - Ask the controller to render Markdown.
 - Stop emitting Markdown as a machine-executable checklist.
 
@@ -417,6 +452,7 @@ An existing report with different content is a hard integrity failure.
 - Generate machine-readable specs with stable AC IDs and shared-contract hashes.
 - Produce Markdown only as a generated review view.
 - Invalidate approval bindings whenever canonical behavior or referenced shared contracts change.
+- After review, call `bind-spec` so hash and item coverage updates are validated and committed through the controller rather than edited as status prose.
 
 ### ddd-develop
 
