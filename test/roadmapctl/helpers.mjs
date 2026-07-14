@@ -66,9 +66,9 @@ export function validRoadmap(overrides = {}) {
       }
     ],
     gates: {
-      tests: { type: 'command', executable: 'node', args: ['--test'], cwd: '.' },
-      consumer: { type: 'command', executable: 'node', args: ['--test', 'test/consumer.test.mjs'], cwd: '.' },
-      e2e: { type: 'command', executable: 'node', args: ['--test', 'test/e2e.test.mjs'], cwd: '.' },
+      tests: { type: 'command', executable: 'node', args: ['--test'], cwd: '.', timeoutMs: 30_000 },
+      consumer: { type: 'command', executable: 'node', args: ['--test', 'test/consumer.test.mjs'], cwd: '.', timeoutMs: 30_000 },
+      e2e: { type: 'command', executable: 'node', args: ['--test', 'test/e2e.test.mjs'], cwd: '.', timeoutMs: 30_000 },
       audit: { type: 'attestation', producer: 'ddd-audit', schema: 'ddd-audit/v1' }
     },
     ...overrides

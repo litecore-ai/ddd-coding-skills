@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,8 +31,13 @@ function passed(gate, bindings, acIds = ['AC-P1.1-001']) {
     status: 'passed',
     processClass: 'exit',
     exitCode: 0,
+    signal: null,
+    startedAt: '2026-07-14T00:00:00.000Z',
+    finishedAt: '2026-07-14T00:00:00.001Z',
+    durationMs: 1,
     bindings,
     acIds,
+    artifacts: [],
     stdoutDigest: 'sha256:' + '3'.repeat(64),
     stderrDigest: 'sha256:' + '4'.repeat(64)
   };
@@ -46,8 +51,19 @@ function passingEvidence(bindings = currentBindings()) {
     e2e: passed('e2e', bindings),
     audit: {
       gate: 'audit', type: 'attestation', producer: 'ddd-audit', schema: 'ddd-audit/v1',
-      status: 'passed', bindings, auditCounts: { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
+      status: 'passed', bindings,
+      auditRange: { from: bindings.itemBaselineSha, to: bindings.implementationSha },
+      auditCounts: { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
     }
+  };
+}
+
+function commandContext(gate, overrides = {}) {
+  const gates = { tests: gate };
+  return {
+    gates,
+    bindings: currentBindings({ manifestHash: gateManifestHash(gates) }),
+    ...overrides
   };
 }
 
@@ -62,7 +78,7 @@ function completion(overrides = {}) {
 
 test('gate command cannot escape the repository', () => {
   assert.throws(
-    () => validateGateCommand(process.cwd(), { executable: 'node', args: ['--test'], cwd: '../outside' }),
+    () => validateGateCommand(process.cwd(), { executable: 'node', args: ['--test'], cwd: '../outside', timeoutMs: 1000 }),
     error => error.code === 'UNSAFE_COMMAND'
   );
 });
@@ -77,7 +93,7 @@ test('gate command rejects a symlink whose final target escapes the repository',
   await symlink(outside, join(root, 'escape'));
 
   assert.throws(
-    () => validateGateCommand(root, { type: 'command', executable: 'node', args: ['--test'], cwd: 'escape' }),
+    () => validateGateCommand(root, { type: 'command', executable: 'node', args: ['--test'], cwd: 'escape', timeoutMs: 1000 }),
     error => error.code === 'UNSAFE_COMMAND'
   );
 });
@@ -85,7 +101,7 @@ test('gate command rejects a symlink whose final target escapes the repository',
 for (const token of ['|', '>', '<', '$(', '`', '\0', ';', '&&', '\n']) {
   test(`rejects shell token ${JSON.stringify(token)}`, () => {
     assert.throws(
-      () => validateGateCommand(process.cwd(), { executable: 'node', args: [token], cwd: '.' }),
+      () => validateGateCommand(process.cwd(), { executable: 'node', args: [token], cwd: '.', timeoutMs: 1000 }),
       error => error.code === 'UNSAFE_COMMAND' && /unsafe/i.test(error.message)
     );
   });
@@ -93,7 +109,7 @@ for (const token of ['|', '>', '<', '$(', '`', '\0', ';', '&&', '\n']) {
 
 test('rejects shell tokens in the executable too', () => {
   assert.throws(
-    () => validateGateCommand(process.cwd(), { executable: 'node;echo', args: [], cwd: '.' }),
+    () => validateGateCommand(process.cwd(), { executable: 'node;echo', args: [], cwd: '.', timeoutMs: 1000 }),
     error => error.code === 'UNSAFE_COMMAND'
   );
 });
@@ -115,19 +131,20 @@ test('sanitized environment removes credentials and controller tokens without mu
 
 test('runGate uses argv execution, hashes complete output, bounds local logs, and returns no raw output', async () => {
   const journals = [];
-  const context = {
-    bindings: currentBindings(),
+  const gate = {
+    type: 'command',
+    executable: process.execPath,
+    args: ['-e', "process.stdout.write('x'.repeat(100)),process.stderr.write('safe-stderr')"],
+    cwd: '.',
+    timeoutMs: 1000
+  };
+  const context = commandContext(gate, {
     acIds: ['AC-P1.1-001'],
     evidenceArtifacts: ['test/report.json'],
     maxLogBytes: 12,
     onJournal: journal => journals.push(journal)
-  };
-  const evidence = await runGate(process.cwd(), context, 'tests', {
-    type: 'command',
-    executable: process.execPath,
-    args: ['-e', "process.stdout.write('x'.repeat(100)),process.stderr.write('safe-stderr')"],
-    cwd: '.'
   });
+  const evidence = await runGate(process.cwd(), context, 'tests', gate);
 
   assert.equal(evidence.status, 'passed');
   assert.equal(evidence.exitCode, 0);
@@ -143,12 +160,10 @@ test('runGate uses argv execution, hashes complete output, bounds local logs, an
 });
 
 test('runGate reports a non-zero exit and a spawn error as normalized failures', async () => {
-  const failed = await runGate(process.cwd(), { bindings: currentBindings() }, 'tests', {
-    type: 'command', executable: process.execPath, args: ['-e', 'process.exit(7)'], cwd: '.'
-  });
-  const missing = await runGate(process.cwd(), { bindings: currentBindings() }, 'tests', {
-    type: 'command', executable: 'roadmapctl-command-that-does-not-exist', args: [], cwd: '.'
-  });
+  const failureGate = { type: 'command', executable: process.execPath, args: ['-e', 'process.exit(7)'], cwd: '.', timeoutMs: 1000 };
+  const missingGate = { type: 'command', executable: 'roadmapctl-command-that-does-not-exist', args: [], cwd: '.', timeoutMs: 1000 };
+  const failed = await runGate(process.cwd(), commandContext(failureGate), 'tests', failureGate);
+  const missing = await runGate(process.cwd(), commandContext(missingGate), 'tests', missingGate);
   assert.deepEqual([failed.status, failed.processClass, failed.exitCode], ['failed', 'exit', 7]);
   assert.equal(missing.status, 'failed');
   assert.equal(missing.processClass, 'spawn-error');
@@ -163,6 +178,39 @@ test('runGate executes only command gates', async () => {
   );
 });
 
+test('runGate rejects a manifest mismatch before spawning the supplied command', async t => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roadmapctl-manifest-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const marker = join(root, 'spawned');
+  const manifestGate = { type: 'command', executable: process.execPath, args: ['-e', 'process.exit(0)'], cwd: '.', timeoutMs: 1000 };
+  const actualGate = { ...manifestGate, args: ['-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)},'spawned')`] };
+
+  await assert.rejects(runGate(root, commandContext(manifestGate), 'tests', actualGate), error => error.code === 'MANIFEST_MISMATCH');
+  await assert.rejects(access(marker));
+});
+
+test('runGate snapshots manifest and bindings before execution', async () => {
+  const gate = { type: 'command', executable: process.execPath, args: ['-e', "setTimeout(function(){},30)"], cwd: '.', timeoutMs: 1000 };
+  const context = commandContext(gate);
+  const expected = structuredClone(context.bindings);
+  const running = runGate(process.cwd(), context, 'tests', gate);
+  context.bindings.implementationSha = '9'.repeat(40);
+  context.gates.tests.timeoutMs = 2;
+  const evidence = await running;
+  assert.deepEqual(evidence.bindings, expected);
+  assert.equal(evidence.status, 'passed');
+});
+
+test('runGate terminates a timed-out child without leaving it running', async () => {
+  const gate = { type: 'command', executable: process.execPath, args: ['-e', 'setInterval(function(){},1000)'], cwd: '.', timeoutMs: 25 };
+  const started = Date.now();
+  const evidence = await runGate(process.cwd(), commandContext(gate), 'tests', gate);
+  assert.equal(evidence.status, 'failed');
+  assert.equal(evidence.processClass, 'timeout');
+  assert.ok(['SIGTERM', 'SIGKILL'].includes(evidence.signal));
+  assert.ok(Date.now() - started < 2000);
+});
+
 test('attestation must match the manifest producer, schema, bindings, and audit range', () => {
   const bindings = currentBindings();
   const gate = { type: 'attestation', producer: 'ddd-audit', schema: 'ddd-audit/v1' };
@@ -173,6 +221,31 @@ test('attestation must match the manifest producer, schema, bindings, and audit 
   assert.throws(() => validateAttestation({ bindings }, gate, { ...report, producer: 'other' }), error => error.code === 'ATTESTATION_INVALID');
   assert.throws(() => validateAttestation({ bindings }, gate, { ...report, bindings: currentBindings({ implementationSha: '9'.repeat(40) }) }), error => error.code === 'ATTESTATION_INVALID');
   assert.throws(() => validateAttestation({ bindings }, gate, { ...report, auditCounts: { ...report.auditCounts, HIGH: -1 } }), error => error.code === 'ATTESTATION_INVALID');
+  assert.throws(() => validateAttestation({ bindings }, gate, { ...report, unknown: true }), error => error.code === 'ATTESTATION_INVALID');
+  const noRange = { ...report };
+  delete noRange.auditRange;
+  assert.throws(() => validateAttestation({ bindings }, gate, noRange), error => error.code === 'ATTESTATION_INVALID');
+});
+
+test('forged or malformed executable evidence deterministically fails completion', () => {
+  const mutations = [
+    evidence => { delete evidence.tests.stdoutDigest; },
+    evidence => { evidence.tests.unknown = 'trusted'; },
+    evidence => { evidence.tests.bindings.extra = true; },
+    evidence => { evidence.tests.acIds.push(evidence.tests.acIds[0]); },
+    evidence => { evidence.tests.processClass = 'spawn-error'; },
+    evidence => { evidence.tests.status = 'warning'; },
+    evidence => { evidence.audit.auditRange.to = '9'.repeat(40); },
+    evidence => { evidence.audit.unknown = true; }
+  ];
+  for (const mutate of mutations) {
+    const evidence = passingEvidence();
+    mutate(evidence);
+    const result = completion({ evidence });
+    assert.equal(result.accepted, false);
+    assert.equal(result.state, 'failed');
+    assert.deepEqual(result.reasons.map(entry => entry.code), ['INVALID_EVIDENCE']);
+  }
 });
 
 test('stale spec evidence cannot complete an item', () => {
@@ -199,7 +272,7 @@ const completionCases = [
   ['spawn error', evidence => { evidence.tests.processClass = 'spawn-error'; evidence.tests.exitCode = null; evidence.tests.status = 'failed'; }, 'GATE_SPAWN_ERROR', 'failed'],
   ['stale implementation SHA', evidence => { evidence.tests.bindings = currentBindings({ implementationSha: '8'.repeat(40) }); }, 'STALE_IMPLEMENTATION', 'failed'],
   ['stale manifest', evidence => { evidence.tests.bindings = currentBindings({ manifestHash: 'sha256:' + '8'.repeat(64) }); }, 'STALE_MANIFEST', 'blocked'],
-  ['missing AC coverage', evidence => { for (const value of Object.values(evidence)) value.acIds = []; }, 'MISSING_AC_COVERAGE', 'blocked'],
+  ['missing AC coverage', evidence => { for (const [gate, value] of Object.entries(evidence)) if (gate !== 'audit') value.acIds = []; }, 'MISSING_AC_COVERAGE', 'blocked'],
   ['missing consumer evidence', evidence => { delete evidence.consumer; }, 'MISSING_CONSUMER_EVIDENCE', 'blocked'],
   ['missing E2E evidence', evidence => { delete evidence.e2e; }, 'MISSING_E2E_EVIDENCE', 'blocked'],
   ['placeholder consumer diagnostic', evidence => { evidence.consumer.diagnostic = 'TODO placeholder consumer check'; }, 'PLACEHOLDER_CONSUMER_EVIDENCE', 'blocked']
@@ -225,7 +298,7 @@ test('completion reasons follow the fixed decision order and never warning-succe
   const evidence = passingEvidence(bindings);
   evidence.tests.bindings = currentBindings({ implementationSha: '8'.repeat(40) });
   evidence.tests.exitCode = 2;
-  evidence.tests.status = 'warning';
+  evidence.tests.status = 'failed';
   evidence.audit.auditCounts.HIGH = 1;
   const result = completion({ bindings, evidence });
   assert.equal(result.accepted, false);
@@ -235,7 +308,7 @@ test('completion reasons follow the fixed decision order and never warning-succe
 
 test('unrecorded relevant changes reject completion after all evidence checks', () => {
   const bindings = currentBindings({ unrecordedRelevantChanges: ['src/profile.mjs'] });
-  const result = completion({ bindings, evidence: passingEvidence(bindings) });
+  const result = completion({ bindings, evidence: passingEvidence(currentBindings()) });
   assert.equal(result.state, 'failed');
   assert.equal(result.reasons.at(-1).code, 'UNRECORDED_RELEVANT_CHANGES');
 });

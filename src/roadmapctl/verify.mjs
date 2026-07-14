@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 
-import { sha256 } from './canonical-json.mjs';
+import { canonicalStringify, sha256 } from './canonical-json.mjs';
 import { RoadmapError } from './errors.mjs';
 
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
@@ -19,6 +19,15 @@ const BINDING_KEYS = Object.freeze([
 ]);
 const DEFAULT_LOG_BYTES = 64 * 1024;
 const MAX_LOG_BYTES = 1024 * 1024;
+const TIMEOUT_GRACE_MS = 100;
+const COMMAND_EVIDENCE_KEYS = Object.freeze([
+  'gate', 'status', 'processClass', 'exitCode', 'signal', 'startedAt', 'finishedAt', 'durationMs',
+  'bindings', 'artifacts', 'acIds', 'stdoutDigest', 'stderrDigest'
+]);
+const OPTIONAL_COMMAND_EVIDENCE_KEYS = Object.freeze(['internal', 'diagnostic', 'placeholder']);
+const AUDIT_EVIDENCE_KEYS = Object.freeze([
+  'gate', 'type', 'producer', 'schema', 'status', 'bindings', 'auditRange', 'auditCounts'
+]);
 
 function unsafe(message, details = {}) {
   return new RoadmapError('UNSAFE_COMMAND', message, details);
@@ -70,6 +79,9 @@ export function validateGateCommand(root, gate) {
   if (typeof gate.cwd !== 'string' || gate.cwd.length === 0 || gate.cwd.includes('\0')) {
     throw unsafe('cwd must be a non-empty safe path', { field: 'cwd' });
   }
+  if (!Number.isSafeInteger(gate.timeoutMs) || gate.timeoutMs <= 0) {
+    throw unsafe('timeoutMs must be a positive safe integer', { field: 'timeoutMs' });
+  }
 
   const resolvedRoot = finalPath(root, 'repository root');
   const resolvedCwd = finalPath(resolve(resolvedRoot, gate.cwd), 'gate cwd');
@@ -77,7 +89,7 @@ export function validateGateCommand(root, gate) {
     throw unsafe('gate cwd resolves outside the repository', { cwd: gate.cwd });
   }
 
-  return Object.freeze({ executable: gate.executable, args: Object.freeze([...gate.args]), cwd: resolvedCwd });
+  return Object.freeze({ executable: gate.executable, args: Object.freeze([...gate.args]), cwd: resolvedCwd, timeoutMs: gate.timeoutMs });
 }
 
 export function gateManifestHash(gates) {
@@ -155,10 +167,18 @@ function normalizedGateEvidence(context, gateName, result) {
 }
 
 function executionSnapshot(context) {
-  const bindings = normalizedBindings(bindingSource(context));
   const manifest = context?.gates ?? context?.gateManifest ?? context?.manifest?.gates;
-  if (plainObject(manifest)) bindings.manifestHash = gateManifestHash(manifest);
+  if (!plainObject(manifest)) throw new RoadmapError('MANIFEST_MISMATCH', 'gate manifest is required before execution');
+  let manifestCopy;
+  try {
+    manifestCopy = structuredClone(manifest);
+  } catch {
+    throw new RoadmapError('MANIFEST_MISMATCH', 'gate manifest must be a cloneable document');
+  }
+  const bindings = normalizedBindings(bindingSource(context));
+  bindings.manifestHash = gateManifestHash(manifestCopy);
   return {
+    manifest: manifestCopy,
     bindings,
     evidenceArtifacts: safeArray(context?.evidenceArtifacts ?? context?.artifacts),
     acIds: safeArray(context?.acIds)
@@ -167,8 +187,12 @@ function executionSnapshot(context) {
 
 export async function runGate(root, context, gateName, gate) {
   if (gate?.type !== 'command') throw unsafe('runGate executes only command gates', { gate: gateName });
-  const command = validateGateCommand(root, gate);
   const snapshot = executionSnapshot(context);
+  if (!Object.hasOwn(snapshot.manifest, gateName)
+      || canonicalStringify(snapshot.manifest[gateName]) !== canonicalStringify(gate)) {
+    throw new RoadmapError('MANIFEST_MISMATCH', `gate ${gateName} does not exactly match the captured manifest`, { gate: gateName });
+  }
+  const command = validateGateCommand(root, snapshot.manifest[gateName]);
   const logLimit = boundedLimit(context?.maxLogBytes);
   const started = Date.now();
   const stdoutHash = createHash('sha256');
@@ -181,9 +205,15 @@ export async function runGate(root, context, gateName, gate) {
   const result = await new Promise(resolveResult => {
     let child;
     let settled = false;
+    let timeoutTimer;
+    let killTimer;
+    let timedOut = false;
+    let timeoutSignal = null;
     const finish = (processClass, exitCode, signal = null) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(killTimer);
       const finished = Date.now();
       resolveResult({
         processClass,
@@ -220,7 +250,21 @@ export async function runGate(root, context, gateName, gate) {
       appendBounded(stderrParts, bytes, stderrState, logLimit);
     });
     child.once('error', () => finish('spawn-error', null));
-    child.once('close', (code, signal) => finish(signal === null ? 'exit' : 'signal', code, signal));
+    child.once('close', (code, signal) => {
+      if (timedOut) finish('timeout', null, signal ?? timeoutSignal);
+      else finish(signal === null ? 'exit' : 'signal', code, signal);
+    });
+    timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      timeoutSignal = 'SIGTERM';
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => {
+        if (!settled) {
+          timeoutSignal = 'SIGKILL';
+          child.kill('SIGKILL');
+        }
+      }, TIMEOUT_GRACE_MS);
+    }, command.timeoutMs);
   });
 
   if (typeof context?.onJournal === 'function') {
@@ -248,6 +292,77 @@ function sameArray(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function exactKeys(value, required, optional = []) {
+  if (!plainObject(value)) return false;
+  const allowed = new Set([...required, ...optional]);
+  const keys = Object.keys(value);
+  return required.every(key => Object.hasOwn(value, key)) && keys.every(key => allowed.has(key));
+}
+
+function validUniqueStrings(value, expression = null) {
+  if (!Array.isArray(value)) return false;
+  const seen = new Set();
+  for (const entry of value) {
+    if (typeof entry !== 'string' || entry.length === 0 || (expression && !expression.test(entry)) || seen.has(entry)) return false;
+    seen.add(entry);
+  }
+  return true;
+}
+
+function validEvidenceBindings(bindings) {
+  return exactKeys(bindings, BINDING_KEYS)
+    && GIT_OBJECT_ID.test(bindings.itemBaselineSha)
+    && GIT_OBJECT_ID.test(bindings.implementationSha)
+    && DIGEST.test(bindings.specHash)
+    && DIGEST.test(bindings.manifestHash)
+    && validUniqueStrings(bindings.sharedContractHashes, DIGEST);
+}
+
+function validCommandEvidence(report, gateName) {
+  if (!exactKeys(report, COMMAND_EVIDENCE_KEYS, OPTIONAL_COMMAND_EVIDENCE_KEYS)) return false;
+  if (report.gate !== gateName || !['passed', 'failed', 'skipped'].includes(report.status)) return false;
+  if (!['exit', 'spawn-error', 'signal', 'timeout'].includes(report.processClass)) return false;
+  if (!validEvidenceBindings(report.bindings)
+      || !validUniqueStrings(report.acIds)
+      || !validUniqueStrings(report.artifacts)
+      || !DIGEST.test(report.stdoutDigest)
+      || !DIGEST.test(report.stderrDigest)) return false;
+  if (typeof report.startedAt !== 'string' || !Number.isFinite(Date.parse(report.startedAt))
+      || typeof report.finishedAt !== 'string' || !Number.isFinite(Date.parse(report.finishedAt))
+      || !Number.isSafeInteger(report.durationMs) || report.durationMs < 0) return false;
+  if (gateName === 'spec' ? report.internal !== true : report.internal !== undefined) return false;
+  if (report.diagnostic !== undefined && (typeof report.diagnostic !== 'string' || report.diagnostic.length === 0)) return false;
+  if (report.placeholder !== undefined && typeof report.placeholder !== 'boolean') return false;
+
+  if (report.processClass === 'exit') {
+    if (!Number.isSafeInteger(report.exitCode) || report.exitCode < 0 || report.signal !== null) return false;
+  } else if (report.processClass === 'spawn-error') {
+    if (report.exitCode !== null || report.signal !== null) return false;
+  } else if (report.exitCode !== null || typeof report.signal !== 'string' || report.signal.length === 0) return false;
+
+  const successfulExit = report.processClass === 'exit' && report.exitCode === 0 && report.signal === null;
+  if (report.status === 'passed' && !successfulExit) return false;
+  if (report.status === 'failed' && successfulExit) return false;
+  return true;
+}
+
+function validAuditEvidence(report, gateName) {
+  return exactKeys(report, AUDIT_EVIDENCE_KEYS)
+    && report.gate === gateName
+    && report.type === 'attestation'
+    && report.producer === 'ddd-audit'
+    && report.schema === 'ddd-audit/v1'
+    && ['passed', 'failed'].includes(report.status)
+    && validEvidenceBindings(report.bindings)
+    && exactKeys(report.auditRange, ['from', 'to'])
+    && GIT_OBJECT_ID.test(report.auditRange.from)
+    && GIT_OBJECT_ID.test(report.auditRange.to)
+    && report.auditRange.from === report.bindings.itemBaselineSha
+    && report.auditRange.to === report.bindings.implementationSha
+    && exactKeys(report.auditCounts, AUDIT_SEVERITIES)
+    && AUDIT_SEVERITIES.every(severity => Number.isSafeInteger(report.auditCounts[severity]) && report.auditCounts[severity] >= 0);
+}
+
 function validateBindingShape(bindings, label, { exact = false } = {}) {
   if (!plainObject(bindings)) attestationError(`${label} bindings must be an object`);
   if (exact) {
@@ -265,8 +380,8 @@ function validateBindingShape(bindings, label, { exact = false } = {}) {
 }
 
 export function validateAttestation(context, gate, report) {
-  if (!plainObject(gate) || gate.type !== 'attestation') attestationError('manifest gate must be an attestation');
-  if (!plainObject(report)) attestationError('attestation report must be an object');
+  if (!exactKeys(gate, ['type', 'producer', 'schema']) || gate.type !== 'attestation') attestationError('manifest gate must be an exact attestation definition');
+  if (!exactKeys(report, AUDIT_EVIDENCE_KEYS)) attestationError('attestation report must contain only the exact report fields');
   if (report.producer !== gate.producer || report.schema !== gate.schema) {
     attestationError('attestation producer or schema does not match the manifest');
   }
@@ -274,7 +389,7 @@ export function validateAttestation(context, gate, report) {
   if (!['passed', 'failed'].includes(report.status)) attestationError('attestation status must be passed or failed');
 
   const currentBindings = bindingSource(context);
-  validateBindingShape(currentBindings, 'current');
+  validateBindingShape(currentBindings, 'current', { exact: true });
   validateBindingShape(report.bindings, 'report', { exact: true });
   const expected = normalizedBindings(currentBindings);
   const actual = normalizedBindings(report.bindings);
@@ -285,16 +400,10 @@ export function validateAttestation(context, gate, report) {
     attestationError('attestation shared-contract bindings are stale', { field: 'sharedContractHashes' });
   }
 
-  const expectedRange = context?.auditRange ?? {
-    from: expected.itemBaselineSha,
-    to: expected.implementationSha
-  };
-  const actualRange = report.auditRange ?? {
-    from: actual.itemBaselineSha,
-    to: actual.implementationSha
-  };
-  if (!plainObject(expectedRange) || !plainObject(actualRange)
-      || actualRange.from !== expectedRange.from || actualRange.to !== expectedRange.to) {
+  if (!exactKeys(report.auditRange, ['from', 'to'])) attestationError('attestation audit range is required and must be exact');
+  const actualRange = report.auditRange;
+  if (!GIT_OBJECT_ID.test(actualRange.from) || !GIT_OBJECT_ID.test(actualRange.to)
+      || actualRange.from !== expected.itemBaselineSha || actualRange.to !== expected.implementationSha) {
     attestationError('attestation audit range is stale');
   }
 
@@ -343,12 +452,39 @@ function placeholderDiagnostic(report) {
   return values.some(value => /\b(?:todo|tbd|placeholder|not implemented|n\/a)\b/i.test(value));
 }
 
-export function evaluateCompletion({ item, evidence, bindings }) {
+function invalidEvidence(issues) {
+  return {
+    accepted: false,
+    state: 'failed',
+    reasons: [{ code: 'INVALID_EVIDENCE', message: 'completion evidence does not match the executable evidence schema', details: { issues } }]
+  };
+}
+
+function evidenceSchemaIssues(item, evidence) {
+  if (!plainObject(item) || !plainObject(evidence)) return ['completion input must contain item and evidence objects'];
+  const requiredGates = Array.isArray(item.requiredGates) ? item.requiredGates : [];
+  const allowedGates = new Set(requiredGates);
+  const issues = Object.keys(evidence).filter(gateName => !allowedGates.has(gateName)).sort().map(gateName => `unknown evidence gate ${gateName}`);
+  for (const gateName of requiredGates) {
+    const report = evidence[gateName];
+    if (report === undefined) continue;
+    const valid = gateName === 'audit'
+      ? validAuditEvidence(report, gateName)
+      : validCommandEvidence(report, gateName);
+    if (!valid) issues.push(`invalid evidence for gate ${gateName}`);
+  }
+  return issues;
+}
+
+function evaluateCompletionUnsafe({ item, evidence, bindings }) {
   const safeItem = plainObject(item) ? item : {};
   const safeEvidence = plainObject(evidence) ? evidence : {};
   const safeBindings = plainObject(bindings) ? bindings : {};
   const requiredGates = Array.isArray(safeItem.requiredGates) ? [...safeItem.requiredGates] : [];
   const findings = [];
+
+  const schemaIssues = evidenceSchemaIssues(item, evidence);
+  if (schemaIssues.length > 0) return invalidEvidence(schemaIssues);
 
   // 1. Binding freshness.
   const freshness = bindingMismatches(safeEvidence, requiredGates, safeBindings);
@@ -440,4 +576,12 @@ export function evaluateCompletion({ item, evidence, bindings }) {
     state: findings.some(finding => finding.state === 'failed') ? 'failed' : 'blocked',
     reasons: findings.map(finding => finding.value)
   };
+}
+
+export function evaluateCompletion(input) {
+  try {
+    return evaluateCompletionUnsafe(input);
+  } catch {
+    return invalidEvidence(['completion evidence could not be read safely']);
+  }
 }

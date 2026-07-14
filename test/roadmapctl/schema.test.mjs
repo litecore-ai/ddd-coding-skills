@@ -171,6 +171,15 @@ test('command gates require an exact structured definition', () => {
   expectSchemaError(() => parseRoadmap(value), '$.gates.tests.cwd', /required/);
 });
 
+test('command gates require a positive safe timeout', () => {
+  for (const timeoutMs of [undefined, 0, -1, Number.MAX_SAFE_INTEGER + 1, 1.5]) {
+    const value = validRoadmap();
+    if (timeoutMs === undefined) delete value.gates.tests.timeoutMs;
+    else value.gates.tests.timeoutMs = timeoutMs;
+    expectSchemaError(() => parseRoadmap(value), '$.gates.tests.timeoutMs', /positive safe integer/);
+  }
+});
+
 test('command gates reject sparse argument arrays at the missing index', () => {
   const value = validRoadmap();
   value.gates.tests.args = new Array(1);

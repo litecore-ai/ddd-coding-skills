@@ -79,6 +79,11 @@ function nonNegativeInteger(value, path) {
   return value;
 }
 
+function positiveSafeInteger(value, path) {
+  if (!Number.isSafeInteger(value) || value <= 0) fail(path, 'must be a positive safe integer');
+  return value;
+}
+
 function array(value, path, { minLength = 0 } = {}) {
   if (value === undefined) fail(path, 'is required and must be an array');
   if (!Array.isArray(value)) fail(path, 'must be an array');
@@ -119,10 +124,11 @@ function validateGate(definition, path) {
   enumValue(definition.type, ['command', 'attestation'], `${path}.type`);
 
   if (definition.type === 'command') {
-    rejectUnknown(definition, ['type', 'executable', 'args', 'cwd'], path);
+    rejectUnknown(definition, ['type', 'executable', 'args', 'cwd', 'timeoutMs'], path);
     string(definition.executable, `${path}.executable`);
     stringArray(definition.args, `${path}.args`);
     string(definition.cwd, `${path}.cwd`);
+    positiveSafeInteger(definition.timeoutMs, `${path}.timeoutMs`);
     if (UNSAFE_SHELL.test(definition.executable)) fail(`${path}.executable`, 'contains an unsafe shell token');
     definition.args.forEach((argument, index) => {
       if (UNSAFE_SHELL.test(argument)) fail(`${path}.args[${index}]`, 'contains an unsafe shell token');
