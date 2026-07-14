@@ -23,46 +23,8 @@ async function synchronizeDirectory(directory, fs) {
   }
 }
 
-function identityOf(stat) {
-  return { dev: stat.dev, ino: stat.ino };
-}
-
-async function pathHasIdentity(path, identity, fs) {
-  if (!identity) return false;
-  try {
-    const current = await fs.lstat(path, { bigint: true });
-    return current.dev === identity.dev && current.ino === identity.ino;
-  } catch {
-    return false;
-  }
-}
-
-async function removeEmptyDirectory(path, fs) {
-  try {
-    await fs.rmdir(path);
-  } catch {
-    // Preserve a non-empty or concurrently replaced diagnostic directory.
-  }
-}
-
-async function restoreQuarantinedFile(quarantinePath, temporaryPath, cleanupDirectory, fs) {
-  try {
-    await fs.link(quarantinePath, temporaryPath);
-  } catch {
-    // EEXIST and all other failures preserve the quarantine without overwriting.
-    return;
-  }
-  try {
-    await fs.unlink(quarantinePath);
-  } catch {
-    // Both hard links retain the data when quarantine unlink fails.
-    return;
-  }
-  await removeEmptyDirectory(cleanupDirectory, fs);
-}
-
-async function quarantineTemporary(temporaryPath, identity, fs) {
-  if (!identity) return;
+async function quarantineTemporary(temporaryPath, wasCreated, fs) {
+  if (!wasCreated) return;
 
   let cleanupDirectory;
   try {
@@ -75,21 +37,9 @@ async function quarantineTemporary(temporaryPath, identity, fs) {
   try {
     await fs.rename(temporaryPath, quarantinePath);
   } catch {
-    await removeEmptyDirectory(cleanupDirectory, fs);
+    // Preserve both the original temp path and the random diagnostic directory.
     return;
   }
-
-  if (!await pathHasIdentity(quarantinePath, identity, fs)) {
-    await restoreQuarantinedFile(quarantinePath, temporaryPath, cleanupDirectory, fs);
-    return;
-  }
-
-  try {
-    await fs.unlink(quarantinePath);
-  } catch {
-    return;
-  }
-  await removeEmptyDirectory(cleanupDirectory, fs);
 }
 
 export async function readJson(path, parser, { fs = fileSystem } = {}) {
@@ -113,18 +63,18 @@ export async function writeJsonAtomic(path, value, {
   const directory = dirname(path);
   const temporaryPath = join(directory, `${basename(path)}.tmp-${createId()}`);
   let handle;
-  let temporaryIdentity;
+  let temporaryCreated = false;
 
   await fs.mkdir(directory, { recursive: true });
   try {
     handle = await fs.open(temporaryPath, 'wx', 0o600);
-    temporaryIdentity = identityOf(await handle.stat({ bigint: true }));
+    temporaryCreated = true;
     await handle.writeFile(canonicalStringify(value), 'utf8');
     await handle.sync();
     await handle.close();
     handle = undefined;
     await fs.rename(temporaryPath, path);
-    temporaryIdentity = undefined;
+    temporaryCreated = false;
     await synchronizeDirectory(directory, fs);
   } catch (error) {
     if (handle) {
@@ -134,7 +84,7 @@ export async function writeJsonAtomic(path, value, {
         // Preserve the primary persistence failure.
       }
     }
-    await quarantineTemporary(temporaryPath, temporaryIdentity, fs);
+    await quarantineTemporary(temporaryPath, temporaryCreated, fs);
     throw error;
   }
 }

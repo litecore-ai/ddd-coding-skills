@@ -391,7 +391,7 @@ Expected: FAIL with missing `store.mjs`.
 
 - [ ] **Step 3: Implement canonical atomic persistence**
 
-`writeJsonAtomic` must create the destination directory, open a same-directory temporary file with exclusive creation, write canonical JSON, sync the file, close, rename, and attempt directory sync. It must remove only its own temporary file on failure. `mutateRevision` parses the existing document, compares the exact revision, increments it once, and writes atomically.
+`writeJsonAtomic` must create the destination directory, open a same-directory temporary file with exclusive creation, write canonical JSON, sync the file, close, rename, and attempt directory sync. On write or destination-rename failure after exclusive creation, it creates an unpredictable same-parent diagnostic directory and attempts to atomically quarantine the current temp entry there. It never unlinks a failed-write temp or quarantine entry automatically: a successful quarantine rename retains the moved entry, while a failed quarantine rename retains the original temp entry and diagnostic directory. Node's standard filesystem API has no conditional unlink-by-inode primitive, so future cleanup must be an explicit, lock-protected maintenance operation. `mutateRevision` parses the existing document, compares the exact revision, increments it once, and writes atomically.
 
 Use this transaction envelope in the run schema:
 

@@ -409,6 +409,8 @@ Controller-owned JSON is serialized canonically and written using:
 3. Atomic rename over the destination.
 4. Directory synchronization where the platform supports it.
 
+After exclusive temporary-file creation, any failed write or destination rename creates an unpredictable diagnostic directory in the same parent and attempts to atomically move the current temp entry into it. Failure handling never unlinks a named temp or quarantine entry, whether it still contains this writer's inode or a concurrent replacement. A successful quarantine rename retains the moved entry; a failed quarantine rename retains the original temp entry and the diagnostic directory. Node's standard filesystem API has no conditional unlink-by-inode primitive, so the controller chooses recoverable residue over possible data loss. A future explicit, lock-protected maintenance operation may inspect and remove retained diagnostics; normal successful destination rename leaves no temp entry.
+
 Each document includes a schema version and monotonically increasing revision. Mutations use compare-and-swap against the revision loaded by the command.
 
 ### Locking

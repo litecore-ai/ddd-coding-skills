@@ -53,6 +53,14 @@ async function seedJournal(directory, overrides = {}) {
   return journalPath;
 }
 
+async function onlyQuarantineEntry(directory) {
+  const cleanupNames = (await fs.readdir(directory)).filter(name => name.includes('.cleanup-'));
+  assert.equal(cleanupNames.length, 1, 'expected exactly one diagnostic quarantine');
+  const cleanupDirectory = join(directory, cleanupNames[0]);
+  assert.deepEqual(await fs.readdir(cleanupDirectory), ['entry']);
+  return join(cleanupDirectory, 'entry');
+}
+
 function lockOptions(overrides = {}) {
   return {
     runId: 'r1',
@@ -79,7 +87,7 @@ test('atomic JSON writes create parents and persist canonical bytes', async t =>
   assert.deepEqual(await fs.readdir(dirname(file)), ['run.json']);
 });
 
-test('temporary-write failure preserves the destination and removes only its own temporary file', async t => {
+test('temporary-write failure preserves the destination and quarantines its temporary file', async t => {
   const directory = await temporaryDirectory(t);
   const file = join(directory, 'run.json');
   const original = validRun({ status: 'active' });
@@ -109,10 +117,15 @@ test('temporary-write failure preserves the destination and removes only its own
 
   assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), original);
   assert.equal(await fs.readFile(unrelated, 'utf8'), 'keep');
-  assert.deepEqual((await fs.readdir(directory)).sort(), ['run.json', `${basename(file)}.tmp-unrelated`]);
+  const names = await fs.readdir(directory);
+  const cleanupName = names.find(name => name.startsWith(`.${basename(file)}.tmp-owned.cleanup-`));
+  assert.ok(cleanupName, 'failed temp must be retained in a diagnostic quarantine');
+  assert.deepEqual(names.sort(), [cleanupName, 'run.json', `${basename(file)}.tmp-unrelated`].sort());
+  assert.deepEqual(await fs.readdir(join(directory, cleanupName)), ['entry']);
+  assert.equal(await fs.readFile(join(directory, cleanupName, 'entry'), 'utf8'), '');
 });
 
-test('rename failure preserves the destination and cleans the completed temporary file', async t => {
+test('rename failure preserves the destination and quarantines the completed temporary file', async t => {
   const directory = await temporaryDirectory(t);
   const file = join(directory, 'run.json');
   const original = validRun();
@@ -131,7 +144,7 @@ test('rename failure preserves the destination and cleans the completed temporar
   );
 
   assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), original);
-  assert.deepEqual(await fs.readdir(directory), ['run.json']);
+  assert.equal(await fs.readFile(await onlyQuarantineEntry(directory), 'utf8'), canonicalStringify({ ...original, status: 'failed' }));
 });
 
 test('rename failure preserves a foreign temporary replacement with a different inode', async t => {
@@ -160,7 +173,7 @@ test('rename failure preserves a foreign temporary replacement with a different 
   );
 
   assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), original);
-  assert.equal(await fs.readFile(temporaryPath, 'utf8'), 'foreign temporary bytes');
+  assert.equal(await fs.readFile(await onlyQuarantineEntry(directory), 'utf8'), 'foreign temporary bytes');
 });
 
 test('cleanup cannot delete a foreign replacement installed after its identity lstat', async t => {
@@ -200,7 +213,52 @@ test('cleanup cannot delete a foreign replacement installed after its identity l
   assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), original);
   if (replaced) assert.equal(await fs.readFile(temporaryPath, 'utf8'), foreignBytes);
   assert.equal(replaced, false, 'cleanup must quarantine before checking path identity');
-  assert.deepEqual(await fs.readdir(directory), ['run.json']);
+  assert.equal(await fs.readFile(await onlyQuarantineEntry(directory), 'utf8'), canonicalStringify({ ...original, status: 'failed' }));
+});
+
+test('cleanup preserves a foreign replacement installed after a real quarantine lstat', async t => {
+  const directory = await temporaryDirectory(t);
+  const file = join(directory, 'run.json');
+  const original = validRun();
+  const next = { ...original, status: 'failed' };
+  const foreignBytes = 'foreign bytes installed inside quarantine';
+  const fault = errorWithCode('EIO', 'injected destination rename failure');
+  let quarantinePath;
+  let quarantinedIdentity;
+  let staleIdentityReads = 0;
+  await writeJsonAtomic(file, original);
+  const injected = {
+    ...fs,
+    async rename(source, destination) {
+      if (destination === file) throw fault;
+      await fs.rename(source, destination);
+      if (basename(destination) === 'entry' && dirname(destination).includes('.cleanup-')) {
+        quarantinePath = destination;
+        quarantinedIdentity = await fs.lstat(destination, { bigint: true });
+        await fs.rm(destination);
+        await fs.writeFile(destination, foreignBytes);
+      }
+    },
+    async lstat(path, options) {
+      if (path === quarantinePath && quarantinedIdentity) {
+        staleIdentityReads += 1;
+        return quarantinedIdentity;
+      }
+      return fs.lstat(path, options);
+    }
+  };
+
+  await assert.rejects(
+    writeJsonAtomic(file, next, { fs: injected, randomUUID: () => 'quarantine-race' }),
+    error => error === fault
+  );
+
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), original);
+  assert.ok(quarantinePath, 'the fault must install a real replacement in quarantine');
+  assert.equal(await fs.readFile(quarantinePath, 'utf8'), foreignBytes);
+  assert.deepEqual(await fs.readdir(dirname(quarantinePath)), ['entry']);
+  assert.equal(await onlyQuarantineEntry(directory), quarantinePath);
+  assert.equal(staleIdentityReads, 0, 'failure cleanup must not inspect or unlink quarantine entries');
 });
 
 test('exclusive-open collision never removes a temporary file owned by another writer', async t => {
