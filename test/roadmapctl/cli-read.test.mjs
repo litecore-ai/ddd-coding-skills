@@ -10,7 +10,7 @@ import { roadmapFixture, runCli, twoLeafRoadmap } from './helpers.mjs';
 
 function runLinkedCli(bin, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [bin, ...args], { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(bin, args, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.setEncoding('utf8');
