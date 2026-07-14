@@ -2,6 +2,16 @@
   "name": "ddd-coding-skills",
   "version": "2.0.0",
   "type": "module",
+  "bin": {
+    "roadmapctl": "./bin/roadmapctl.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --test && node scripts/check-skill-contracts.mjs"
+  },
   "description": "DDD development skill suite: project initialization, roadmap generation, spec generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
   "keywords": [
     "skills",
