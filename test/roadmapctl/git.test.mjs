@@ -106,6 +106,24 @@ test('implementation commits must be non-empty descendants of baseline', async t
   );
 });
 
+test('implementation commit explicitly rejects the resolved baseline itself', async t => {
+  const repo = await gitFixture();
+  t.after(repo.cleanup);
+  await repo.write('prior-change.txt', 'already changed\n');
+  await repo.git(['add', '--', 'prior-change.txt']);
+  await repo.git(['commit', '-m', 'feat: prior change']);
+  const nonRootBaseline = (await repo.git(['rev-parse', 'HEAD'])).stdout.trim();
+
+  await assert.rejects(
+    () => assertImplementationCommit(repo.root, {
+      baseline: nonRootBaseline,
+      commit: nonRootBaseline,
+      runBranch: 'main'
+    }),
+    error => error instanceof GitError && error.code === 'IMPLEMENTATION_EQUALS_BASELINE'
+  );
+});
+
 test('changedFiles returns the exact baseline-to-commit paths including unusual names', async t => {
   const repo = await gitFixture();
   t.after(repo.cleanup);
@@ -120,6 +138,57 @@ test('changedFiles returns the exact baseline-to-commit paths including unusual 
     '-leading-dash.txt',
     'path with spaces.txt'
   ]);
+});
+
+test('changedFiles reports both rename endpoints regardless of rename configuration', async t => {
+  for (const renames of ['true', 'false']) {
+    await t.test(`diff.renames=${renames}`, async t => {
+      const repo = await gitFixture();
+      t.after(repo.cleanup);
+      await repo.write('old name with spaces.txt', 'content\n');
+      await repo.git(['add', '--', 'old name with spaces.txt']);
+      await repo.git(['commit', '-m', 'test: add rename source']);
+      const baseline = (await repo.git(['rev-parse', 'HEAD'])).stdout.trim();
+      await repo.git(['mv', 'old name with spaces.txt', 'new name with spaces.txt']);
+      await repo.git(['commit', '-m', 'test: rename file']);
+      const commit = (await repo.git(['rev-parse', 'HEAD'])).stdout.trim();
+      await repo.git(['config', '--local', 'diff.renames', renames]);
+
+      assert.deepEqual(await changedFiles(repo.root, baseline, commit), [
+        'new name with spaces.txt',
+        'old name with spaces.txt'
+      ]);
+    });
+  }
+});
+
+test('changedFiles overrides global rename configuration deterministically', async t => {
+  for (const renames of ['true', 'false']) {
+    await t.test(`global diff.renames=${renames}`, async t => {
+      const repo = await gitFixture();
+      t.after(repo.cleanup);
+      await repo.write('global old name.txt', 'content\n');
+      await repo.git(['add', '--', 'global old name.txt']);
+      await repo.git(['commit', '-m', 'test: add global rename source']);
+      const baseline = (await repo.git(['rev-parse', 'HEAD'])).stdout.trim();
+      await repo.git(['mv', 'global old name.txt', 'global new name.txt']);
+      await repo.git(['commit', '-m', 'test: global rename file']);
+      const commit = (await repo.git(['rev-parse', 'HEAD'])).stdout.trim();
+      const configPath = join(repo.root, '.test-global-gitconfig');
+      await repo.write('.test-global-gitconfig', `[diff]\n\trenames = ${renames}\n`);
+      const previousConfig = process.env.GIT_CONFIG_GLOBAL;
+      process.env.GIT_CONFIG_GLOBAL = configPath;
+      try {
+        assert.deepEqual(await changedFiles(repo.root, baseline, commit), [
+          'global new name.txt',
+          'global old name.txt'
+        ]);
+      } finally {
+        if (previousConfig === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+        else process.env.GIT_CONFIG_GLOBAL = previousConfig;
+      }
+    });
+  }
 });
 
 test('commitGenerated explicitly stages allowlisted paths and suppresses hooks', async t => {
@@ -154,6 +223,72 @@ test('generated commit never sweeps unrelated files', async t => {
   );
   assert.equal(await repo.read('user-note.txt'), 'mine\n');
   assert.equal((await repo.git(['log', '--format=%s', '-1'])).stdout.trim(), 'test: initial commit');
+});
+
+test('generated paths reject non-canonical and cross-platform ambiguous aliases before staging', async t => {
+  const repo = await gitFixture();
+  t.after(repo.cleanup);
+  await repo.write('generated/file.json', '{}\n');
+  const invalidPathLists = [
+    [''],
+    ['bad\0path'],
+    ['/absolute/file.json'],
+    ['.'],
+    ['..'],
+    ['../escape.json'],
+    ['./generated/file.json'],
+    ['generated/../file.json'],
+    ['generated/./file.json'],
+    ['generated//file.json'],
+    ['generated/file.json/'],
+    ['generated\\file.json'],
+    ['C:/generated/file.json'],
+    ['generated/file.json', 'generated/file.json']
+  ];
+
+  for (const paths of invalidPathLists) {
+    await assert.rejects(
+      () => commitGenerated(repo.root, { paths, message: 'test: invalid generated path' }),
+      error => error instanceof GitError && error.code === 'INVALID_GENERATED_PATHS'
+    );
+  }
+  assert.equal((await repo.git(['diff', '--cached', '--name-only'])).stdout, '');
+});
+
+test('generated paths reject an existing directory instead of recursively staging it', async t => {
+  const repo = await gitFixture();
+  t.after(repo.cleanup);
+  await repo.write('generated-dir/nested.json', '{}\n');
+
+  await assert.rejects(
+    () => commitGenerated(repo.root, { paths: ['generated-dir'], message: 'test: directory path' }),
+    error => error instanceof GitError && error.code === 'INVALID_GENERATED_PATHS'
+  );
+  assert.equal((await repo.git(['diff', '--cached', '--name-only'])).stdout, '');
+});
+
+test('generated commits treat pathspec magic literally and allow deleted files', async t => {
+  const literal = await gitFixture();
+  const deleted = await gitFixture();
+  t.after(literal.cleanup);
+  t.after(deleted.cleanup);
+
+  await literal.write(':(glob)literal*.json', 'literal\n');
+  const literalCommit = await commitGenerated(literal.root, {
+    paths: [':(glob)literal*.json'],
+    message: 'test: literal pathspec'
+  });
+  assert.deepEqual(await changedFiles(literal.root, `${literalCommit}^`, literalCommit), [':(glob)literal*.json']);
+
+  await deleted.write('obsolete file.txt', 'remove me\n');
+  await deleted.git(['add', '--', 'obsolete file.txt']);
+  await deleted.git(['commit', '-m', 'test: add obsolete file']);
+  await rm(join(deleted.root, 'obsolete file.txt'));
+  const deletionCommit = await commitGenerated(deleted.root, {
+    paths: ['obsolete file.txt'],
+    message: 'test: delete obsolete file'
+  });
+  assert.deepEqual(await changedFiles(deleted.root, `${deletionCommit}^`, deletionCommit), ['obsolete file.txt']);
 });
 
 test('git failures are typed and retain process evidence', async t => {

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { lstat, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -137,6 +137,9 @@ export async function assertImplementationCommit(root, { baseline, commit, runBr
 
   const baselineSha = await resolveCommit(root, baseline);
   const commitSha = await resolveCommit(root, commit);
+  if (baselineSha === commitSha) {
+    throw stateError('IMPLEMENTATION_EQUALS_BASELINE', 'The implementation commit must differ from the baseline');
+  }
   const branchSha = await resolveCommit(root, runBranch);
   if (!await isAncestor(root, baselineSha, commitSha) || !await isAncestor(root, commitSha, branchSha)) {
     throw stateError(
@@ -152,7 +155,18 @@ export async function assertImplementationCommit(root, { baseline, commit, runBr
 }
 
 export async function changedFiles(root, baseline, commit) {
-  const result = await git(root, ['diff', '--name-only', '-z', baseline, commit, '--']);
+  const result = await git(root, [
+    '--literal-pathspecs',
+    '-c',
+    'diff.renames=false',
+    'diff',
+    '--no-renames',
+    '--name-only',
+    '-z',
+    baseline,
+    commit,
+    '--'
+  ]);
   return result.stdout.split('\0').filter(Boolean).sort();
 }
 
@@ -173,15 +187,51 @@ function dirtyPaths(porcelain) {
   return paths;
 }
 
-function validatePaths(paths) {
-  if (!Array.isArray(paths) || paths.length === 0 || paths.some(path => typeof path !== 'string' || path.length === 0 || path.includes('\0'))) {
-    throw stateError('INVALID_GENERATED_PATHS', 'Generated paths must be a non-empty array of valid path strings');
+function invalidGeneratedPaths(message) {
+  return stateError('INVALID_GENERATED_PATHS', message);
+}
+
+async function validateGeneratedPaths(root, paths) {
+  if (!Array.isArray(paths) || paths.length === 0) {
+    throw invalidGeneratedPaths('Generated paths must be a non-empty array');
   }
-  return [...new Set(paths)];
+
+  const seen = new Set();
+  for (const path of paths) {
+    if (
+      typeof path !== 'string' ||
+      path.length === 0 ||
+      path.includes('\0') ||
+      path.includes('\\') ||
+      posix.isAbsolute(path) ||
+      /^[A-Za-z]:/.test(path) ||
+      path === '.' ||
+      path === '..' ||
+      posix.normalize(path) !== path ||
+      path.split('/').some(segment => segment === '' || segment === '.' || segment === '..') ||
+      seen.has(path)
+    ) {
+      throw invalidGeneratedPaths(`Generated path is not canonical and repository-relative: ${String(path)}`);
+    }
+    seen.add(path);
+
+    try {
+      const metadata = await lstat(join(root, path));
+      if (metadata.isDirectory()) {
+        throw invalidGeneratedPaths(`Generated path names a directory: ${path}`);
+      }
+    } catch (error) {
+      if (error instanceof GitError) throw error;
+      if (error.code !== 'ENOENT') {
+        throw invalidGeneratedPaths(`Generated path cannot be validated: ${path}`);
+      }
+    }
+  }
+  return [...paths];
 }
 
 export async function commitGenerated(root, { paths, message }) {
-  const allowedPaths = validatePaths(paths);
+  const allowedPaths = await validateGeneratedPaths(root, paths);
   const allowed = new Set(allowedPaths);
   const state = await repositoryState(root);
   if (state.branch === null) {
@@ -195,7 +245,7 @@ export async function commitGenerated(root, { paths, message }) {
   }
 
   const baseline = state.head;
-  await git(root, ['add', '--', ...allowedPaths]);
+  await git(root, ['--literal-pathspecs', 'add', '--', ...allowedPaths]);
   const emptyHooksDir = await mkdtemp(join(tmpdir(), 'roadmapctl-empty-hooks-'));
   try {
     await git(root, ['-c', `core.hooksPath=${emptyHooksDir}`, 'commit', '-m', message]);
