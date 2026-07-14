@@ -46,6 +46,37 @@ function completeRun(overrides = {}) {
   };
 }
 
+async function currentAttempt(repo, runId, itemId) {
+  const journal = JSON.parse(await readFile(join(repo.root, '.ddd/runs', `${runId}.json`), 'utf8'));
+  return journal.attempts[itemId].at(-1);
+}
+
+async function attestAudit(repo, runId, itemId, counts = { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }) {
+  const attempt = await currentAttempt(repo, runId, itemId);
+  const bindings = attempt.evidence.tests.bindings;
+  const audit = {
+    gate: 'audit',
+    type: 'attestation',
+    producer: 'ddd-audit',
+    schema: 'ddd-audit/v1',
+    status: counts.CRIT > 0 || counts.HIGH > 0 ? 'failed' : 'passed',
+    bindings,
+    auditRange: { from: bindings.itemBaselineSha, to: bindings.implementationSha },
+    auditCounts: counts
+  };
+  const path = `.ddd/audit-${itemId}.json`;
+  await repo.write(path, `${JSON.stringify(audit, null, 2)}\n`);
+  return repo.cli(['attest', runId, itemId, 'audit', path]);
+}
+
+async function implementCurrent(repo, runId, itemId, path, { audit = true, counts } = {}) {
+  const implementation = await repo.implementationCommit(path, `${itemId}\n`);
+  await repo.cli(['record', runId, itemId, '--commit', implementation, '--ac', 'AC-P1.1-001']);
+  await repo.cli(['verify', runId, itemId]);
+  if (audit) await attestAudit(repo, runId, itemId, counts);
+  return repo.cli(['finish', runId, itemId]);
+}
+
 test('run schema accepts the exact lifecycle journal and rejects unknown nested keys', () => {
   const parsed = parseRun(completeRun());
   assert.equal(parsed.currentItemId, 'P1.1.1');
@@ -171,4 +202,107 @@ test('record rejects undeclared acceptance criteria without advancing the attemp
   assert.equal(attempt.state, 'in_progress');
   assert.equal(attempt.implementationSha, null);
   assert.deepEqual(attempt.evidence, {});
+});
+
+test('two-leaf scope closes successfully only after both evidence-backed items finish', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  assert.equal((await repo.cli(['next', runId])).item.id, 'P1.1.1');
+  assert.equal((await implementCurrent(repo, runId, 'P1.1.1', 'first.txt')).state, 'done');
+
+  const middle = await repo.cli(['status', runId]);
+  assert.equal(middle.leaves['P1.1.1'], 'done');
+  assert.equal(middle.leaves['P1.1.2'], 'ready');
+  assert.equal(middle.aggregates['P1.1'], 'in_progress');
+  assert.deepEqual(middle.remaining, ['P1.1.2']);
+  const premature = await repo.rawCli(['close', runId, '--require-success']);
+  assert.notEqual(premature.exitCode, 0);
+
+  assert.equal((await repo.cli(['next', runId])).item.id, 'P1.1.2');
+  assert.equal((await implementCurrent(repo, runId, 'P1.1.2', 'second.txt')).state, 'done');
+  const closed = await repo.cli(['close', runId, '--require-success']);
+  assert.equal(closed.status, 'successful');
+  const reportPath = join(repo.root, 'docs/roadmap/runs', runId, 'report.json');
+  assert.equal(JSON.parse(await readFile(reportPath, 'utf8')).status, 'successful');
+  await assert.rejects(readFile(join(repo.root, '.ddd/active-run.json'), 'utf8'));
+});
+
+test('status and resume resolve the active pointer and reject a stale pointer', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  const status = await repo.cli(['status', '--active']);
+  const resumed = await repo.cli(['resume', '--active']);
+  assert.equal(status.runId, runId);
+  assert.equal(status.action, 'next');
+  assert.deepEqual(resumed, status);
+
+  await repo.write('.ddd/active-run.json', `${JSON.stringify({
+    schemaVersion: 1,
+    runId: 'missing-run',
+    journal: '.ddd/runs/missing-run.json'
+  })}\n`);
+  const stale = await repo.rawCli(['status', '--active']);
+  assert.notEqual(stale.exitCode, 0);
+});
+
+test('missing audit blocks finish and close reports blocked rather than success', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  await repo.cli(['next', runId]);
+  const finished = await implementCurrent(repo, runId, 'P1.1.1', 'blocked.txt', { audit: false });
+  assert.equal(finished.state, 'blocked');
+  const closed = await repo.cli(['close', runId]);
+  assert.equal(closed.status, 'blocked');
+  assert.notEqual((await repo.cli(['status', runId])).aggregates['P1.1'], 'done');
+});
+
+test('blocking audit fails finish and close reports failed', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  await repo.cli(['next', runId]);
+  const finished = await implementCurrent(repo, runId, 'P1.1.1', 'failed.txt', {
+    counts: { CRIT: 0, HIGH: 1, MEDIUM: 0, LOW: 0 }
+  });
+  assert.equal(finished.state, 'failed');
+  assert.equal((await repo.cli(['close', runId])).status, 'failed');
+});
+
+test('abort requires confirmation, preserves cancellation evidence, and never completes the parent', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  await repo.cli(['next', runId]);
+  assert.notEqual((await repo.rawCli(['abort', runId])).exitCode, 0);
+  const aborted = await repo.cli(['abort', runId, '--confirm']);
+  assert.equal(aborted.status, 'cancelled');
+  const status = await repo.cli(['status', runId]);
+  assert.equal(status.leaves['P1.1.1'], 'cancelled');
+  assert.notEqual(status.aggregates['P1.1'], 'done');
+});
+
+test('retry preserves prior attempts and the bounded budget closes as capped', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  await repo.cli(['next', runId]);
+
+  for (let number = 1; number <= 3; number += 1) {
+    if (number > 1) {
+      const retried = await repo.cli(['retry', runId, 'P1.1.1', '--reason', `attempt ${number}`]);
+      assert.equal(retried.attempt, number);
+    }
+    const finished = await implementCurrent(repo, runId, 'P1.1.1', `blocked-${number}.txt`, { audit: false });
+    assert.equal(finished.state, 'blocked');
+  }
+
+  const exhausted = await repo.rawCli(['retry', runId, 'P1.1.1', '--reason', 'one too many']);
+  assert.notEqual(exhausted.exitCode, 0);
+  const status = await repo.cli(['status', runId]);
+  assert.equal(status.attemptsRemaining['P1.1.1'], 0);
+  assert.equal((await currentAttempt(repo, runId, 'P1.1.1')).number, 3);
+  assert.equal((await repo.cli(['close', runId])).status, 'capped');
 });

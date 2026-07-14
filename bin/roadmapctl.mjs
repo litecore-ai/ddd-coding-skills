@@ -21,7 +21,10 @@ export function parseGlobalArgs(argv) {
   if (tokens.some(token => token === '--root')) usage('--root must be the leading option');
   const command = tokens.shift();
   if (!command) usage('a command is required');
-  if (!['validate', 'scope', 'render', 'start', 'next', 'record', 'verify', 'attest'].includes(command)) {
+  if (![
+    'validate', 'scope', 'render', 'start', 'next', 'record', 'verify', 'attest',
+    'finish', 'status', 'resume', 'retry', 'abort', 'close'
+  ].includes(command)) {
     usage(`unknown command: ${command}`);
   }
   if (command === 'scope' && tokens.length !== 1) usage('scope requires exactly one selector');
@@ -40,7 +43,24 @@ export function parseGlobalArgs(argv) {
   }
   if (command === 'verify' && tokens.length !== 2) usage('verify requires one run id and one item id');
   if (command === 'attest' && tokens.length !== 4) usage('attest requires run id, item id, gate, and report path');
-  if (!['scope', 'start', 'next', 'record', 'verify', 'attest'].includes(command) && tokens.length !== 0) {
+  if (command === 'finish' && tokens.length !== 2) usage('finish requires one run id and one item id');
+  if (['status', 'resume'].includes(command)
+      && (tokens.length !== 1 || (tokens[0] === '--active' ? false : tokens[0].startsWith('--')))) {
+    usage(`${command} requires one run id or --active`);
+  }
+  if (command === 'retry' && (tokens.length !== 4 || tokens[2] !== '--reason' || !tokens[3])) {
+    usage('retry requires run id, item id, and --reason text');
+  }
+  if (command === 'abort' && (tokens.length !== 2 || tokens[1] !== '--confirm')) {
+    usage('abort requires one run id and --confirm');
+  }
+  if (command === 'close'
+      && (tokens.length < 1 || tokens.length > 2 || (tokens.length === 2 && tokens[1] !== '--require-success'))) {
+    usage('close requires one run id and optional --require-success');
+  }
+  if (![
+    'scope', 'start', 'next', 'record', 'verify', 'attest', 'finish', 'status', 'resume', 'retry', 'abort', 'close'
+  ].includes(command) && tokens.length !== 0) {
     usage(`${command} does not accept arguments`);
   }
   return {
@@ -50,7 +70,11 @@ export function parseGlobalArgs(argv) {
     options: {
       manifestApproved: command === 'start' && tokens[1] === '--manifest-approved',
       commit: command === 'record' ? tokens[3] : null,
-      acIds: command === 'record' ? tokens.slice(5).filter((_, index) => index % 2 === 0) : []
+      acIds: command === 'record' ? tokens.slice(5).filter((_, index) => index % 2 === 0) : [],
+      active: ['status', 'resume'].includes(command) && tokens[0] === '--active',
+      reason: command === 'retry' ? tokens[3] : null,
+      confirmed: command === 'abort' && tokens[1] === '--confirm',
+      requireSuccess: command === 'close' && tokens[1] === '--require-success'
     }
   };
 }
@@ -66,7 +90,13 @@ export async function main(argv, io = { stdout: process.stdout, stderr: process.
     next: () => controller.next(args[0]),
     record: () => controller.record(args[0], args[1], options),
     verify: () => controller.verify(args[0], args[1]),
-    attest: () => controller.attest(args[0], args[1], args[2], args[3])
+    attest: () => controller.attest(args[0], args[1], args[2], args[3]),
+    finish: () => controller.finish(args[0], args[1]),
+    status: () => controller.status(options.active ? null : args[0]),
+    resume: () => controller.resume(options.active ? null : args[0]),
+    retry: () => controller.retry(args[0], args[1], options.reason),
+    abort: () => controller.abort(args[0], options),
+    close: () => controller.close(args[0], options)
   };
   const result = await handlers[command]();
   io.stdout.write(canonicalStringify(result));
