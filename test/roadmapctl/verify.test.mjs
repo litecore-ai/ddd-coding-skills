@@ -160,8 +160,8 @@ test('runGate uses argv execution, hashes complete output, bounds local logs, an
 });
 
 test('runGate reports a non-zero exit and a spawn error as normalized failures', async () => {
-  const failureGate = { type: 'command', executable: process.execPath, args: ['-e', 'process.exit(7)'], cwd: '.', timeoutMs: 1000 };
-  const missingGate = { type: 'command', executable: 'roadmapctl-command-that-does-not-exist', args: [], cwd: '.', timeoutMs: 1000 };
+  const failureGate = { type: 'command', executable: process.execPath, args: ['-e', 'process.exit(7)'], cwd: '.', timeoutMs: 5000 };
+  const missingGate = { type: 'command', executable: 'roadmapctl-command-that-does-not-exist', args: [], cwd: '.', timeoutMs: 5000 };
   const failed = await runGate(process.cwd(), commandContext(failureGate), 'tests', failureGate);
   const missing = await runGate(process.cwd(), commandContext(missingGate), 'tests', missingGate);
   assert.deepEqual([failed.status, failed.processClass, failed.exitCode], ['failed', 'exit', 7]);

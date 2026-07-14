@@ -21,19 +21,31 @@ export function parseGlobalArgs(argv) {
   if (tokens.some(token => token === '--root')) usage('--root must be the leading option');
   const command = tokens.shift();
   if (!command) usage('a command is required');
-  if (!['validate', 'scope', 'render'].includes(command)) usage(`unknown command: ${command}`);
+  if (!['validate', 'scope', 'render', 'start', 'next'].includes(command)) usage(`unknown command: ${command}`);
   if (command === 'scope' && tokens.length !== 1) usage('scope requires exactly one selector');
-  if (command !== 'scope' && tokens.length !== 0) usage(`${command} does not accept arguments`);
-  return { root, command, args: tokens };
+  if (command === 'start') {
+    if (tokens.length < 1 || tokens.length > 2) usage('start requires one selector and an optional authorization flag');
+    if (tokens.length === 2 && tokens[1] !== '--manifest-approved') usage('start accepts only --manifest-approved');
+  }
+  if (command === 'next' && tokens.length !== 1) usage('next requires exactly one run id');
+  if (!['scope', 'start', 'next'].includes(command) && tokens.length !== 0) usage(`${command} does not accept arguments`);
+  return {
+    root,
+    command,
+    args: tokens,
+    options: { manifestApproved: command === 'start' && tokens[1] === '--manifest-approved' }
+  };
 }
 
 export async function main(argv, io = { stdout: process.stdout, stderr: process.stderr }) {
-  const { root, command, args } = parseGlobalArgs(argv);
+  const { root, command, args, options } = parseGlobalArgs(argv);
   const controller = await RoadmapController.open(root);
   const handlers = {
     validate: () => controller.validate(),
     scope: () => controller.scope(args[0]),
-    render: () => controller.render()
+    render: () => controller.render(),
+    start: () => controller.start(args[0], options),
+    next: () => controller.next(args[0])
   };
   const result = await handlers[command]();
   io.stdout.write(canonicalStringify(result));

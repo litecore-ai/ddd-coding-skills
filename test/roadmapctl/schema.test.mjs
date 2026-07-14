@@ -283,9 +283,12 @@ test('spec rejects legacy Markdown input', () => {
   expectSchemaError(() => parseSpec('## Acceptance Criteria\n\n- Given x when y then z'), '$', /object/);
 });
 
-for (const [name, parse] of [['run', parseRun], ['report', parseReport]]) {
+for (const [name, parse, create] of [
+  ['run', parseRun, overrides => validRun(overrides)],
+  ['report', parseReport, overrides => ({ schemaVersion: 1, revision: 3, runId: 'run-001', status: 'running', ...overrides })]
+]) {
   test(`${name} parser validates and deeply freezes the common envelope`, () => {
-    const value = { schemaVersion: 1, revision: 3, runId: 'run-001', status: 'running' };
+    const value = create({ revision: 3 });
     const parsed = parse(value);
 
     assert.deepEqual(parsed, value);
@@ -294,12 +297,12 @@ for (const [name, parse] of [['run', parseRun], ['report', parseReport]]) {
   });
 
   test(`${name} parser rejects unknown envelope keys`, () => {
-    const value = { schemaVersion: 1, revision: 3, runId: 'run-001', status: 'running', legacy: true };
+    const value = create({ legacy: true });
     expectSchemaError(() => parse(value), '$.legacy', /unknown key legacy/);
   });
 
   test(`${name} parser rejects invalid envelope fields with a full path`, () => {
-    const value = { schemaVersion: 1, revision: '3', runId: 'run-001', status: 'running' };
+    const value = create({ revision: '3' });
     expectSchemaError(() => parse(value), '$.revision', /non-negative integer/);
   });
 }

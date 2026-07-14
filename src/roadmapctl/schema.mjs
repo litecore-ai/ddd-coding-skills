@@ -9,7 +9,33 @@ const NODE_KEYS = Object.freeze({
 const ITEM_STATES = ['planned', 'blocked', 'failed', 'cancelled', 'done'];
 const SPEC_KEYS = ['schemaVersion', 'id', 'title', 'status', 'acceptanceCriteria', 'sharedContracts', 'consumers'];
 const REPORT_KEYS = ['schemaVersion', 'revision', 'runId', 'status'];
-const RUN_KEYS = [...REPORT_KEYS, 'pendingTransaction'];
+const RUN_KEYS = [
+  ...REPORT_KEYS,
+  'selector',
+  'scope',
+  'originalBranch',
+  'runBranch',
+  'baselineSha',
+  'manifestAuthorization',
+  'maxAttemptsPerItem',
+  'currentItemId',
+  'attempts',
+  'events',
+  'pendingTransaction'
+];
+const ATTEMPT_KEYS = [
+  'number',
+  'state',
+  'itemBaselineSha',
+  'implementationSha',
+  'changedFiles',
+  'acIds',
+  'evidence',
+  'reason',
+  'startedAt',
+  'finishedAt'
+];
+const EVENT_KEYS = ['sequence', 'at', 'type', 'itemId', 'details'];
 const TRANSACTION_KEYS = [
   'id',
   'type',
@@ -24,6 +50,8 @@ const TRANSACTION_KEYS = [
 const BUILT_IN_GATES = new Set(['spec']);
 const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const TRANSACTION_ID = /^tx-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const ITEM_ID = /^P\d+\.\d+\.\d+$/;
+const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const UNSAFE_SHELL = /[\0\r\n|&;<>`]|\$\(/;
 
 function fail(path, message, details = {}) {
@@ -238,6 +266,106 @@ function nullableGitObjectId(value, path) {
   pattern(value, GIT_OBJECT_ID, path, 'must be null or a 40- or 64-character lowercase Git object ID');
 }
 
+function gitObjectId(value, path) {
+  string(value, path);
+  pattern(value, GIT_OBJECT_ID, path, 'must be a 40- or 64-character lowercase Git object ID');
+}
+
+function timestamp(value, path, { nullable = false } = {}) {
+  if (nullable && value === null) return;
+  string(value, path);
+  if (!Number.isFinite(Date.parse(value))) fail(path, 'must be an ISO timestamp');
+}
+
+function validateAttempt(attempt, path, expectedNumber) {
+  object(attempt, path);
+  rejectUnknown(attempt, ATTEMPT_KEYS, path);
+  positiveSafeInteger(attempt.number, `${path}.number`);
+  if (attempt.number !== expectedNumber) fail(`${path}.number`, `must equal attempt position ${expectedNumber}`);
+  enumValue(attempt.state, ['in_progress', 'verifying', 'done', 'blocked', 'failed', 'cancelled'], `${path}.state`);
+  gitObjectId(attempt.itemBaselineSha, `${path}.itemBaselineSha`);
+  nullableGitObjectId(attempt.implementationSha, `${path}.implementationSha`);
+  stringArray(attempt.changedFiles, `${path}.changedFiles`);
+  stringArray(attempt.acIds, `${path}.acIds`);
+  uniqueStrings(attempt.changedFiles, `${path}.changedFiles`, 'changed path');
+  uniqueStrings(attempt.acIds, `${path}.acIds`, 'acceptance-criterion id');
+  object(attempt.evidence, `${path}.evidence`);
+  if (attempt.reason !== null) {
+    object(attempt.reason, `${path}.reason`);
+    rejectUnknown(attempt.reason, ['code', 'message', 'details'], `${path}.reason`);
+    string(attempt.reason.code, `${path}.reason.code`);
+    string(attempt.reason.message, `${path}.reason.message`);
+    object(attempt.reason.details, `${path}.reason.details`);
+  }
+  timestamp(attempt.startedAt, `${path}.startedAt`);
+  timestamp(attempt.finishedAt, `${path}.finishedAt`, { nullable: true });
+  if (['in_progress', 'verifying'].includes(attempt.state) && attempt.finishedAt !== null) {
+    fail(`${path}.finishedAt`, 'must be null for an active attempt');
+  }
+  if (!['in_progress', 'verifying'].includes(attempt.state) && attempt.finishedAt === null) {
+    fail(`${path}.finishedAt`, 'must be present for a settled attempt');
+  }
+}
+
+function validateRun(run) {
+  string(run.runId, '$.runId');
+  string(run.selector, '$.selector');
+  stringArray(run.scope, '$.scope', { minLength: 1 });
+  uniqueStrings(run.scope, '$.scope', 'item id');
+  run.scope.forEach((id, index) => pattern(id, ITEM_ID, `$.scope[${index}]`, 'must be an item id'));
+  enumValue(run.status, ['active', 'successful', 'blocked', 'failed', 'cancelled', 'capped'], '$.status');
+  string(run.originalBranch, '$.originalBranch');
+  string(run.runBranch, '$.runBranch');
+  gitObjectId(run.baselineSha, '$.baselineSha');
+
+  object(run.manifestAuthorization, '$.manifestAuthorization');
+  rejectUnknown(run.manifestAuthorization, ['mode', 'hash'], '$.manifestAuthorization');
+  enumValue(run.manifestAuthorization.mode, ['sandboxed', 'approved'], '$.manifestAuthorization.mode');
+  string(run.manifestAuthorization.hash, '$.manifestAuthorization.hash');
+  pattern(run.manifestAuthorization.hash, DIGEST, '$.manifestAuthorization.hash', 'must be a sha256 digest');
+  positiveSafeInteger(run.maxAttemptsPerItem, '$.maxAttemptsPerItem');
+
+  if (run.currentItemId !== null) {
+    string(run.currentItemId, '$.currentItemId');
+    pattern(run.currentItemId, ITEM_ID, '$.currentItemId', 'must be null or an item id');
+    if (!run.scope.includes(run.currentItemId)) fail('$.currentItemId', 'must belong to the run scope');
+  }
+
+  object(run.attempts, '$.attempts');
+  let activeAttemptId = null;
+  for (const [itemId, attempts] of Object.entries(run.attempts)) {
+    pattern(itemId, ITEM_ID, `$.attempts.${itemId}`, 'attempt key must be an item id');
+    if (!run.scope.includes(itemId)) fail(`$.attempts.${itemId}`, 'attempt item must belong to the run scope');
+    array(attempts, `$.attempts.${itemId}`, { minLength: 1 });
+    if (attempts.length > run.maxAttemptsPerItem) fail(`$.attempts.${itemId}`, 'exceeds the per-item attempt cap');
+    attempts.forEach((attempt, index) => validateAttempt(attempt, `$.attempts.${itemId}[${index}]`, index + 1));
+    const last = attempts.at(-1);
+    if (['in_progress', 'verifying'].includes(last.state)) {
+      if (activeAttemptId !== null) fail(`$.attempts.${itemId}`, 'only one item may have an active attempt');
+      activeAttemptId = itemId;
+    }
+  }
+  if (activeAttemptId !== run.currentItemId) fail('$.currentItemId', 'must identify the only active attempt');
+  if (run.status !== 'active' && run.currentItemId !== null) fail('$.currentItemId', 'closed runs cannot retain an active item');
+
+  array(run.events, '$.events');
+  run.events.forEach((event, index) => {
+    const path = `$.events[${index}]`;
+    object(event, path);
+    rejectUnknown(event, EVENT_KEYS, path);
+    positiveSafeInteger(event.sequence, `${path}.sequence`);
+    if (event.sequence !== index + 1) fail(`${path}.sequence`, `must equal event position ${index + 1}`);
+    timestamp(event.at, `${path}.at`);
+    string(event.type, `${path}.type`);
+    if (event.itemId !== null) {
+      string(event.itemId, `${path}.itemId`);
+      pattern(event.itemId, ITEM_ID, `${path}.itemId`, 'must be null or an item id');
+      if (!run.scope.includes(event.itemId)) fail(`${path}.itemId`, 'must belong to the run scope');
+    }
+    object(event.details, `${path}.details`);
+  });
+}
+
 function validateTransaction(transaction, path) {
   object(transaction, path);
   rejectUnknown(transaction, TRANSACTION_KEYS, path);
@@ -327,6 +455,7 @@ export function parseSpec(value) {
 export function parseRun(value) {
   const run = cloneDocument(value);
   validateCommonEnvelope(run, RUN_KEYS);
+  validateRun(run);
   if (run.pendingTransaction !== undefined && run.pendingTransaction !== null) {
     validateTransaction(run.pendingTransaction, '$.pendingTransaction');
   }

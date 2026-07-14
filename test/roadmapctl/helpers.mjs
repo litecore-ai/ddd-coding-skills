@@ -5,6 +5,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { sha256 } from '../../src/roadmapctl/canonical-json.mjs';
+
 const execFileAsync = promisify(execFile);
 
 export async function gitFixture() {
@@ -97,6 +99,16 @@ export function validRun(overrides = {}) {
     revision: 0,
     runId: 'r1',
     status: 'active',
+    selector: 'P1.1.1',
+    scope: ['P1.1.1'],
+    originalBranch: 'main',
+    runBranch: 'ddd/run/r1',
+    baselineSha: '0'.repeat(40),
+    manifestAuthorization: { mode: 'sandboxed', hash: `sha256:${'0'.repeat(64)}` },
+    maxAttemptsPerItem: 3,
+    currentItemId: null,
+    attempts: {},
+    events: [],
     pendingTransaction: null,
     ...overrides
   };
@@ -138,4 +150,59 @@ export function runCli(root, args) {
     child.once('error', reject);
     child.once('close', exitCode => resolve({ exitCode, stdout, stderr }));
   });
+}
+
+export async function lifecycleFixture() {
+  const repo = await gitFixture();
+  const spec = validSpec();
+  const roadmap = twoLeafRoadmap();
+  roadmap.nodes[3].dependsOn = ['P1.1.1'];
+  for (const item of roadmap.nodes.filter(node => node.kind === 'item')) {
+    item.spec.hash = sha256(spec);
+  }
+
+  await repo.write('.gitignore', '.ddd/\n');
+  await repo.write('docs/roadmap/roadmap.json', `${JSON.stringify(roadmap, null, 2)}\n`);
+  await repo.write('docs/specs/P1.1-profile.json', `${JSON.stringify(spec, null, 2)}\n`);
+  await repo.write('test/gate-pass.mjs', "process.stdout.write('ok\\n');\n");
+  for (const gate of ['tests', 'consumer', 'e2e']) {
+    roadmap.gates[gate] = {
+      type: 'command',
+      executable: process.execPath,
+      args: ['test/gate-pass.mjs'],
+      cwd: '.',
+      timeoutMs: 5_000
+    };
+  }
+  await repo.write('docs/roadmap/roadmap.json', `${JSON.stringify(roadmap, null, 2)}\n`);
+  await repo.git(['add', '--', '.gitignore', 'docs/roadmap/roadmap.json', 'docs/specs/P1.1-profile.json', 'test/gate-pass.mjs']);
+  await repo.git(['commit', '-m', 'test: add lifecycle fixture']);
+
+  async function cli(args) {
+    const result = await runCli(repo.root, args);
+    if (result.exitCode !== 0) {
+      const error = new Error(result.stderr || `roadmapctl exited ${result.exitCode}`);
+      error.exitCode = result.exitCode;
+      error.diagnostic = result.stderr ? JSON.parse(result.stderr) : null;
+      throw error;
+    }
+    assertEmpty(result.stderr);
+    return JSON.parse(result.stdout);
+  }
+
+  return {
+    ...repo,
+    cli,
+    rawCli: args => runCli(repo.root, args),
+    implementationCommit: async (path, contents) => {
+      await repo.write(path, contents);
+      await repo.git(['add', '--', path]);
+      await repo.git(['commit', '-m', `feat: implement ${path}`]);
+      return (await repo.git(['rev-parse', 'HEAD'])).stdout.trim();
+    }
+  };
+}
+
+function assertEmpty(value) {
+  if (value !== '') throw new Error(`unexpected stderr: ${value}`);
 }
