@@ -97,12 +97,38 @@ async function validateStaleJournal(options, owner, fs) {
   }
 }
 
-async function restoreMovedLock(diagnosticPath, lockPath, fs) {
+async function failClosedAfterQuarantine(lockPath, diagnosticPath, cause, fs, {
+  code = cause?.code?.startsWith?.('LOCK_') ? cause.code : 'LOCK_RECOVERY_REQUIRED',
+  message = cause?.code?.startsWith?.('LOCK_')
+    ? cause.message
+    : `Lock recovery is required for ${lockPath}`,
+  details = {}
+} = {}) {
+  let reservationCreated = false;
+  let reservationError;
   try {
-    await fs.rename(diagnosticPath, lockPath);
+    await fs.mkdir(lockPath, { mode: 0o700 });
+    reservationCreated = true;
   } catch (error) {
-    if (error.code !== 'EEXIST') throw error;
+    if (error.code !== 'EEXIST') reservationError = error;
   }
+
+  throw lockError(code, message, {
+    ...(cause?.details ?? {}),
+    ...details,
+    lockPath,
+    diagnosticPath,
+    reservationPath: lockPath,
+    reservationCreated,
+    causeCode: cause?.code ?? null,
+    cause: cause?.message ?? String(cause),
+    ...(reservationError
+      ? {
+          reservationErrorCode: reservationError.code ?? null,
+          reservationError: reservationError.message
+        }
+      : {})
+  });
 }
 
 function identityOf(stat) {
@@ -136,15 +162,14 @@ async function quarantineStaleLock(lockPath, owner, fs, createId) {
   try {
     movedOwner = await readOwner(diagnosticPath, fs);
   } catch (error) {
-    await restoreMovedLock(diagnosticPath, lockPath, fs);
-    throw error;
+    await failClosedAfterQuarantine(lockPath, diagnosticPath, error, fs);
   }
   if (movedOwner.token !== owner.token) {
-    await restoreMovedLock(diagnosticPath, lockPath, fs);
-    throw lockError('LOCK_RACE', 'Lock owner changed while stale recovery was in progress', {
+    const error = lockError('LOCK_RACE', 'Lock owner changed while stale recovery was in progress', {
       expectedToken: owner.token,
       actualToken: movedOwner.token
     });
+    await failClosedAfterQuarantine(lockPath, diagnosticPath, error, fs);
   }
 
   // The moved name can be replaced after revalidation. Retain every diagnostic
@@ -152,17 +177,21 @@ async function quarantineStaleLock(lockPath, owner, fs, createId) {
   return true;
 }
 
-async function cleanFailedAcquisition(lockPath, token, identity, fs, createId) {
-  if (!await pathHasIdentity(lockPath, identity, fs)) return;
+async function cleanFailedAcquisition(lockPath, token, identity, cause, fs, createId) {
+  if (identity && !await pathHasIdentity(lockPath, identity, fs)) return;
   const diagnosticPath = `${lockPath}.failed-${token}-${createId()}`;
   try {
     await fs.rename(lockPath, diagnosticPath);
   } catch {
     return;
   }
+  if (!identity) {
+    await failClosedAfterQuarantine(lockPath, diagnosticPath, cause, fs);
+  }
   if (!await pathHasIdentity(diagnosticPath, identity, fs)) {
-    await restoreMovedLock(diagnosticPath, lockPath, fs);
-    return;
+    await failClosedAfterQuarantine(lockPath, diagnosticPath, cause, fs, {
+      message: `Lock recovery is required after failed acquisition at ${lockPath}`
+    });
   }
   // Matching identity authorizes removal from the active path, not deletion of
   // the diagnostic name, which can be replaced immediately after this check.
@@ -183,35 +212,32 @@ export async function acquireRunLock(lockPath, options = {}) {
   for (let race = 0; race < MAX_ACQUIRE_RACES; race += 1) {
     let created = false;
     let createdIdentity;
+    let token;
     try {
       await fs.mkdir(lockPath, { mode: 0o700 });
       created = true;
+      token = createId();
       createdIdentity = await pathIdentity(lockPath, fs);
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-    }
-
-    if (created) {
       const createdAt = optionValue(options.now, Date.now);
-      const token = createId();
-      try {
-        const owner = parseOwner({
-          runId,
-          pid: ownerPid,
-          hostname: localHostname,
-          createdAt: new Date(createdAt).toISOString(),
-          leaseExpiresAt: new Date(createdAt + leaseMs).toISOString(),
-          token
-        });
-        await writeJsonAtomic(join(lockPath, 'owner.json'), owner, { fs, randomUUID: createId });
-        return {
-          owner,
-          release: () => releaseRunLock(lockPath, owner, { fs, randomUUID: createId })
-        };
-      } catch (error) {
-        await cleanFailedAcquisition(lockPath, token, createdIdentity, fs, createId);
+      const owner = parseOwner({
+        runId,
+        pid: ownerPid,
+        hostname: localHostname,
+        createdAt: new Date(createdAt).toISOString(),
+        leaseExpiresAt: new Date(createdAt + leaseMs).toISOString(),
+        token
+      });
+      await writeJsonAtomic(join(lockPath, 'owner.json'), owner, { fs, randomUUID: createId });
+      return {
+        owner,
+        release: () => releaseRunLock(lockPath, owner, { fs, randomUUID: createId })
+      };
+    } catch (error) {
+      if (created) {
+        await cleanFailedAcquisition(lockPath, token, createdIdentity, error, fs, createId);
         throw error;
       }
+      if (error.code !== 'EEXIST') throw error;
     }
 
     const existing = await readOwner(lockPath, fs);
@@ -272,15 +298,14 @@ export async function releaseRunLock(lockPath, owner, options = {}) {
   try {
     moved = await readOwner(diagnosticPath, fs);
   } catch (error) {
-    await restoreMovedLock(diagnosticPath, lockPath, fs);
-    throw error;
+    await failClosedAfterQuarantine(lockPath, diagnosticPath, error, fs);
   }
   if (moved.token !== owner.token) {
-    await restoreMovedLock(diagnosticPath, lockPath, fs);
-    throw lockError('LOCK_OWNER_MISMATCH', 'Lock owner changed while release was in progress', {
+    const error = lockError('LOCK_OWNER_MISMATCH', 'Lock owner changed while release was in progress', {
       expectedToken: owner.token,
       actualToken: moved.token
     });
+    await failClosedAfterQuarantine(lockPath, diagnosticPath, error, fs);
   }
   // Successful release frees lockPath atomically but retains the moved entry.
   // A future lock-protected maintenance operation may remove diagnostics.

@@ -528,6 +528,139 @@ test('failed acquisition preserves a foreign diagnostic replacement installed af
   assert.equal(await fs.readFile(join(diagnosticPath, 'marker'), 'utf8'), foreignMarkerBytes);
 });
 
+test('failed-acquisition identity mismatch never restores over a foreign empty canonical directory', async t => {
+  const directory = await temporaryDirectory(t);
+  const lockPath = join(directory, 'run.lock');
+  const diagnosticPath = `${lockPath}.failed-${NEXT_TOKEN}-${NEXT_TOKEN}`;
+  const foreignMarkerBytes = 'foreign failed-acquisition mismatch diagnostic';
+  const fault = errorWithCode('EIO', 'injected owner write failure before identity mismatch');
+  let foreignCanonicalIdentity;
+  const injected = {
+    ...fs,
+    async open(path, flags, mode) {
+      if (flags === 'wx' && basename(path).startsWith('owner.json.tmp-')) throw fault;
+      return fs.open(path, flags, mode);
+    },
+    async rename(source, destination) {
+      await fs.rename(source, destination);
+      if (source === lockPath && destination === diagnosticPath) {
+        await fs.mkdir(lockPath);
+        foreignCanonicalIdentity = await fs.lstat(lockPath, { bigint: true });
+        await fs.rm(diagnosticPath, { recursive: true });
+        await fs.mkdir(diagnosticPath);
+        await fs.writeFile(join(diagnosticPath, 'marker'), foreignMarkerBytes);
+      }
+    }
+  };
+
+  await assert.rejects(
+    acquireRunLock(lockPath, lockOptions({ fs: injected })),
+    error => error.code === 'LOCK_RECOVERY_REQUIRED'
+      && error.details.diagnosticPath === diagnosticPath
+      && error.details.reservationCreated === false
+      && error.details.causeCode === 'EIO'
+  );
+
+  const retainedCanonicalIdentity = await fs.lstat(lockPath, { bigint: true });
+  assert.equal(retainedCanonicalIdentity.dev, foreignCanonicalIdentity.dev);
+  assert.equal(retainedCanonicalIdentity.ino, foreignCanonicalIdentity.ino);
+  assert.deepEqual(await fs.readdir(lockPath), []);
+  assert.equal(await fs.readFile(join(diagnosticPath, 'marker'), 'utf8'), foreignMarkerBytes);
+});
+
+test('post-mkdir identity failure quarantines the created directory and installs a fail-closed reservation', async t => {
+  const directory = await temporaryDirectory(t);
+  const lockPath = join(directory, 'run.lock');
+  const diagnosticPath = `${lockPath}.failed-${NEXT_TOKEN}-${NEXT_TOKEN}`;
+  const fault = errorWithCode('EIO', 'injected post-mkdir identity failure');
+  let createdIdentity;
+  let failed = false;
+  const injected = {
+    ...fs,
+    async lstat(path, options) {
+      const identity = await fs.lstat(path, options);
+      if (!failed && path === lockPath) {
+        failed = true;
+        createdIdentity = identity;
+        throw fault;
+      }
+      return identity;
+    }
+  };
+
+  await assert.rejects(
+    acquireRunLock(lockPath, lockOptions({ fs: injected })),
+    error => error.code === 'LOCK_RECOVERY_REQUIRED'
+      && error.details.diagnosticPath === diagnosticPath
+      && error.details.reservationCreated === true
+      && error.details.causeCode === 'EIO'
+  );
+
+  const diagnosticIdentity = await fs.lstat(diagnosticPath, { bigint: true });
+  assert.equal(diagnosticIdentity.dev, createdIdentity.dev);
+  assert.equal(diagnosticIdentity.ino, createdIdentity.ino);
+  assert.deepEqual(await fs.readdir(diagnosticPath), []);
+  const reservationIdentity = await fs.lstat(lockPath, { bigint: true });
+  assert.notEqual(reservationIdentity.ino, diagnosticIdentity.ino);
+  assert.equal(Number(reservationIdentity.mode & 0o777n), 0o700);
+  assert.deepEqual(await fs.readdir(lockPath), []);
+
+  await assert.rejects(
+    acquireRunLock(lockPath, lockOptions()),
+    error => error.code === 'LOCK_CORRUPT'
+  );
+  const retainedReservationIdentity = await fs.lstat(lockPath, { bigint: true });
+  assert.equal(retainedReservationIdentity.dev, reservationIdentity.dev);
+  assert.equal(retainedReservationIdentity.ino, reservationIdentity.ino);
+  assert.deepEqual(await fs.readdir(diagnosticPath), []);
+});
+
+test('fail-closed reservation creation never touches a foreign canonical race winner', async t => {
+  const directory = await temporaryDirectory(t);
+  const lockPath = join(directory, 'run.lock');
+  const diagnosticPath = `${lockPath}.failed-${NEXT_TOKEN}-${NEXT_TOKEN}`;
+  const fault = errorWithCode('EIO', 'injected post-mkdir identity failure before reservation race');
+  let createdIdentity;
+  let foreignCanonicalIdentity;
+  let failed = false;
+  const injected = {
+    ...fs,
+    async lstat(path, options) {
+      const identity = await fs.lstat(path, options);
+      if (!failed && path === lockPath) {
+        failed = true;
+        createdIdentity = identity;
+        throw fault;
+      }
+      return identity;
+    },
+    async rename(source, destination) {
+      await fs.rename(source, destination);
+      if (source === lockPath && destination === diagnosticPath) {
+        await fs.mkdir(lockPath);
+        foreignCanonicalIdentity = await fs.lstat(lockPath, { bigint: true });
+      }
+    }
+  };
+
+  await assert.rejects(
+    acquireRunLock(lockPath, lockOptions({ fs: injected })),
+    error => error.code === 'LOCK_RECOVERY_REQUIRED'
+      && error.details.diagnosticPath === diagnosticPath
+      && error.details.reservationCreated === false
+      && error.details.causeCode === 'EIO'
+  );
+
+  const diagnosticIdentity = await fs.lstat(diagnosticPath, { bigint: true });
+  assert.equal(diagnosticIdentity.dev, createdIdentity.dev);
+  assert.equal(diagnosticIdentity.ino, createdIdentity.ino);
+  assert.deepEqual(await fs.readdir(diagnosticPath), []);
+  const retainedCanonicalIdentity = await fs.lstat(lockPath, { bigint: true });
+  assert.equal(retainedCanonicalIdentity.dev, foreignCanonicalIdentity.dev);
+  assert.equal(retainedCanonicalIdentity.ino, foreignCanonicalIdentity.ino);
+  assert.deepEqual(await fs.readdir(lockPath), []);
+});
+
 test('foreign lock cannot be released and remains byte-for-byte unchanged', async t => {
   const directory = await temporaryDirectory(t);
   const lockPath = join(directory, 'run.lock');
@@ -547,9 +680,10 @@ test('foreign lock cannot be released and remains byte-for-byte unchanged', asyn
   await acquired.release();
 });
 
-test('release restores corrupt metadata discovered after quarantine instead of freeing the lock path', async t => {
+test('release quarantines corrupt metadata and reserves the active lock path for recovery', async t => {
   const directory = await temporaryDirectory(t);
   const lockPath = join(directory, 'run.lock');
+  const diagnosticPath = `${lockPath}.release-${OWNER_TOKEN}-${NEXT_TOKEN}`;
   const owner = fixedOwner();
   await seedLock(lockPath, owner);
   const injected = {
@@ -563,9 +697,54 @@ test('release restores corrupt metadata discovered after quarantine instead of f
   await assert.rejects(
     releaseRunLock(lockPath, owner, { fs: injected, randomUUID: () => NEXT_TOKEN }),
     error => error.code === 'LOCK_CORRUPT'
+      && error.details.diagnosticPath === diagnosticPath
+      && error.details.reservationCreated === true
   );
-  assert.equal(await fs.readFile(join(lockPath, 'owner.json'), 'utf8'), '{corrupt replacement');
+  assert.equal(await fs.readFile(join(diagnosticPath, 'owner.json'), 'utf8'), '{corrupt replacement');
+  assert.deepEqual(await fs.readdir(lockPath), []);
+  const reservation = await fs.lstat(lockPath, { bigint: true });
+  assert.equal(Number(reservation.mode & 0o777n), 0o700);
 });
+
+for (const movedOwner of ['corrupt', 'token-mismatch']) {
+  test(`release ${movedOwner} never restores a diagnostic over a foreign empty canonical directory`, async t => {
+    const directory = await temporaryDirectory(t);
+    const lockPath = join(directory, 'run.lock');
+    const diagnosticPath = `${lockPath}.release-${OWNER_TOKEN}-${NEXT_TOKEN}`;
+    const owner = fixedOwner();
+    const movedOwnerBytes = movedOwner === 'corrupt'
+      ? '{corrupt moved owner'
+      : canonicalStringify(fixedOwner({ token: FOREIGN_TOKEN, pid: 6262 }));
+    let foreignCanonicalIdentity;
+    await seedLock(lockPath, owner);
+    const injected = {
+      ...fs,
+      async rename(source, destination) {
+        await fs.rename(source, destination);
+        if (source === lockPath && destination === diagnosticPath) {
+          await fs.mkdir(lockPath);
+          foreignCanonicalIdentity = await fs.lstat(lockPath, { bigint: true });
+          await fs.writeFile(join(diagnosticPath, 'owner.json'), movedOwnerBytes);
+        }
+      }
+    };
+
+    const expectedCode = movedOwner === 'corrupt' ? 'LOCK_CORRUPT' : 'LOCK_OWNER_MISMATCH';
+    await assert.rejects(
+      releaseRunLock(lockPath, owner, { fs: injected, randomUUID: () => NEXT_TOKEN }),
+      error => error.code === expectedCode
+        && error.details.diagnosticPath === diagnosticPath
+        && error.details.reservationCreated === false
+        && error.details.causeCode === expectedCode
+    );
+
+    const retainedCanonicalIdentity = await fs.lstat(lockPath, { bigint: true });
+    assert.equal(retainedCanonicalIdentity.dev, foreignCanonicalIdentity.dev);
+    assert.equal(retainedCanonicalIdentity.ino, foreignCanonicalIdentity.ino);
+    assert.deepEqual(await fs.readdir(lockPath), []);
+    assert.equal(await fs.readFile(join(diagnosticPath, 'owner.json'), 'utf8'), movedOwnerBytes);
+  });
+}
 
 test('release preserves a foreign diagnostic replacement installed after moved owner read', async t => {
   const directory = await temporaryDirectory(t);
@@ -686,6 +865,41 @@ test('stale recovery preserves a foreign diagnostic replacement installed after 
   assert.equal(await fs.readFile(join(diagnosticPath, 'marker'), 'utf8'), foreignMarkerBytes);
 });
 
+test('stale-recovery mismatch never restores a diagnostic over a foreign empty canonical directory', async t => {
+  const directory = await temporaryDirectory(t);
+  const lockPath = join(directory, 'run.lock');
+  const diagnosticPath = `${lockPath}.stale-${OWNER_TOKEN}-${NEXT_TOKEN}`;
+  const journalPath = await seedJournal(directory);
+  const movedOwnerBytes = canonicalStringify(fixedOwner({ token: FOREIGN_TOKEN, pid: 6262 }));
+  let foreignCanonicalIdentity;
+  await seedLock(lockPath);
+  const injected = {
+    ...fs,
+    async rename(source, destination) {
+      await fs.rename(source, destination);
+      if (source === lockPath && destination === diagnosticPath) {
+        await fs.mkdir(lockPath);
+        foreignCanonicalIdentity = await fs.lstat(lockPath, { bigint: true });
+        await fs.writeFile(join(diagnosticPath, 'owner.json'), movedOwnerBytes);
+      }
+    }
+  };
+
+  await assert.rejects(
+    acquireRunLock(lockPath, lockOptions({ fs: injected, journalPath, journalParser: parseRun })),
+    error => error.code === 'LOCK_RACE'
+      && error.details.diagnosticPath === diagnosticPath
+      && error.details.reservationCreated === false
+      && error.details.causeCode === 'LOCK_RACE'
+  );
+
+  const retainedCanonicalIdentity = await fs.lstat(lockPath, { bigint: true });
+  assert.equal(retainedCanonicalIdentity.dev, foreignCanonicalIdentity.dev);
+  assert.equal(retainedCanonicalIdentity.ino, foreignCanonicalIdentity.ino);
+  assert.deepEqual(await fs.readdir(lockPath), []);
+  assert.equal(await fs.readFile(join(diagnosticPath, 'owner.json'), 'utf8'), movedOwnerBytes);
+});
+
 test('remote owner is recovered only after lease expiry', async t => {
   const directory = await temporaryDirectory(t);
   const lockPath = join(directory, 'run.lock');
@@ -761,9 +975,10 @@ test('unexpected same-host process probe errors never trigger recovery', async t
   assert.equal((await readJson(join(lockPath, 'owner.json'), value => value)).token, OWNER_TOKEN);
 });
 
-test('stale rename revalidates the token and never deletes a concurrently replaced lock', async t => {
+test('stale rename quarantines a concurrently replaced lock and reserves the active path', async t => {
   const directory = await temporaryDirectory(t);
   const lockPath = join(directory, 'run.lock');
+  const diagnosticPath = `${lockPath}.stale-${OWNER_TOKEN}-${NEXT_TOKEN}`;
   const journalPath = await seedJournal(directory);
   await seedLock(lockPath);
   const replacement = fixedOwner({ token: FOREIGN_TOKEN, pid: 6262 });
@@ -784,9 +999,14 @@ test('stale rename revalidates the token and never deletes a concurrently replac
   await assert.rejects(
     acquireRunLock(lockPath, lockOptions({ fs: injected, journalPath, journalParser: parseRun })),
     error => error.code === 'LOCK_RACE'
+      && error.details.diagnosticPath === diagnosticPath
+      && error.details.reservationCreated === true
   );
 
-  assert.deepEqual(await readJson(join(lockPath, 'owner.json'), value => value), replacement);
+  assert.deepEqual(await readJson(join(diagnosticPath, 'owner.json'), value => value), replacement);
+  assert.deepEqual(await fs.readdir(lockPath), []);
+  const reservation = await fs.lstat(lockPath, { bigint: true });
+  assert.equal(Number(reservation.mode & 0o777n), 0o700);
 });
 
 test('corrupt owner metadata is preserved and never treated as stale', async t => {

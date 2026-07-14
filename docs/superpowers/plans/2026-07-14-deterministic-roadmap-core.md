@@ -381,7 +381,7 @@ test('foreign lock cannot be released', async () => {
 });
 ```
 
-Cover temporary-write failure, stale same-host PID, live owner, expired remote-host lease, corrupt journal preservation, idempotent transaction markers, and real-filesystem replacement of failed-acquisition, stale-recovery, and release diagnostics after their final owner/identity revalidation point.
+Cover temporary-write failure, stale same-host PID, live owner, expired remote-host lease, corrupt journal preservation, idempotent transaction markers, and real-filesystem replacement of failed-acquisition, stale-recovery, and release diagnostics after their final owner/identity revalidation point. Also cover corrupt/token-mismatched moved owners when a foreign empty canonical directory already exists, a failed-acquisition identity mismatch, failure of the first identity `lstat` after successful `mkdir`, and an `EEXIST` race while creating the fail-closed reservation. Assert diagnostic retention, foreign canonical inode retention, typed recovery details, and stable rejection of an empty reservation on the next acquisition.
 
 - [ ] **Step 2: Run store tests and confirm failure**
 
@@ -413,7 +413,7 @@ Use this transaction envelope in the run schema:
 
 - [ ] **Step 4: Implement atomic directory locks**
 
-Create the lock with `mkdir`, then atomically write `owner.json` containing `runId`, PID, hostname, ISO creation time, lease expiry, and `randomUUID()` token. Treat a same-host PID as live when `process.kill(pid, 0)` succeeds or returns `EPERM`. Recover only absent same-host processes or expired remote leases. Release, failed-acquisition cleanup, and stale recovery atomically rename the active lock path to an unpredictable diagnostic name before token/inode revalidation. Matching identity authorizes freeing the active path but never deleting the diagnostic; mismatches retain the existing no-overwrite restoration/error rules. Automated paths never call `rm`, `rmdir`, or unlink on lock diagnostics. A future explicit, lock-protected maintenance operation is responsible for inspection and cleanup.
+Create the lock with `mkdir`, then atomically write `owner.json` containing `runId`, PID, hostname, ISO creation time, lease expiry, and `randomUUID()` token. Treat a same-host PID as live when `process.kill(pid, 0)` succeeds or returns `EPERM`. Recover only absent same-host processes or expired remote leases. Release, failed-acquisition cleanup, and stale recovery atomically rename the active lock path to an unpredictable diagnostic name before token/inode revalidation. Matching identity authorizes freeing the active path but never deleting the diagnostic. Mismatch, corruption, or unknown identity never renames a diagnostic back: retain it, preserve the original typed lock error when possible, and fail closed with `diagnosticPath`, cause, and reservation details. Reserve a missing canonical path only with atomic `mkdir(lockPath, { mode: 0o700 })`; on `EEXIST`, do not inspect, rename, delete, or overwrite the concurrent winner. A later acquisition must reject an empty reservation as recovery-required or corrupt. Put the first post-`mkdir` identity read and owner initialization in the same cleanup boundary so every failure quarantines without identity-based deletion. Automated paths never call `rm`, `rmdir`, or unlink on lock diagnostics. A future explicit, lock-protected maintenance operation is responsible for inspection and cleanup.
 
 - [ ] **Step 5: Run store tests and commit**
 
