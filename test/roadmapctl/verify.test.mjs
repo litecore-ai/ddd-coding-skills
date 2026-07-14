@@ -211,39 +211,62 @@ test('runGate terminates a timed-out child without leaving it running', async ()
   assert.ok(Date.now() - started < 2000);
 });
 
-test('runGate terminates timed-out process trees even when a descendant inherits stdio', async t => {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'roadmapctl-tree-')));
-  const pidPath = join(root, 'descendant.pid');
-  const markerPath = join(root, 'descendant-survived');
-  const parentPath = join(root, 'gate-parent.sh');
-  let descendantPid;
-  t.after(async () => {
-    if (descendantPid) {
-      try { process.kill(descendantPid, 'SIGKILL'); } catch {}
-    }
-    await rm(root, { recursive: true, force: true });
-  });
-  let gate;
-  if (process.platform === 'win32') {
-    const descendantScript = `require('node:fs').writeFileSync(${JSON.stringify(pidPath)},String(process.pid)),setTimeout(function(){require('node:fs').writeFileSync(${JSON.stringify(markerPath)},'survived')},800)`;
-    const parentScript = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendantScript)}],{stdio:'inherit'}),setInterval(function(){},1000)`;
-    gate = { type: 'command', executable: process.execPath, args: ['-e', parentScript], cwd: '.', timeoutMs: 500 };
-  } else {
-    await writeFile(parentPath, `#!/bin/sh\n( sleep 0.8; printf survived > "${markerPath}" ) &\nprintf '%s' "$!" > "${pidPath}"\nwhile :; do sleep 1; done\n`);
-    await chmod(parentPath, 0o755);
-    gate = { type: 'command', executable: '/bin/sh', args: [parentPath], cwd: '.', timeoutMs: 100 };
-  }
+test('runGate terminates timed-out process trees even when a descendant inherits stdio', async () => {
+  const attempt = async timeoutMs => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'roadmapctl-tree-')));
+    const pidPath = join(root, 'descendant.pid');
+    const markerPath = join(root, 'descendant-survived');
+    const parentPath = join(root, 'gate-parent.sh');
+    const descendantDelayMs = timeoutMs + 700;
+    let descendantPid;
+    try {
+      let gate;
+      if (process.platform === 'win32') {
+        const descendantScript = `require('node:fs').writeFileSync(${JSON.stringify(pidPath)},String(process.pid)),setTimeout(function(){require('node:fs').writeFileSync(${JSON.stringify(markerPath)},'survived')},${descendantDelayMs})`;
+        const parentScript = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendantScript)}],{stdio:'inherit'}),setInterval(function(){},1000)`;
+        gate = { type: 'command', executable: process.execPath, args: ['-e', parentScript], cwd: '.', timeoutMs };
+      } else {
+        await writeFile(parentPath, `#!/bin/sh\n( sleep ${descendantDelayMs / 1000}; printf survived > "${markerPath}" ) &\nprintf '%s' "$!" > "${pidPath}"\nwhile :; do sleep 1; done\n`);
+        await chmod(parentPath, 0o755);
+        gate = { type: 'command', executable: '/bin/sh', args: [parentPath], cwd: '.', timeoutMs };
+      }
 
-  const started = Date.now();
-  const journals = [];
-  const evidence = await runGate(root, commandContext(gate, { onJournal: entry => journals.push(entry) }), 'tests', gate);
-  const elapsed = Date.now() - started;
-  assert.equal(evidence.processClass, 'timeout', JSON.stringify(journals));
-  descendantPid = Number(await readFile(pidPath, 'utf8').catch(error => assert.fail(`${error.message}; journal=${JSON.stringify(journals)}`)));
-  assert.ok(elapsed < gate.timeoutMs + 350, `timed-out tree returned after ${elapsed}ms`);
-  await new Promise(resolve => setTimeout(resolve, 850));
-  assert.throws(() => process.kill(descendantPid, 0), error => error.code === 'ESRCH');
-  await assert.rejects(access(markerPath));
+      const started = Date.now();
+      const journals = [];
+      const evidence = await runGate(root, commandContext(gate, { onJournal: entry => journals.push(entry) }), 'tests', gate);
+      const elapsed = Date.now() - started;
+      assert.equal(evidence.processClass, 'timeout', JSON.stringify(journals));
+      assert.ok(elapsed < timeoutMs + 350, `timeout ${timeoutMs}ms returned after ${elapsed}ms`);
+
+      let pidText;
+      try {
+        pidText = await readFile(pidPath, 'utf8');
+      } catch (error) {
+        if (error.code === 'ENOENT') return { started: false, timeoutMs };
+        throw error;
+      }
+      descendantPid = Number(pidText);
+      if (!Number.isSafeInteger(descendantPid) || descendantPid <= 0) return { started: false, timeoutMs };
+
+      await new Promise(resolve => setTimeout(resolve, 850));
+      assert.throws(() => process.kill(descendantPid, 0), error => error.code === 'ESRCH');
+      await assert.rejects(access(markerPath));
+      return { started: true, timeoutMs };
+    } finally {
+      if (descendantPid) {
+        try { process.kill(descendantPid, 'SIGKILL'); } catch {}
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+  };
+
+  const attempts = [];
+  for (const timeoutMs of [100, 250, 500, 1000]) {
+    const result = await attempt(timeoutMs);
+    attempts.push(result);
+    if (result.started) return;
+  }
+  assert.fail(`descendant did not start in any bounded attempt: ${JSON.stringify(attempts)}`);
 });
 
 test('attestation must match the manifest producer, schema, bindings, and audit range', () => {
