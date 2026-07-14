@@ -127,6 +127,47 @@ export function twoLeafRoadmap({ first = 'planned', second = 'planned' } = {}) {
   return roadmap;
 }
 
+export function p11SevenLeafSpec() {
+  return validSpec({
+    acceptanceCriteria: Array.from({ length: 7 }, (_, index) => {
+      const leaf = index + 1;
+      return {
+        id: `AC-P1.1-00${leaf}`,
+        given: `P1.1.${leaf} has not been completed`,
+        when: `the P1.1.${leaf} workflow succeeds`,
+        then: `the P1.1.${leaf} outcome is observable by its consumer`
+      };
+    })
+  });
+}
+
+export function p11SevenLeafRoadmap() {
+  const roadmap = validRoadmap();
+  const template = roadmap.nodes[2];
+  roadmap.nodes = [
+    roadmap.nodes[0],
+    roadmap.nodes[1],
+    ...Array.from({ length: 7 }, (_, index) => {
+      const leaf = index + 1;
+      return {
+        ...template,
+        id: `P1.1.${leaf}`,
+        title: `Profile workflow ${leaf}`,
+        outcome: `Profile workflow ${leaf} is complete end to end`,
+        dependsOn: leaf === 1 ? [] : [`P1.1.${leaf - 1}`],
+        spec: {
+          ...template.spec,
+          acceptanceCriteria: [`AC-P1.1-00${leaf}`]
+        },
+        consumers: ['ProfileController'],
+        requiredGates: ['spec', 'tests', 'consumer', 'e2e', 'audit'],
+        status: 'planned'
+      };
+    })
+  ];
+  return roadmap;
+}
+
 export async function roadmapFixture(roadmap = validRoadmap()) {
   const repo = await gitFixture();
   await repo.write('docs/roadmap/roadmap.json', `${JSON.stringify(roadmap, null, 2)}\n`);
@@ -152,11 +193,11 @@ export function runCli(root, args) {
   });
 }
 
-export async function lifecycleFixture() {
+export async function lifecycleFixture(options = {}) {
   const repo = await gitFixture();
-  const spec = validSpec();
-  const roadmap = twoLeafRoadmap();
-  roadmap.nodes[3].dependsOn = ['P1.1.1'];
+  const spec = structuredClone(options.spec ?? validSpec());
+  const roadmap = structuredClone(options.roadmap ?? twoLeafRoadmap());
+  if (options.roadmap === undefined) roadmap.nodes[3].dependsOn = ['P1.1.1'];
   for (const item of roadmap.nodes.filter(node => node.kind === 'item')) {
     item.spec.hash = sha256(spec);
   }
@@ -201,6 +242,13 @@ export async function lifecycleFixture() {
       return (await repo.git(['rev-parse', 'HEAD'])).stdout.trim();
     }
   };
+}
+
+export function p11SevenLeafLifecycleFixture() {
+  return lifecycleFixture({
+    roadmap: p11SevenLeafRoadmap(),
+    spec: p11SevenLeafSpec()
+  });
 }
 
 function assertEmpty(value) {
