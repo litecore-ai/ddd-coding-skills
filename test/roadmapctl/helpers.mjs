@@ -37,3 +37,29 @@ export function validRoadmap(overrides = {}) {
     ...overrides
   };
 }
+
+export function validTransaction(overrides = {}) {
+  return {
+    id: 'tx-550e8400-e29b-41d4-a716-446655440000',
+    type: 'settle-item',
+    state: 'prepared',
+    expectedRoadmapRevision: 4,
+    itemId: 'P1.1.1',
+    targetState: 'done',
+    implementationSha: '0'.repeat(40),
+    allowedPaths: ['docs/roadmap/roadmap.json', 'docs/roadmap/roadmap.md'],
+    bookkeepingSha: null,
+    ...overrides
+  };
+}
+
+export function validRun(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    revision: 0,
+    runId: 'r1',
+    status: 'active',
+    pendingTransaction: null,
+    ...overrides
+  };
+}

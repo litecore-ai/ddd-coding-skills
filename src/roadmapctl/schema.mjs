@@ -8,8 +8,22 @@ const NODE_KEYS = Object.freeze({
 });
 const ITEM_STATES = ['planned', 'blocked', 'failed', 'cancelled', 'done'];
 const SPEC_KEYS = ['schemaVersion', 'id', 'title', 'status', 'acceptanceCriteria', 'sharedContracts', 'consumers'];
-const ENVELOPE_KEYS = ['schemaVersion', 'revision', 'runId', 'status'];
+const REPORT_KEYS = ['schemaVersion', 'revision', 'runId', 'status'];
+const RUN_KEYS = [...REPORT_KEYS, 'pendingTransaction'];
+const TRANSACTION_KEYS = [
+  'id',
+  'type',
+  'state',
+  'expectedRoadmapRevision',
+  'itemId',
+  'targetState',
+  'implementationSha',
+  'allowedPaths',
+  'bookkeepingSha'
+];
 const BUILT_IN_GATES = new Set(['spec']);
+const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const TRANSACTION_ID = /^tx-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function fail(path, message, details = {}) {
   throw new RoadmapError('SCHEMA_INVALID', `${path}: ${message}`, { path, ...details });
@@ -204,9 +218,42 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function validateCommonEnvelope(value) {
+function nullableGitObjectId(value, path) {
+  if (value === null) return;
+  string(value, path);
+  pattern(value, GIT_OBJECT_ID, path, 'must be null or a 40- or 64-character lowercase Git object ID');
+}
+
+function validateTransaction(transaction, path) {
+  object(transaction, path);
+  rejectUnknown(transaction, TRANSACTION_KEYS, path);
+  string(transaction.id, `${path}.id`);
+  pattern(transaction.id, TRANSACTION_ID, `${path}.id`, 'must be tx- followed by a lowercase UUID');
+  enumValue(transaction.type, ['settle-item', 'close-run'], `${path}.type`);
+  enumValue(transaction.state, ['prepared', 'committed'], `${path}.state`);
+  nonNegativeInteger(transaction.expectedRoadmapRevision, `${path}.expectedRoadmapRevision`);
+  nullableGitObjectId(transaction.implementationSha, `${path}.implementationSha`);
+  stringArray(transaction.allowedPaths, `${path}.allowedPaths`, { minLength: 1 });
+  uniqueStrings(transaction.allowedPaths, `${path}.allowedPaths`, 'allowed path');
+  nullableGitObjectId(transaction.bookkeepingSha, `${path}.bookkeepingSha`);
+
+  if (transaction.type === 'settle-item') {
+    string(transaction.itemId, `${path}.itemId`);
+    pattern(transaction.itemId, /^P\d+\.\d+\.\d+$/, `${path}.itemId`, 'item id must match PNN.NN.NN');
+    enumValue(transaction.targetState, ['done', 'blocked', 'failed', 'cancelled'], `${path}.targetState`);
+  } else {
+    if (transaction.itemId !== null) fail(`${path}.itemId`, 'must be null for a close-run transaction');
+    if (transaction.targetState !== null) fail(`${path}.targetState`, 'must be null for a close-run transaction');
+  }
+
+  if (transaction.state === 'committed' && transaction.bookkeepingSha === null) {
+    fail(`${path}.bookkeepingSha`, 'must contain the bookkeeping Git object ID for a committed transaction');
+  }
+}
+
+function validateCommonEnvelope(value, allowedKeys) {
   object(value, '$');
-  rejectUnknown(value, ENVELOPE_KEYS, '$');
+  rejectUnknown(value, allowedKeys, '$');
   enumValue(value.schemaVersion, [1], '$.schemaVersion');
   nonNegativeInteger(value.revision, '$.revision');
   string(value.runId, '$.runId');
@@ -265,12 +312,15 @@ export function parseSpec(value) {
 
 export function parseRun(value) {
   const run = cloneDocument(value);
-  validateCommonEnvelope(run);
+  validateCommonEnvelope(run, RUN_KEYS);
+  if (run.pendingTransaction !== undefined && run.pendingTransaction !== null) {
+    validateTransaction(run.pendingTransaction, '$.pendingTransaction');
+  }
   return deepFreeze(run);
 }
 
 export function parseReport(value) {
   const report = cloneDocument(value);
-  validateCommonEnvelope(report);
+  validateCommonEnvelope(report, REPORT_KEYS);
   return deepFreeze(report);
 }
