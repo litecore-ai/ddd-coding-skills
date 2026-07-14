@@ -119,8 +119,9 @@ test('rename failure preserves the destination and cleans the completed temporar
   await writeJsonAtomic(file, original);
   const injected = {
     ...fs,
-    async rename() {
-      throw new Error('injected rename failure');
+    async rename(source, destination) {
+      if (destination === file) throw new Error('injected rename failure');
+      return fs.rename(source, destination);
     }
   };
 
@@ -142,11 +143,14 @@ test('rename failure preserves a foreign temporary replacement with a different 
   await writeJsonAtomic(file, original);
   const injected = {
     ...fs,
-    async rename(source) {
-      assert.equal(source, temporaryPath);
-      await fs.rm(source);
-      await fs.writeFile(source, 'foreign temporary bytes');
-      throw fault;
+    async rename(source, destination) {
+      if (destination === file) {
+        assert.equal(source, temporaryPath);
+        await fs.rm(source);
+        await fs.writeFile(source, 'foreign temporary bytes');
+        throw fault;
+      }
+      return fs.rename(source, destination);
     }
   };
 
@@ -157,6 +161,46 @@ test('rename failure preserves a foreign temporary replacement with a different 
 
   assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), original);
   assert.equal(await fs.readFile(temporaryPath, 'utf8'), 'foreign temporary bytes');
+});
+
+test('cleanup cannot delete a foreign replacement installed after its identity lstat', async t => {
+  const directory = await temporaryDirectory(t);
+  const file = join(directory, 'run.json');
+  const original = validRun();
+  const temporaryPath = join(directory, `${basename(file)}.tmp-after-check`);
+  const foreignBytes = 'foreign bytes installed after lstat';
+  const fault = errorWithCode('EIO', 'injected destination rename failure');
+  let replaced = false;
+  await writeJsonAtomic(file, original);
+  const injected = {
+    ...fs,
+    async rename(source, destination) {
+      if (destination === file) throw fault;
+      return fs.rename(source, destination);
+    },
+    async lstat(path, options) {
+      const identity = await fs.lstat(path, options);
+      if (!replaced && path === temporaryPath) {
+        replaced = true;
+        await fs.rm(path);
+        await fs.writeFile(path, foreignBytes);
+      }
+      return identity;
+    }
+  };
+
+  await assert.rejects(
+    writeJsonAtomic(file, { ...original, status: 'failed' }, {
+      fs: injected,
+      randomUUID: () => 'after-check'
+    }),
+    error => error === fault
+  );
+
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), original);
+  if (replaced) assert.equal(await fs.readFile(temporaryPath, 'utf8'), foreignBytes);
+  assert.equal(replaced, false, 'cleanup must quarantine before checking path identity');
+  assert.deepEqual(await fs.readdir(directory), ['run.json']);
 });
 
 test('exclusive-open collision never removes a temporary file owned by another writer', async t => {

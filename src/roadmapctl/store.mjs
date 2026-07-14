@@ -37,6 +37,61 @@ async function pathHasIdentity(path, identity, fs) {
   }
 }
 
+async function removeEmptyDirectory(path, fs) {
+  try {
+    await fs.rmdir(path);
+  } catch {
+    // Preserve a non-empty or concurrently replaced diagnostic directory.
+  }
+}
+
+async function restoreQuarantinedFile(quarantinePath, temporaryPath, cleanupDirectory, fs) {
+  try {
+    await fs.link(quarantinePath, temporaryPath);
+  } catch {
+    // EEXIST and all other failures preserve the quarantine without overwriting.
+    return;
+  }
+  try {
+    await fs.unlink(quarantinePath);
+  } catch {
+    // Both hard links retain the data when quarantine unlink fails.
+    return;
+  }
+  await removeEmptyDirectory(cleanupDirectory, fs);
+}
+
+async function quarantineTemporary(temporaryPath, identity, fs) {
+  if (!identity) return;
+
+  let cleanupDirectory;
+  try {
+    cleanupDirectory = await fs.mkdtemp(join(dirname(temporaryPath), `.${basename(temporaryPath)}.cleanup-`));
+  } catch {
+    return;
+  }
+  const quarantinePath = join(cleanupDirectory, 'entry');
+
+  try {
+    await fs.rename(temporaryPath, quarantinePath);
+  } catch {
+    await removeEmptyDirectory(cleanupDirectory, fs);
+    return;
+  }
+
+  if (!await pathHasIdentity(quarantinePath, identity, fs)) {
+    await restoreQuarantinedFile(quarantinePath, temporaryPath, cleanupDirectory, fs);
+    return;
+  }
+
+  try {
+    await fs.unlink(quarantinePath);
+  } catch {
+    return;
+  }
+  await removeEmptyDirectory(cleanupDirectory, fs);
+}
+
 export async function readJson(path, parser, { fs = fileSystem } = {}) {
   const source = await fs.readFile(path, 'utf8');
   let value;
@@ -79,13 +134,7 @@ export async function writeJsonAtomic(path, value, {
         // Preserve the primary persistence failure.
       }
     }
-    if (await pathHasIdentity(temporaryPath, temporaryIdentity, fs)) {
-      try {
-        await fs.rm(temporaryPath, { force: true });
-      } catch {
-        // Never broaden cleanup beyond the temporary path owned by this call.
-      }
-    }
+    await quarantineTemporary(temporaryPath, temporaryIdentity, fs);
     throw error;
   }
 }
