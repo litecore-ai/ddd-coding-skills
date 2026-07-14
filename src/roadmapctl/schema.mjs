@@ -24,6 +24,7 @@ const TRANSACTION_KEYS = [
 const BUILT_IN_GATES = new Set(['spec']);
 const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const TRANSACTION_ID = /^tx-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const UNSAFE_SHELL = /[\0\r\n|&;<>`]|\$\(/;
 
 function fail(path, message, details = {}) {
   throw new RoadmapError('SCHEMA_INVALID', `${path}: ${message}`, { path, ...details });
@@ -122,6 +123,11 @@ function validateGate(definition, path) {
     string(definition.executable, `${path}.executable`);
     stringArray(definition.args, `${path}.args`);
     string(definition.cwd, `${path}.cwd`);
+    if (UNSAFE_SHELL.test(definition.executable)) fail(`${path}.executable`, 'contains an unsafe shell token');
+    definition.args.forEach((argument, index) => {
+      if (UNSAFE_SHELL.test(argument)) fail(`${path}.args[${index}]`, 'contains an unsafe shell token');
+    });
+    if (definition.cwd.includes('\0')) fail(`${path}.cwd`, 'contains an unsafe path token');
     return;
   }
 
