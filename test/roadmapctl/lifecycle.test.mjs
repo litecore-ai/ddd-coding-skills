@@ -108,3 +108,67 @@ test('start fails closed when the approved spec binding is stale', async t => {
   assert.equal(JSON.parse(result.stderr).code, 'INVALID');
   await assert.rejects(readFile(join(repo.root, '.ddd/active-run.json'), 'utf8'));
 });
+
+test('record, verify, and attest bind all evidence to one implementation commit', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  await repo.cli(['next', runId]);
+  const implementation = await repo.implementationCommit('first.txt', 'first\n');
+
+  const recorded = await repo.cli([
+    'record', runId, 'P1.1.1', '--commit', implementation, '--ac', 'AC-P1.1-001'
+  ]);
+  assert.equal(recorded.state, 'verifying');
+  assert.equal(recorded.implementationSha, implementation);
+  assert.deepEqual(recorded.changedFiles, ['first.txt']);
+
+  const verified = await repo.cli(['verify', runId, 'P1.1.1']);
+  assert.deepEqual(verified.gates, ['spec', 'tests', 'consumer', 'e2e']);
+  let journal = JSON.parse(await readFile(join(repo.root, '.ddd/runs', `${runId}.json`), 'utf8'));
+  let attempt = journal.attempts['P1.1.1'][0];
+  assert.equal(attempt.evidence.tests.bindings.implementationSha, implementation);
+  assert.equal(attempt.evidence.consumer.status, 'passed');
+  assert.equal(attempt.evidence.e2e.status, 'passed');
+  assert.doesNotMatch(JSON.stringify(attempt.evidence), /ok\n|stdout\"|stderr\"/);
+
+  const bindings = attempt.evidence.tests.bindings;
+  const audit = {
+    gate: 'audit',
+    type: 'attestation',
+    producer: 'ddd-audit',
+    schema: 'ddd-audit/v1',
+    status: 'passed',
+    bindings,
+    auditRange: { from: bindings.itemBaselineSha, to: bindings.implementationSha },
+    auditCounts: { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
+  };
+  await repo.write('.ddd/audit-P1.1.1.json', `${JSON.stringify(audit, null, 2)}\n`);
+  const attested = await repo.cli(['attest', runId, 'P1.1.1', 'audit', '.ddd/audit-P1.1.1.json']);
+  assert.equal(attested.gate, 'audit');
+  assert.equal(attested.status, 'passed');
+
+  journal = JSON.parse(await readFile(join(repo.root, '.ddd/runs', `${runId}.json`), 'utf8'));
+  attempt = journal.attempts['P1.1.1'][0];
+  assert.equal(attempt.evidence.audit.producer, 'ddd-audit');
+  assert.equal(attempt.evidence.audit.bindings.implementationSha, implementation);
+});
+
+test('record rejects undeclared acceptance criteria without advancing the attempt', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  await repo.cli(['next', runId]);
+  const implementation = await repo.implementationCommit('invalid.txt', 'invalid\n');
+
+  const result = await repo.rawCli([
+    'record', runId, 'P1.1.1', '--commit', implementation, '--ac', 'AC-P1.1-999'
+  ]);
+  assert.notEqual(result.exitCode, 0);
+  assert.equal(JSON.parse(result.stderr).code, 'INVALID');
+  const journal = JSON.parse(await readFile(join(repo.root, '.ddd/runs', `${runId}.json`), 'utf8'));
+  const attempt = journal.attempts['P1.1.1'][0];
+  assert.equal(attempt.state, 'in_progress');
+  assert.equal(attempt.implementationSha, null);
+  assert.deepEqual(attempt.evidence, {});
+});

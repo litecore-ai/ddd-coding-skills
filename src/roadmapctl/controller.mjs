@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as fileSystem from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { canonicalStringify, sha256 } from './canonical-json.mjs';
 import { RoadmapError } from './errors.mjs';
-import { prepareRunBranch, repositoryState } from './git.mjs';
+import { assertImplementationCommit, changedFiles, prepareRunBranch, repositoryState } from './git.mjs';
 import { validateGraph } from './graph.mjs';
 import { acquireRunLock } from './lock.mjs';
 import { renderRoadmap } from './render.mjs';
@@ -12,7 +12,9 @@ import { parseRoadmap, parseRun, parseSpec } from './schema.mjs';
 import { expandScope } from './scope.mjs';
 import { readyItems } from './state.mjs';
 import { mutateRevision, readJson, writeJsonAtomic } from './store.mjs';
-import { gateManifestHash, validateGateCommand } from './verify.mjs';
+import { gateManifestHash, runGate, validateAttestation, validateGateCommand } from './verify.mjs';
+
+const EMPTY_DIGEST = `sha256:${createHash('sha256').update('').digest('hex')}`;
 
 async function writeTextAtomic(path, contents, fs = fileSystem) {
   const temporaryPath = `${path}.tmp-${randomUUID()}`;
@@ -57,6 +59,27 @@ function addEvent(run, at, type, itemId = null, details = {}) {
     ...run.events,
     { sequence: run.events.length + 1, at, type, itemId, details }
   ];
+}
+
+function activeAttempt(run, itemId, expectedState = null) {
+  if (run.currentItemId !== itemId) {
+    throw lifecycleError('ACTIVE_ITEM_MISMATCH', 'the requested item is not active', { itemId });
+  }
+  const attempts = run.attempts[itemId] ?? [];
+  const attempt = attempts.at(-1);
+  if (!attempt || (expectedState && attempt.state !== expectedState)) {
+    throw lifecycleError('ATTEMPT_STATE_INVALID', 'the active attempt is not in the required state', {
+      itemId,
+      expectedState,
+      actualState: attempt?.state ?? null
+    });
+  }
+  return { attempt, attempts };
+}
+
+function replaceLastAttempt(run, itemId, nextAttempt) {
+  const attempts = run.attempts[itemId] ?? [];
+  return { ...run.attempts, [itemId]: [...attempts.slice(0, -1), nextAttempt] };
 }
 
 async function writeExclusiveJson(path, value, fs) {
@@ -283,6 +306,144 @@ export class RoadmapController {
         item: { ...item, spec },
         revision: updated.revision
       };
+    });
+  }
+
+  async record(runId, itemId, { commit, acIds }) {
+    return this.withRunLock(runId, async journalPath => {
+      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const { attempt } = activeAttempt(run, itemId, 'in_progress');
+      const item = this.roadmap.nodes.find(node => node.kind === 'item' && node.id === itemId);
+      if (!item || !run.scope.includes(itemId)) throw lifecycleError('ITEM_OUT_OF_SCOPE', 'item is outside the run scope');
+      const declared = item.spec.acceptanceCriteria;
+      if (!Array.isArray(acIds) || acIds.length === 0 || new Set(acIds).size !== acIds.length
+          || acIds.length !== declared.length || acIds.some(id => !declared.includes(id))) {
+        throw lifecycleError('AC_COVERAGE_INVALID', 'recorded acceptance criteria must exactly match the item contract');
+      }
+      await this.readSpec(item);
+      if (gateManifestHash(this.roadmap.gates) !== run.manifestAuthorization.hash) {
+        throw lifecycleError('MANIFEST_MISMATCH', 'the gate manifest changed after run authorization');
+      }
+      const implementationSha = await assertImplementationCommit(this.root, {
+        baseline: attempt.itemBaselineSha,
+        commit,
+        runBranch: run.runBranch
+      });
+      const paths = await changedFiles(this.root, attempt.itemBaselineSha, implementationSha);
+      const at = this.timestamp();
+      const nextAttempt = {
+        ...attempt,
+        state: 'verifying',
+        implementationSha,
+        changedFiles: paths,
+        acIds: [...acIds]
+      };
+      const updated = await mutateRevision(journalPath, parseRun, run.revision, current => ({
+        ...current,
+        attempts: replaceLastAttempt(current, itemId, nextAttempt),
+        events: addEvent(current, at, 'implementation-recorded', itemId, { changedFiles: paths })
+      }), { fs: this.fs, randomUUID: this.createId });
+      return { runId, itemId, state: 'verifying', implementationSha, changedFiles: paths, revision: updated.revision };
+    });
+  }
+
+  async evidenceContext(run, item, attempt) {
+    const spec = await this.readSpec(item);
+    const manifestHash = gateManifestHash(this.roadmap.gates);
+    if (manifestHash !== run.manifestAuthorization.hash) {
+      throw lifecycleError('MANIFEST_MISMATCH', 'the gate manifest changed after run authorization');
+    }
+    return {
+      bindings: {
+        itemBaselineSha: attempt.itemBaselineSha,
+        implementationSha: attempt.implementationSha,
+        specHash: item.spec.hash,
+        manifestHash,
+        sharedContractHashes: [...spec.sharedContracts]
+      },
+      spec
+    };
+  }
+
+  async verify(runId, itemId) {
+    return this.withRunLock(runId, async journalPath => {
+      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const { attempt } = activeAttempt(run, itemId, 'verifying');
+      const item = this.roadmap.nodes.find(node => node.kind === 'item' && node.id === itemId);
+      if (!item || attempt.implementationSha === null) {
+        throw lifecycleError('ATTEMPT_STATE_INVALID', 'verification requires a recorded implementation');
+      }
+      const { bindings } = await this.evidenceContext(run, item, attempt);
+      const at = this.timestamp();
+      const evidence = {
+        ...attempt.evidence,
+        spec: {
+          gate: 'spec',
+          status: 'passed',
+          processClass: 'exit',
+          exitCode: 0,
+          signal: null,
+          startedAt: at,
+          finishedAt: at,
+          durationMs: 0,
+          bindings,
+          artifacts: [item.spec.path],
+          acIds: [...item.spec.acceptanceCriteria],
+          stdoutDigest: EMPTY_DIGEST,
+          stderrDigest: EMPTY_DIGEST,
+          internal: true
+        }
+      };
+      const executed = ['spec'];
+      for (const gateName of item.requiredGates) {
+        if (gateName === 'spec') continue;
+        const gate = this.roadmap.gates[gateName];
+        if (gate?.type !== 'command') continue;
+        evidence[gateName] = await runGate(this.root, {
+          gates: this.roadmap.gates,
+          bindings,
+          acIds: attempt.acIds,
+          evidenceArtifacts: attempt.changedFiles
+        }, gateName, gate);
+        executed.push(gateName);
+      }
+      const nextAttempt = { ...attempt, evidence };
+      const updated = await mutateRevision(journalPath, parseRun, run.revision, current => ({
+        ...current,
+        attempts: replaceLastAttempt(current, itemId, nextAttempt),
+        events: addEvent(current, this.timestamp(), 'gates-verified', itemId, { gates: executed })
+      }), { fs: this.fs, randomUUID: this.createId });
+      return { runId, itemId, gates: executed, revision: updated.revision };
+    });
+  }
+
+  async attest(runId, itemId, gateName, reportPath) {
+    return this.withRunLock(runId, async journalPath => {
+      const run = await readJson(journalPath, parseRun, { fs: this.fs });
+      const { attempt } = activeAttempt(run, itemId, 'verifying');
+      const item = this.roadmap.nodes.find(node => node.kind === 'item' && node.id === itemId);
+      const gate = this.roadmap.gates[gateName];
+      if (!item?.requiredGates.includes(gateName) || gate?.type !== 'attestation') {
+        throw lifecycleError('ATTESTATION_INVALID', 'the item does not declare this attestation gate');
+      }
+      const requested = resolve(this.root, reportPath);
+      const real = await this.fs.realpath(requested);
+      if (!isContained(this.root, real)) throw unsafePath();
+      let report;
+      try {
+        report = JSON.parse(await this.fs.readFile(real, 'utf8'));
+      } catch (error) {
+        throw lifecycleError('ATTESTATION_INVALID', 'attestation report is not valid JSON', { causeCode: error.code });
+      }
+      const { bindings } = await this.evidenceContext(run, item, attempt);
+      const normalized = validateAttestation({ bindings, gateName }, gate, report);
+      const nextAttempt = { ...attempt, evidence: { ...attempt.evidence, [gateName]: normalized } };
+      const updated = await mutateRevision(journalPath, parseRun, run.revision, current => ({
+        ...current,
+        attempts: replaceLastAttempt(current, itemId, nextAttempt),
+        events: addEvent(current, this.timestamp(), 'attestation-recorded', itemId, { gate: gateName })
+      }), { fs: this.fs, randomUUID: this.createId });
+      return { runId, itemId, gate: gateName, status: normalized.status, revision: updated.revision };
     });
   }
 }
