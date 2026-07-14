@@ -20,6 +20,7 @@ const BINDING_KEYS = Object.freeze([
 const DEFAULT_LOG_BYTES = 64 * 1024;
 const MAX_LOG_BYTES = 1024 * 1024;
 const TIMEOUT_GRACE_MS = 100;
+const TIMEOUT_HARD_SETTLE_MS = 100;
 const COMMAND_EVIDENCE_KEYS = Object.freeze([
   'gate', 'status', 'processClass', 'exitCode', 'signal', 'startedAt', 'finishedAt', 'durationMs',
   'bindings', 'artifacts', 'acIds', 'stdoutDigest', 'stderrDigest'
@@ -166,6 +167,42 @@ function normalizedGateEvidence(context, gateName, result) {
   });
 }
 
+function directChildKill(child, signal) {
+  try {
+    return child.kill(signal);
+  } catch {
+    return false;
+  }
+}
+
+function windowsTreeKill(child, force) {
+  if (!Number.isSafeInteger(child.pid) || child.pid <= 0) return directChildKill(child, force ? 'SIGKILL' : 'SIGTERM');
+  let killer;
+  try {
+    const args = ['/PID', String(child.pid), '/T'];
+    if (force) args.push('/F');
+    killer = spawn('taskkill', args, { shell: false, stdio: 'ignore', windowsHide: true });
+    killer.once('error', () => directChildKill(child, force ? 'SIGKILL' : 'SIGTERM'));
+    killer.unref();
+    return true;
+  } catch {
+    return directChildKill(child, force ? 'SIGKILL' : 'SIGTERM');
+  }
+}
+
+function terminateProcessTree(child, signal) {
+  if (process.platform === 'win32') return windowsTreeKill(child, signal === 'SIGKILL');
+  if (Number.isSafeInteger(child.pid) && child.pid > 0) {
+    try {
+      process.kill(-child.pid, signal);
+      return true;
+    } catch {
+      // A missing/unavailable group falls back only to the process we own.
+    }
+  }
+  return directChildKill(child, signal);
+}
+
 function executionSnapshot(context) {
   const manifest = context?.gates ?? context?.gateManifest ?? context?.manifest?.gates;
   if (!plainObject(manifest)) throw new RoadmapError('MANIFEST_MISMATCH', 'gate manifest is required before execution');
@@ -207,13 +244,33 @@ export async function runGate(root, context, gateName, gate) {
     let settled = false;
     let timeoutTimer;
     let killTimer;
+    let hardDeadlineTimer;
     let timedOut = false;
+    let forceSent = false;
+    let timeoutClose = null;
     let timeoutSignal = null;
+    let onStdoutData;
+    let onStderrData;
+    let onChildError;
+    let onChildClose;
+    const detachListeners = () => {
+      child?.stdout?.removeListener('data', onStdoutData);
+      child?.stderr?.removeListener('data', onStderrData);
+      child?.removeListener('error', onChildError);
+      child?.removeListener('close', onChildClose);
+    };
     const finish = (processClass, exitCode, signal = null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutTimer);
       clearTimeout(killTimer);
+      clearTimeout(hardDeadlineTimer);
+      detachListeners();
+      if (child && child.exitCode === null && child.signalCode === null) {
+        const swallowLateError = () => {};
+        child.once('error', swallowLateError);
+        child.once('close', () => child.removeListener('error', swallowLateError));
+      }
       const finished = Date.now();
       resolveResult({
         processClass,
@@ -230,6 +287,7 @@ export async function runGate(root, context, gateName, gate) {
     try {
       child = spawn(command.executable, command.args, {
         cwd: command.cwd,
+        detached: process.platform !== 'win32',
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: sanitizedEnvironment(process.env)
@@ -239,31 +297,48 @@ export async function runGate(root, context, gateName, gate) {
       return;
     }
 
-    child.stdout.on('data', chunk => {
+    onStdoutData = chunk => {
       const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       stdoutHash.update(bytes);
       appendBounded(stdoutParts, bytes, stdoutState, logLimit);
-    });
-    child.stderr.on('data', chunk => {
+    };
+    onStderrData = chunk => {
       const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       stderrHash.update(bytes);
       appendBounded(stderrParts, bytes, stderrState, logLimit);
-    });
-    child.once('error', () => finish('spawn-error', null));
-    child.once('close', (code, signal) => {
-      if (timedOut) finish('timeout', null, signal ?? timeoutSignal);
+    };
+    onChildError = () => finish('spawn-error', null);
+    onChildClose = (code, signal) => {
+      if (timedOut) {
+        timeoutClose = { signal };
+        if (forceSent) finish('timeout', null, signal ?? timeoutSignal);
+      }
       else finish(signal === null ? 'exit' : 'signal', code, signal);
-    });
+    };
+    child.stdout.on('data', onStdoutData);
+    child.stderr.on('data', onStderrData);
+    child.once('error', onChildError);
+    child.once('close', onChildClose);
     timeoutTimer = setTimeout(() => {
       timedOut = true;
       timeoutSignal = 'SIGTERM';
-      child.kill('SIGTERM');
+      terminateProcessTree(child, 'SIGTERM');
       killTimer = setTimeout(() => {
         if (!settled) {
+          forceSent = true;
           timeoutSignal = 'SIGKILL';
-          child.kill('SIGKILL');
+          terminateProcessTree(child, 'SIGKILL');
+          if (timeoutClose) finish('timeout', null, timeoutClose.signal ?? timeoutSignal);
         }
       }, TIMEOUT_GRACE_MS);
+      hardDeadlineTimer = setTimeout(() => {
+        if (settled) return;
+        timeoutSignal = 'SIGKILL';
+        terminateProcessTree(child, 'SIGKILL');
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        finish('timeout', null, timeoutSignal);
+      }, TIMEOUT_GRACE_MS + TIMEOUT_HARD_SETTLE_MS);
     }, command.timeoutMs);
   });
 

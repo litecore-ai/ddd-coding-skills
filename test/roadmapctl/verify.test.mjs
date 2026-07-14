@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises';
+import { access, chmod, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -209,6 +209,41 @@ test('runGate terminates a timed-out child without leaving it running', async ()
   assert.equal(evidence.processClass, 'timeout');
   assert.ok(['SIGTERM', 'SIGKILL'].includes(evidence.signal));
   assert.ok(Date.now() - started < 2000);
+});
+
+test('runGate terminates timed-out process trees even when a descendant inherits stdio', async t => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roadmapctl-tree-')));
+  const pidPath = join(root, 'descendant.pid');
+  const markerPath = join(root, 'descendant-survived');
+  const parentPath = join(root, 'gate-parent.sh');
+  let descendantPid;
+  t.after(async () => {
+    if (descendantPid) {
+      try { process.kill(descendantPid, 'SIGKILL'); } catch {}
+    }
+    await rm(root, { recursive: true, force: true });
+  });
+  let gate;
+  if (process.platform === 'win32') {
+    const descendantScript = `require('node:fs').writeFileSync(${JSON.stringify(pidPath)},String(process.pid)),setTimeout(function(){require('node:fs').writeFileSync(${JSON.stringify(markerPath)},'survived')},800)`;
+    const parentScript = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(descendantScript)}],{stdio:'inherit'}),setInterval(function(){},1000)`;
+    gate = { type: 'command', executable: process.execPath, args: ['-e', parentScript], cwd: '.', timeoutMs: 500 };
+  } else {
+    await writeFile(parentPath, `#!/bin/sh\n( sleep 0.8; printf survived > "${markerPath}" ) &\nprintf '%s' "$!" > "${pidPath}"\nwhile :; do sleep 1; done\n`);
+    await chmod(parentPath, 0o755);
+    gate = { type: 'command', executable: '/bin/sh', args: [parentPath], cwd: '.', timeoutMs: 100 };
+  }
+
+  const started = Date.now();
+  const journals = [];
+  const evidence = await runGate(root, commandContext(gate, { onJournal: entry => journals.push(entry) }), 'tests', gate);
+  const elapsed = Date.now() - started;
+  assert.equal(evidence.processClass, 'timeout', JSON.stringify(journals));
+  descendantPid = Number(await readFile(pidPath, 'utf8').catch(error => assert.fail(`${error.message}; journal=${JSON.stringify(journals)}`)));
+  assert.ok(elapsed < gate.timeoutMs + 350, `timed-out tree returned after ${elapsed}ms`);
+  await new Promise(resolve => setTimeout(resolve, 850));
+  assert.throws(() => process.kill(descendantPid, 0), error => error.code === 'ESRCH');
+  await assert.rejects(access(markerPath));
 });
 
 test('attestation must match the manifest producer, schema, bindings, and audit range', () => {
