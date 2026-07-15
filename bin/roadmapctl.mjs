@@ -22,12 +22,14 @@ export function parseGlobalArgs(argv) {
   const command = tokens.shift();
   if (!command) usage('a command is required');
   if (![
-    'validate', 'scope', 'render', 'start', 'next', 'record', 'verify', 'attest',
+    'validate', 'scope', 'render', 'hash-file', 'bind-spec', 'start', 'next', 'record', 'verify', 'attest',
     'finish', 'status', 'resume', 'retry', 'abort', 'close'
   ].includes(command)) {
     usage(`unknown command: ${command}`);
   }
   if (command === 'scope' && tokens.length !== 1) usage('scope requires exactly one selector');
+  if (command === 'hash-file' && tokens.length !== 1) usage('hash-file requires one repository-relative path');
+  if (command === 'bind-spec' && tokens.length !== 2) usage('bind-spec requires one feature id and one spec path');
   if (command === 'start') {
     if (tokens.length !== 2 || !['--manifest-approved', '--sandboxed'].includes(tokens[1])) {
       usage('start requires one selector and exactly one authorization mode');
@@ -60,7 +62,7 @@ export function parseGlobalArgs(argv) {
     usage('close requires one run id and optional --require-success');
   }
   if (![
-    'scope', 'start', 'next', 'record', 'verify', 'attest', 'finish', 'status', 'resume', 'retry', 'abort', 'close'
+    'scope', 'hash-file', 'bind-spec', 'start', 'next', 'record', 'verify', 'attest', 'finish', 'status', 'resume', 'retry', 'abort', 'close'
   ].includes(command) && tokens.length !== 0) {
     usage(`${command} does not accept arguments`);
   }
@@ -88,6 +90,8 @@ export async function main(argv, io = { stdout: process.stdout, stderr: process.
     validate: () => controller.validate(),
     scope: () => controller.scope(args[0]),
     render: () => controller.render(),
+    'hash-file': () => controller.hashFile(args[0]),
+    'bind-spec': () => controller.bindSpec(args[0], args[1]),
     start: () => controller.start(args[0], options),
     next: () => controller.next(args[0]),
     record: () => controller.record(args[0], args[1], options),

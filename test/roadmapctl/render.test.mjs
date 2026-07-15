@@ -51,6 +51,7 @@ test('spec rendering cannot inject headings HTML or code blocks', () => {
     title: 'Spec\n# injected <b> ~~x~~',
     acceptanceCriteria: [{
       id: 'AC-P1.1-001',
+      covers: ['P1.1.1'],
       given: 'given\r\n    code',
       when: '> quote',
       then: '<script>& `run`'
@@ -64,6 +65,8 @@ test('spec rendering cannot inject headings HTML or code blocks', () => {
 test('spec rendering includes stable AC ids and canonical hash', () => {
   const markdown = renderSpec(validSpec());
   assert.match(markdown, /AC-P1\.1-001/);
+  assert.match(markdown, /ProfileRepository/);
+  assert.match(markdown, /displayName: string/);
   assert.match(markdown, /sha256:[a-f0-9]{64}/);
   assert.equal(renderSpec(validSpec()), markdown);
 });

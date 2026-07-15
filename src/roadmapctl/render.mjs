@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import * as fileSystem from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
-import { canonicalStringify, sha256 } from './canonical-json.mjs';
+import { canonicalStringify, specHash } from './canonical-json.mjs';
 import { RoadmapError } from './errors.mjs';
 import { compareIds } from './ids.mjs';
 import { deriveAggregate } from './state.mjs';
@@ -158,10 +158,12 @@ export function renderSpec(spec) {
     '',
     `# ${spec.id} ${markdown(spec.title)}`,
     '',
-    `Canonical hash: ${sha256(spec)}`,
+    `Canonical hash: ${specHash(spec)}`,
     `Status: ${spec.status}`,
+    `Models: ${list(spec.models.map(model => `${model.name} (${model.kind})`))}`,
+    `Contracts: ${list(spec.contracts.map(contract => `${contract.name} (${contract.kind}: ${contract.operation})`))}`,
     `Consumers: ${list(spec.consumers)}`,
-    `Shared contracts: ${list(spec.sharedContracts)}`,
+    `Shared contracts: ${list(spec.sharedContracts.map(reference => `${reference.path}@${reference.hash}`))}`,
     '',
     '## Acceptance criteria',
     ''
@@ -170,9 +172,33 @@ export function renderSpec(spec) {
     lines.push(
       `### ${criterion.id}`,
       '',
+      `- Covers: ${list(criterion.covers)}`,
       `- Given: ${markdown(criterion.given)}`,
       `- When: ${markdown(criterion.when)}`,
       `- Then: ${markdown(criterion.then)}`,
+      ''
+    );
+  }
+  lines.push('## Models', '');
+  for (const model of spec.models) {
+    lines.push(`### ${markdown(model.name)} (${markdown(model.kind)})`, '');
+    for (const field of model.fields) {
+      lines.push(
+        `- ${markdown(field.name)}: ${markdown(field.type)}; required=${field.required}; constraints=${list(field.constraints)}`
+      );
+    }
+    lines.push('');
+  }
+  lines.push('## Public contracts', '');
+  for (const contract of spec.contracts) {
+    lines.push(
+      `### ${markdown(contract.name)}`,
+      '',
+      `- Kind: ${markdown(contract.kind)}`,
+      `- Operation: ${markdown(contract.operation)}`,
+      `- Input: ${markdown(contract.input)}`,
+      `- Output: ${markdown(contract.output)}`,
+      `- Errors: ${list(contract.errors)}`,
       ''
     );
   }

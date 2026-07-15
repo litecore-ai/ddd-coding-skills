@@ -23,7 +23,7 @@ function addFeature(roadmap, featureNumber, itemNumber = 1, overrides = {}) {
     dependsOn: [],
     spec: {
       ...roadmap.nodes[2].spec,
-      path: `docs/specs/${featureId}.json`,
+      path: `docs/specs/${featureId}-feature.json`,
       acceptanceCriteria: [`AC-${featureId}-001`]
     },
     ...overrides

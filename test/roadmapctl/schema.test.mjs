@@ -231,7 +231,7 @@ test('spec rejects unknown keys', () => {
 });
 
 test('spec rejects positional acceptance-criterion IDs', () => {
-  const value = validSpec({ acceptanceCriteria: [{ id: 'AC-1', given: 'x', when: 'y', then: 'z' }] });
+  const value = validSpec({ acceptanceCriteria: [{ id: 'AC-1', covers: ['P1.1.1'], given: 'x', when: 'y', then: 'z' }] });
   assert.throws(() => parseSpec(value), /AC-P1\.1-001/);
 });
 
@@ -253,6 +253,27 @@ test('spec requires exact Given/When/Then string fields', () => {
 
 test('spec requires stable acceptance-criterion coverage', () => {
   expectSchemaError(() => parseSpec(validSpec({ acceptanceCriteria: [] })), '$.acceptanceCriteria', /at least one/);
+});
+
+test('spec requires explicit item coverage, models, and contracts', () => {
+  const missingCoverage = validSpec();
+  delete missingCoverage.acceptanceCriteria[0].covers;
+  expectSchemaError(() => parseSpec(missingCoverage), '$.acceptanceCriteria[0].covers', /required/);
+  expectSchemaError(() => parseSpec(validSpec({ models: [] })), '$.models', /at least one/);
+  expectSchemaError(() => parseSpec(validSpec({ contracts: [] })), '$.contracts', /at least one/);
+});
+
+test('spec shared contracts require canonical paths and content hashes', () => {
+  expectSchemaError(
+    () => parseSpec(validSpec({ sharedContracts: [{ path: '../escape.json', hash: `sha256:${'0'.repeat(64)}` }] })),
+    '$.sharedContracts[0].path',
+    /canonical repository-relative/
+  );
+  expectSchemaError(
+    () => parseSpec(validSpec({ sharedContracts: [{ path: 'contracts/profile.json', hash: 'latest' }] })),
+    '$.sharedContracts[0].hash',
+    /sha256/
+  );
 });
 
 test('spec rejects sparse acceptance criteria at the missing index', () => {

@@ -7,7 +7,10 @@ const NODE_KEYS = Object.freeze({
   item: ['id', 'kind', 'parentId', 'title', 'outcome', 'dependsOn', 'spec', 'consumers', 'requiredGates', 'status']
 });
 const ITEM_STATES = ['planned', 'blocked', 'failed', 'cancelled', 'done'];
-const SPEC_KEYS = ['schemaVersion', 'id', 'title', 'status', 'acceptanceCriteria', 'sharedContracts', 'consumers'];
+const SPEC_KEYS = [
+  'schemaVersion', 'id', 'title', 'status', 'acceptanceCriteria', 'models', 'contracts',
+  'sharedContracts', 'consumers'
+];
 const COMMON_ENVELOPE_KEYS = ['schemaVersion', 'revision', 'runId', 'status'];
 const REPORT_KEYS = [...COMMON_ENVELOPE_KEYS, 'selector', 'scope', 'items'];
 const RUN_KEYS = [
@@ -119,6 +122,11 @@ function positiveSafeInteger(value, path) {
   return value;
 }
 
+function boolean(value, path) {
+  if (typeof value !== 'boolean') fail(path, 'is required and must be a boolean');
+  return value;
+}
+
 function array(value, path, { minLength = 0 } = {}) {
   if (value === undefined) fail(path, 'is required and must be an array');
   if (!Array.isArray(value)) fail(path, 'must be an array');
@@ -182,6 +190,10 @@ function validateSpecReference(reference, path) {
   rejectUnknown(reference, ['path', 'hash', 'acceptanceCriteria'], path);
   string(reference.path, `${path}.path`);
   pattern(reference.path, /\.json$/, `${path}.path`, 'must reference a JSON spec document');
+  if (reference.path.includes('\\') || reference.path.startsWith('/') || /^[A-Za-z]:/.test(reference.path)
+      || reference.path.split('/').some(segment => segment === '' || segment === '.' || segment === '..')) {
+    fail(`${path}.path`, 'must be a canonical repository-relative path');
+  }
   string(reference.hash, `${path}.hash`);
   pattern(reference.hash, /^sha256:[0-9a-f]{64}$/, `${path}.hash`, 'must be a sha256: hash with 64 lowercase hexadecimal digits');
   stringArray(reference.acceptanceCriteria, `${path}.acceptanceCriteria`, { minLength: 1 });
@@ -241,6 +253,10 @@ function validateRoadmapCrossRecords(roadmap) {
     }
 
     if (node.kind !== 'item') return;
+    const escapedParent = escapeRegex(node.parentId);
+    if (!new RegExp(`^docs/specs/${escapedParent}-[a-z0-9]+(?:-[a-z0-9]+)*\\.json$`).test(node.spec.path)) {
+      fail(`${path}.spec.path`, 'must match docs/specs/<feature-id>-<slug>.json');
+    }
     node.dependsOn.forEach((dependencyId, dependencyIndex) => {
       const dependency = nodesById.get(dependencyId);
       const dependencyPath = `${path}.dependsOn[${dependencyIndex}]`;
@@ -472,21 +488,84 @@ export function parseSpec(value) {
   string(spec.title, '$.title');
   enumValue(spec.status, ['draft', 'approved'], '$.status');
   array(spec.acceptanceCriteria, '$.acceptanceCriteria', { minLength: 1 });
-  stringArray(spec.sharedContracts, '$.sharedContracts');
+  array(spec.models, '$.models', { minLength: 1 });
+  const modelNames = [];
+  spec.models.forEach((model, modelIndex) => {
+    const path = `$.models[${modelIndex}]`;
+    object(model, path);
+    rejectUnknown(model, ['name', 'kind', 'fields'], path);
+    string(model.name, `${path}.name`);
+    enumValue(model.kind, ['entity', 'value-object', 'aggregate', 'event'], `${path}.kind`);
+    array(model.fields, `${path}.fields`, { minLength: 1 });
+    const fieldNames = [];
+    model.fields.forEach((field, fieldIndex) => {
+      const fieldPath = `${path}.fields[${fieldIndex}]`;
+      object(field, fieldPath);
+      rejectUnknown(field, ['name', 'type', 'required', 'constraints'], fieldPath);
+      string(field.name, `${fieldPath}.name`);
+      string(field.type, `${fieldPath}.type`);
+      boolean(field.required, `${fieldPath}.required`);
+      stringArray(field.constraints, `${fieldPath}.constraints`);
+      uniqueStrings(field.constraints, `${fieldPath}.constraints`, 'constraint');
+      fieldNames.push(field.name);
+    });
+    uniqueStrings(fieldNames, `${path}.fields`, 'field name', '.name');
+    modelNames.push(model.name);
+  });
+  uniqueStrings(modelNames, '$.models', 'model name', '.name');
+
+  array(spec.contracts, '$.contracts', { minLength: 1 });
+  const contractNames = [];
+  spec.contracts.forEach((contract, contractIndex) => {
+    const path = `$.contracts[${contractIndex}]`;
+    object(contract, path);
+    rejectUnknown(contract, ['name', 'kind', 'operation', 'input', 'output', 'errors'], path);
+    string(contract.name, `${path}.name`);
+    enumValue(contract.kind, ['api', 'command', 'query', 'event', 'repository', 'port'], `${path}.kind`);
+    string(contract.operation, `${path}.operation`);
+    string(contract.input, `${path}.input`);
+    string(contract.output, `${path}.output`);
+    stringArray(contract.errors, `${path}.errors`, { minLength: 1 });
+    uniqueStrings(contract.errors, `${path}.errors`, 'error');
+    contractNames.push(contract.name);
+  });
+  uniqueStrings(contractNames, '$.contracts', 'contract name', '.name');
+  array(spec.sharedContracts, '$.sharedContracts');
   stringArray(spec.consumers, '$.consumers', { minLength: 1 });
   uniqueStrings(spec.consumers, '$.consumers', 'consumer');
+
+  const sharedContractPaths = [];
+  spec.sharedContracts.forEach((reference, index) => {
+    const path = `$.sharedContracts[${index}]`;
+    object(reference, path);
+    rejectUnknown(reference, ['path', 'hash'], path);
+    string(reference.path, `${path}.path`);
+    if (reference.path.includes('\\') || reference.path.startsWith('/') || /^[A-Za-z]:/.test(reference.path)
+        || reference.path.split('/').some(segment => segment === '' || segment === '.' || segment === '..')) {
+      fail(`${path}.path`, 'must be a canonical repository-relative path');
+    }
+    string(reference.hash, `${path}.hash`);
+    pattern(reference.hash, DIGEST, `${path}.hash`, 'must be a sha256: hash with 64 lowercase hexadecimal digits');
+    sharedContractPaths.push(reference.path);
+  });
+  uniqueStrings(sharedContractPaths, '$.sharedContracts', 'shared-contract path', '.path');
 
   const acceptanceIds = [];
   const expectedId = new RegExp(`^AC-${escapeRegex(spec.id)}-\\d{3}$`);
   spec.acceptanceCriteria.forEach((criterion, index) => {
     const path = `$.acceptanceCriteria[${index}]`;
     object(criterion, path);
-    rejectUnknown(criterion, ['id', 'given', 'when', 'then'], path);
+    rejectUnknown(criterion, ['id', 'covers', 'given', 'when', 'then'], path);
     string(criterion.id, `${path}.id`);
     pattern(criterion.id, expectedId, `${path}.id`, `must match AC-${spec.id}-NNN (for example AC-${spec.id}-001)`);
     string(criterion.given, `${path}.given`);
     string(criterion.when, `${path}.when`);
     string(criterion.then, `${path}.then`);
+    stringArray(criterion.covers, `${path}.covers`, { minLength: 1 });
+    criterion.covers.forEach((itemId, coverIndex) => {
+      pattern(itemId, ITEM_ID, `${path}.covers[${coverIndex}]`, 'must be an item id');
+    });
+    uniqueStrings(criterion.covers, `${path}.covers`, 'covered item id');
     acceptanceIds.push(criterion.id);
   });
   uniqueStrings(acceptanceIds, '$.acceptanceCriteria', 'acceptance-criterion id', '.id');

@@ -1,13 +1,22 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { constants } from 'node:fs';
 import * as fileSystem from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { canonicalStringify, sha256 } from './canonical-json.mjs';
+import { canonicalStringify, sha256Bytes, specHash } from './canonical-json.mjs';
 import { RoadmapError } from './errors.mjs';
-import { assertImplementationCommit, changedFiles, commitGenerated, git, prepareRunBranch, repositoryState } from './git.mjs';
+import {
+  assertGeneratedWorktree,
+  assertImplementationCommit,
+  changedFiles,
+  commitGenerated,
+  git,
+  prepareRunBranch,
+  repositoryState
+} from './git.mjs';
 import { blockersFor, validateGraph } from './graph.mjs';
 import { acquireRunLock } from './lock.mjs';
-import { buildRunReport, renderRoadmap, writeImmutableReport } from './render.mjs';
+import { buildRunReport, renderRoadmap, renderSpec, writeImmutableReport } from './render.mjs';
 import { parseReport, parseRoadmap, parseRun, parseSpec } from './schema.mjs';
 import { expandScope } from './scope.mjs';
 import { deriveAggregate, readyItems } from './state.mjs';
@@ -54,8 +63,107 @@ async function realParentPath(root, path, fs) {
   return join(parent, basename(path));
 }
 
+async function readContainedRegular(root, path, fs) {
+  if (!isContained(root, path)) throw unsafePath();
+  let handle;
+  try {
+    handle = await fs.open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  } catch (error) {
+    if (['ELOOP', 'EMLINK'].includes(error.code)) throw unsafePath();
+    throw error;
+  }
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile()) throw unsafePath();
+    const before = await fs.lstat(path, { bigint: true });
+    const real = await fs.realpath(path);
+    if (!isContained(root, real) || !before.isFile() || before.isSymbolicLink()
+        || before.dev !== opened.dev || before.ino !== opened.ino) {
+      throw unsafePath();
+    }
+    const contents = await handle.readFile();
+    const after = await fs.lstat(path, { bigint: true });
+    if (!after.isFile() || after.isSymbolicLink() || after.dev !== opened.dev || after.ino !== opened.ino) {
+      throw unsafePath();
+    }
+    return { contents, real };
+  } finally {
+    await handle.close();
+  }
+}
+
+function canonicalProjectPath(root, candidate) {
+  if (typeof candidate !== 'string' || candidate.length === 0 || candidate.includes('\\') || isAbsolute(candidate)) {
+    throw unsafePath();
+  }
+  const absolute = resolve(root, candidate);
+  if (!isContained(root, absolute)) throw unsafePath();
+  const local = relative(root, absolute).split(sep).join('/');
+  if (local !== candidate || local === '' || local.split('/').some(segment => segment === '.' || segment === '..')) {
+    throw unsafePath();
+  }
+  return { absolute, local };
+}
+
+async function containedWritePath(root, path, fs) {
+  const safe = await realParentPath(root, path, fs);
+  if (resolve(safe) !== resolve(path)) throw unsafePath();
+  return safe;
+}
+
+async function snapshotControllerFiles(root, paths, fs) {
+  const snapshots = [];
+  for (const path of paths) {
+    try {
+      const { contents } = await readContainedRegular(root, path, fs);
+      snapshots.push({ path, exists: true, contents });
+    } catch (error) {
+      if (error.code === 'ENOENT') snapshots.push({ path, exists: false, contents: null });
+      else throw error;
+    }
+  }
+  return snapshots;
+}
+
+async function restoreControllerFiles(root, snapshots, fs) {
+  for (const snapshot of snapshots) {
+    const safe = await containedWritePath(root, snapshot.path, fs);
+    if (snapshot.exists) await writeTextAtomic(safe, snapshot.contents, fs);
+    else await fs.rm(safe, { force: true });
+  }
+}
+
 function lifecycleError(code, message, details = {}) {
   return new RoadmapError(code, message, details);
+}
+
+function coverageForItems(items, spec) {
+  const coverage = new Map(items.map(item => [item.id, []]));
+  for (const criterion of spec.acceptanceCriteria) {
+    for (const itemId of criterion.covers) {
+      const acceptanceCriteria = coverage.get(itemId);
+      if (!acceptanceCriteria) {
+        throw lifecycleError('SPEC_COVERAGE_INVALID', 'criterion covers an item outside the feature', {
+          criterionId: criterion.id,
+          itemId
+        });
+      }
+      acceptanceCriteria.push(criterion.id);
+    }
+  }
+  for (const item of items) {
+    if (coverage.get(item.id).length === 0) {
+      throw lifecycleError('SPEC_COVERAGE_INVALID', 'every feature item requires explicit criterion coverage', {
+        itemId: item.id
+      });
+    }
+    if (item.consumers.some(consumer => !spec.consumers.includes(consumer))) {
+      throw lifecycleError('SPEC_COVERAGE_INVALID', 'roadmap consumers must be declared by the spec', {
+        itemId: item.id
+      });
+    }
+  }
+  return coverage;
 }
 
 function assertLifecycleRunId(runId) {
@@ -243,18 +351,77 @@ export class RoadmapController {
   }
 
   async readSpec(item) {
-    const requested = resolve(this.root, item.spec.path);
-    const real = await this.fs.realpath(requested);
-    if (!isContained(this.root, real)) throw unsafePath();
-    const spec = await readJson(real, parseSpec, { fs: this.fs });
-    if (spec.id !== item.parentId || spec.status !== 'approved' || sha256(spec) !== item.spec.hash) {
+    const { absolute } = canonicalProjectPath(this.root, item.spec.path);
+    let contents;
+    try {
+      ({ contents } = await readContainedRegular(this.root, absolute, this.fs));
+    } catch (error) {
+      if (error instanceof RoadmapError) throw error;
+      throw lifecycleError('SPEC_BINDING_STALE', 'bound spec is unavailable', {
+        itemId: item.id,
+        causeCode: error.code
+      });
+    }
+    let spec;
+    try {
+      spec = parseSpec(JSON.parse(contents.toString('utf8')));
+    } catch (error) {
+      if (error instanceof RoadmapError) throw error;
+      throw lifecycleError('SPEC_INVALID', 'spec is not valid JSON', { itemId: item.id });
+    }
+    if (spec.id !== item.parentId || spec.status !== 'approved' || specHash(spec) !== item.spec.hash) {
       throw lifecycleError('SPEC_BINDING_STALE', 'approved spec binding is not current', { itemId: item.id });
     }
-    const declared = new Set(spec.acceptanceCriteria.map(criterion => criterion.id));
-    if (item.spec.acceptanceCriteria.some(id => !declared.has(id))) {
-      throw lifecycleError('SPEC_BINDING_STALE', 'item acceptance criteria are not present in the approved spec', { itemId: item.id });
+    const featureItems = this.roadmap.nodes.filter(node => node.kind === 'item' && node.parentId === spec.id);
+    const featureItemIds = new Set(featureItems.map(node => node.id));
+    const coverage = new Map(featureItems.map(node => [node.id, []]));
+    for (const criterion of spec.acceptanceCriteria) {
+      for (const coveredId of criterion.covers) {
+        if (!featureItemIds.has(coveredId)) {
+          throw lifecycleError('SPEC_BINDING_STALE', 'spec criterion covers an item outside its feature', {
+            criterionId: criterion.id,
+            itemId: coveredId
+          });
+        }
+        coverage.get(coveredId).push(criterion.id);
+      }
     }
+    for (const featureItem of featureItems) {
+      const expected = coverage.get(featureItem.id).sort();
+      const actual = [...featureItem.spec.acceptanceCriteria].sort();
+      if (expected.length === 0 || featureItem.spec.path !== item.spec.path
+          || featureItem.spec.hash !== item.spec.hash
+          || expected.length !== actual.length
+          || expected.some((criterionId, index) => criterionId !== actual[index])
+          || featureItem.consumers.some(consumer => !spec.consumers.includes(consumer))) {
+        throw lifecycleError('SPEC_BINDING_STALE', 'feature item bindings do not exactly match spec coverage', {
+          itemId: featureItem.id
+        });
+      }
+    }
+    await this.validateSharedContracts(spec);
     return spec;
+  }
+
+  async validateSharedContracts(spec) {
+    for (const reference of spec.sharedContracts) {
+      const { absolute } = canonicalProjectPath(this.root, reference.path);
+      let file;
+      try {
+        file = await readContainedRegular(this.root, absolute, this.fs);
+      } catch (error) {
+        if (error instanceof RoadmapError) throw error;
+        throw lifecycleError('SHARED_CONTRACT_STALE', 'a referenced shared contract is unavailable', {
+          path: reference.path,
+          causeCode: error.code
+        });
+      }
+      if (sha256Bytes(file.contents) !== reference.hash) {
+        throw lifecycleError('SHARED_CONTRACT_STALE', 'a referenced shared contract hash changed', {
+          path: reference.path
+        });
+      }
+    }
   }
 
   async validateLifecycleScope(selector) {
@@ -326,6 +493,160 @@ export class RoadmapController {
       path: relative(this.root, markdownPath).split('\\').join('/'),
       revision: this.roadmap.revision
     };
+  }
+
+  async hashFile(path) {
+    const requested = canonicalProjectPath(this.root, path);
+    let file;
+    try {
+      file = await readContainedRegular(this.root, requested.absolute, this.fs);
+    } catch (error) {
+      if (error instanceof RoadmapError) throw error;
+      throw lifecycleError('SHARED_CONTRACT_INVALID', 'shared contract is unavailable', {
+        path: requested.local,
+        causeCode: error.code
+      });
+    }
+    return { path: requested.local, hash: sha256Bytes(file.contents) };
+  }
+
+  async bindSpec(featureId, specPath) {
+    const feature = this.roadmap.nodes.find(node => node.id === featureId);
+    if (!feature || feature.kind !== 'feature') {
+      throw lifecycleError('SPEC_BINDING_INVALID', 'bind-spec requires a feature id');
+    }
+    const items = this.roadmap.nodes.filter(node => node.kind === 'item' && node.parentId === featureId);
+    if (items.length === 0) throw lifecycleError('SPEC_BINDING_INVALID', 'feature has no executable items');
+    const requested = canonicalProjectPath(this.root, specPath);
+    const expectedSpecPath = new RegExp(`^docs/specs/${featureId.replaceAll('.', '\\.')}-[a-z0-9]+(?:-[a-z0-9]+)*\\.json$`);
+    if (!expectedSpecPath.test(requested.local)) {
+      throw lifecycleError('SPEC_BINDING_INVALID', 'spec path must be docs/specs/<feature-id>-<slug>.json');
+    }
+
+    return this.withActivePointerLock(async () => {
+      if ((await this.activeJournals()).length > 0) {
+        throw lifecycleError('ACTIVE_RUN_CONFLICT', 'spec binding is forbidden while a roadmap run is active');
+      }
+      let spec;
+      try {
+        const { contents } = await readContainedRegular(this.root, requested.absolute, this.fs);
+        spec = parseSpec(JSON.parse(contents.toString('utf8')));
+      } catch (error) {
+        if (error instanceof RoadmapError) throw error;
+        throw lifecycleError('SPEC_INVALID', 'spec is not valid JSON', { causeCode: error.code });
+      }
+      if (spec.id !== featureId || spec.status !== 'approved') {
+        throw lifecycleError('SPEC_BINDING_INVALID', 'spec id and approved status must match the feature');
+      }
+      await this.validateSharedContracts(spec);
+      const coverage = coverageForItems(items, spec);
+      const specMarkdownPath = requested.absolute.replace(/\.json$/, '.md');
+      const specMarkdown = requested.local.replace(/\.json$/, '.md');
+      const roadmapLocal = relative(this.root, this.roadmapPath).split(sep).join('/');
+      const markdownLocal = relative(this.root, this.markdownPath).split(sep).join('/');
+      const allowedPaths = [
+        requested.local,
+        specMarkdown,
+        roadmapLocal,
+        markdownLocal
+      ];
+      let preflight;
+      try {
+        preflight = await assertGeneratedWorktree(this.root, allowedPaths);
+      } catch (error) {
+        throw lifecycleError('SPEC_BINDING_CONFLICT', 'spec binding requires no unrelated worktree changes', {
+          causeCode: error.code
+        });
+      }
+      const currentRoadmapSource = await this.fs.readFile(this.roadmapPath, 'utf8');
+      let headRoadmapSource;
+      try {
+        headRoadmapSource = (await git(this.root, ['show', `HEAD:${roadmapLocal}`])).stdout;
+      } catch (error) {
+        throw lifecycleError('SPEC_BINDING_CONFLICT', 'canonical roadmap must already exist at HEAD', {
+          causeCode: error.code
+        });
+      }
+      if (currentRoadmapSource !== headRoadmapSource) {
+        throw lifecycleError('SPEC_BINDING_CONFLICT', 'canonical roadmap must match HEAD before spec binding');
+      }
+      const hash = specHash(spec);
+      const roadmap = await readJson(this.roadmapPath, parseRoadmap, { fs: this.fs });
+      if (roadmap.revision !== this.roadmap.revision) {
+        throw lifecycleError('REVISION_CONFLICT', 'roadmap changed before spec binding');
+      }
+      const absolutePaths = [requested.absolute, specMarkdownPath, this.roadmapPath, this.markdownPath];
+      const snapshots = await snapshotControllerFiles(this.root, absolutePaths, this.fs);
+      let updatedRoadmap;
+      let bookkeepingSha;
+      try {
+        const safeRoadmapPath = await containedWritePath(this.root, this.roadmapPath, this.fs);
+        updatedRoadmap = await mutateRevision(safeRoadmapPath, parseRoadmap, roadmap.revision, current => ({
+          ...current,
+          nodes: current.nodes.map(node => coverage.has(node.id) ? {
+            ...node,
+            spec: {
+              path: requested.local,
+              hash,
+              acceptanceCriteria: [...coverage.get(node.id)].sort()
+            },
+            status: 'planned'
+          } : node)
+        }), { fs: this.fs, randomUUID: this.createId });
+
+        await writeTextAtomic(await containedWritePath(this.root, requested.absolute, this.fs), canonicalStringify(spec), this.fs);
+        await writeTextAtomic(await containedWritePath(this.root, specMarkdownPath, this.fs), renderSpec(spec), this.fs);
+        await writeTextAtomic(
+          await containedWritePath(this.root, this.markdownPath, this.fs),
+          renderRoadmap(updatedRoadmap, null),
+          this.fs
+        );
+        bookkeepingSha = await commitGenerated(this.root, {
+          paths: allowedPaths,
+          message: `chore(roadmapctl): bind spec ${featureId}`
+        });
+      } catch (error) {
+        let currentHead = null;
+        try {
+          currentHead = (await repositoryState(this.root)).head;
+          if (currentHead !== preflight.state.head) {
+            throw lifecycleError('SPEC_BINDING_RECOVERY_REQUIRED', 'binding commit advanced HEAD before failure', {
+              causeCode: error.code,
+              head: currentHead
+            });
+          }
+          const staged = (await git(this.root, [
+            '--literal-pathspecs', 'diff', '--cached', '--name-only', '-z', '--'
+          ])).stdout.split('\0').filter(Boolean);
+          if (staged.length > 0) {
+            await git(this.root, ['--literal-pathspecs', 'restore', '--staged', '--', ...staged]);
+          }
+          await restoreControllerFiles(this.root, snapshots, this.fs);
+          this.roadmap = roadmap;
+        } catch (recoveryError) {
+          if (recoveryError instanceof RoadmapError && recoveryError.code === 'SPEC_BINDING_RECOVERY_REQUIRED') {
+            throw recoveryError;
+          }
+          throw lifecycleError('SPEC_BINDING_RECOVERY_REQUIRED', 'spec binding rollback failed', {
+            causeCode: recoveryError.code,
+            originalCauseCode: error.code
+          });
+        }
+        throw lifecycleError('SPEC_BINDING_TRANSACTION_FAILED', 'spec binding failed and was rolled back', {
+          causeCode: error.code
+        });
+      }
+      this.roadmap = updatedRoadmap;
+      return {
+        featureId,
+        specHash: hash,
+        items: Object.fromEntries(items.map(item => [item.id, {
+          acceptanceCriteria: [...coverage.get(item.id)].sort()
+        }])),
+        bookkeepingSha,
+        revision: updatedRoadmap.revision
+      };
+    });
   }
 
   async start(selector, { manifestApproved = false, sandboxed = false } = {}) {
@@ -508,7 +829,7 @@ export class RoadmapController {
         implementationSha: attempt.implementationSha,
         specHash: item.spec.hash,
         manifestHash,
-        sharedContractHashes: [...spec.sharedContracts]
+        sharedContractHashes: spec.sharedContracts.map(reference => reference.hash)
       },
       spec
     };
@@ -1068,7 +1389,7 @@ export class RoadmapController {
       events: addEvent(committed, at, 'run-closed', null, { status: outcome })
     }), { fs: this.fs, randomUUID: this.createId });
     await this.clearActivePointer(runId);
-    return { runId, status: outcome, report: relativeReport, bookkeepingSha, revision: finalized.revision };
+    return { runId, status: outcome, reportPath: relativeReport, bookkeepingSha, revision: finalized.revision };
   }
 
   async close(runId, options = {}) {

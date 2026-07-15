@@ -187,6 +187,19 @@ function dirtyPaths(porcelain) {
   return paths;
 }
 
+function stagedPaths(porcelain) {
+  const fields = porcelain.split('\0');
+  const paths = [];
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index];
+    if (!field) continue;
+    const status = field.slice(0, 2);
+    if (status[0] !== ' ' && status[0] !== '?') paths.push(field.slice(3));
+    if (status.includes('R') || status.includes('C')) index += 1;
+  }
+  return paths;
+}
+
 function invalidGeneratedPaths(message) {
   return stateError('INVALID_GENERATED_PATHS', message);
 }
@@ -230,7 +243,7 @@ async function validateGeneratedPaths(root, paths) {
   return [...paths];
 }
 
-export async function commitGenerated(root, { paths, message }) {
+export async function assertGeneratedWorktree(root, paths) {
   const allowedPaths = await validateGeneratedPaths(root, paths);
   const allowed = new Set(allowedPaths);
   const state = await repositoryState(root);
@@ -239,10 +252,20 @@ export async function commitGenerated(root, { paths, message }) {
   }
 
   const status = await git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
+  const staged = stagedPaths(status.stdout);
+  if (staged.length > 0) {
+    throw stateError('STAGED_WORKTREE', `Generated commit requires an empty index: ${staged.join(', ')}`);
+  }
   const unrelated = dirtyPaths(status.stdout).filter(path => !allowed.has(path));
   if (unrelated.length > 0) {
     throw stateError('DIRTY_WORKTREE', `Dirty paths are outside the generated allowlist: ${unrelated.join(', ')}`);
   }
+  return { allowedPaths, state };
+}
+
+export async function commitGenerated(root, { paths, message }) {
+  const { allowedPaths, state } = await assertGeneratedWorktree(root, paths);
+  const allowed = new Set(allowedPaths);
 
   const baseline = state.head;
   await git(root, ['--literal-pathspecs', 'add', '--', ...allowedPaths]);

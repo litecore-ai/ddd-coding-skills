@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { sha256 } from '../../src/roadmapctl/canonical-json.mjs';
+import { specHash } from '../../src/roadmapctl/canonical-json.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,7 +45,28 @@ export function validSpec(overrides = {}) {
     title: 'Profile',
     status: 'approved',
     acceptanceCriteria: [
-      { id: 'AC-P1.1-001', given: 'no profile exists', when: 'a valid profile is created', then: 'it can be retrieved' }
+      {
+        id: 'AC-P1.1-001', covers: ['P1.1.1'], given: 'no profile exists',
+        when: 'a valid profile is created', then: 'it can be retrieved'
+      }
+    ],
+    models: [{
+      name: 'Profile',
+      kind: 'aggregate',
+      fields: [
+        { name: 'id', type: 'ProfileId', required: true, constraints: ['immutable'] },
+        { name: 'displayName', type: 'string', required: true, constraints: ['length:1..100'] }
+      ]
+    }],
+    contracts: [
+      {
+        name: 'ProfileRepository', kind: 'repository', operation: 'save-and-find-by-id',
+        input: 'Profile', output: 'Profile|null', errors: ['storage-unavailable']
+      },
+      {
+        name: 'ProfileController', kind: 'api', operation: 'POST/GET /profiles',
+        input: 'ProfileRequest', output: 'ProfileResponse', errors: ['invalid-profile', 'profile-not-found']
+      }
     ],
     sharedContracts: [],
     consumers: ['ProfileController'],
@@ -133,6 +154,7 @@ export function p11SevenLeafSpec() {
       const leaf = index + 1;
       return {
         id: `AC-P1.1-00${leaf}`,
+        covers: [`P1.1.${leaf}`],
         given: `P1.1.${leaf} has not been completed`,
         when: `the P1.1.${leaf} workflow succeeds`,
         then: `the P1.1.${leaf} outcome is observable by its consumer`
@@ -175,6 +197,54 @@ export async function roadmapFixture(roadmap = validRoadmap()) {
   return repo;
 }
 
+export async function specBindingFixture() {
+  const repo = await gitFixture();
+  const roadmap = twoLeafRoadmap({ first: 'done', second: 'blocked' });
+  roadmap.nodes[2].spec.acceptanceCriteria = ['AC-P1.1-099'];
+  roadmap.nodes[3].spec.acceptanceCriteria = ['AC-P1.1-099'];
+  const spec = validSpec({
+    acceptanceCriteria: [
+      {
+        id: 'AC-P1.1-001',
+        covers: ['P1.1.1'],
+        given: 'no profile exists',
+        when: 'a valid profile is created',
+        then: 'it can be retrieved'
+      },
+      {
+        id: 'AC-P1.1-002',
+        covers: ['P1.1.2'],
+        given: 'a profile exists',
+        when: 'the profile is updated',
+        then: 'the updated profile can be retrieved'
+      }
+    ],
+    models: validSpec().models,
+    contracts: validSpec().contracts,
+    sharedContracts: []
+  });
+
+  await repo.write('.gitignore', '.ddd/\n');
+  await repo.write('docs/roadmap/roadmap.json', `${JSON.stringify(roadmap, null, 2)}\n`);
+  await repo.write('docs/specs/P1.1-profile.json', `${JSON.stringify(spec, null, 2)}\n`);
+  await repo.git(['add', '--', '.gitignore', 'docs/roadmap/roadmap.json', 'docs/specs/P1.1-profile.json']);
+  await repo.git(['commit', '-m', 'test: add unbound spec fixture']);
+
+  async function cli(args) {
+    const result = await runCli(repo.root, args);
+    if (result.exitCode !== 0) {
+      const error = new Error(result.stderr || `roadmapctl exited ${result.exitCode}`);
+      error.exitCode = result.exitCode;
+      error.diagnostic = result.stderr ? JSON.parse(result.stderr) : null;
+      throw error;
+    }
+    assertEmpty(result.stderr);
+    return JSON.parse(result.stdout);
+  }
+
+  return { ...repo, cli, rawCli: args => runCli(repo.root, args), spec };
+}
+
 export function runCli(root, args) {
   const bin = fileURLToPath(new URL('../../bin/roadmapctl.mjs', import.meta.url));
   return new Promise((resolve, reject) => {
@@ -198,8 +268,14 @@ export async function lifecycleFixture(options = {}) {
   const spec = structuredClone(options.spec ?? validSpec());
   const roadmap = structuredClone(options.roadmap ?? twoLeafRoadmap());
   if (options.roadmap === undefined) roadmap.nodes[3].dependsOn = ['P1.1.1'];
-  for (const item of roadmap.nodes.filter(node => node.kind === 'item')) {
-    item.spec.hash = sha256(spec);
+  const items = roadmap.nodes.filter(node => node.kind === 'item');
+  for (const criterion of spec.acceptanceCriteria) {
+    criterion.covers = items
+      .filter(item => item.spec.acceptanceCriteria.includes(criterion.id))
+      .map(item => item.id);
+  }
+  for (const item of items) {
+    item.spec.hash = specHash(spec);
   }
 
   await repo.write('.gitignore', '.ddd/\n');
