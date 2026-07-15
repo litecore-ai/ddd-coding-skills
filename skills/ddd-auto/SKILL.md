@@ -21,10 +21,10 @@ In Codex, execute the loop directly; no Stop hook is needed. In Claude Code, the
 
 Call `roadmapctl resume <run-id>` before every transition and switch only on its exact `action`:
 
-- `next`: call `roadmapctl next <run-id>` once. Invoke `ddd-develop` for exactly the returned `item`, `item.spec`, `attempt`, and run ID.
+- `next`: call `roadmapctl next <run-id>` once. If it returns an item, invoke `ddd-develop` for exactly the returned `item`, `item.spec`, `attempt`, and run ID. If it returns `terminal: true` with no item, do not invoke development; follow its returned action and outcome.
 - `record`: resume `ddd-develop` for the returned active item and attempt; do not request another item.
 - `finish`: resume `ddd-develop` to complete only missing verification or audit evidence and call finish.
-- `close`: call `roadmapctl close <run-id> --require-success`. Report the immutable `reportPath` only if close succeeds.
+- `close`: when `remaining` is empty, call `roadmapctl close <run-id> --require-success`. When `remaining` is non-empty and no item is ready, call `roadmapctl close <run-id>` without `--require-success` so the controller can persist the exact blocked, failed, cancelled, or capped outcome. In both cases, report the returned status and immutable `reportPath` only after close succeeds.
 - `closed`: report the recorded terminal status and report path, then stop.
 - Any unknown action is a hard error. Stop without inventing a recovery transition.
 

@@ -19,11 +19,11 @@ Create a vertical-slice delivery graph whose state is controlled by `roadmapctl`
 
 1. Resolve the controller exactly as the shared protocol requires. Run `validate` when a roadmap exists. Use `status --active` to detect an active run; if it resolves, stop planning mutations and report the run.
 2. Determine full-project or user-scoped mode. Read user-named sources in full, then inspect only relevant product, architecture, code, test, and manifest context.
-3. Align product goals, users, observable outcomes, non-goals, constraints, and success measures with the user. Write or merge `docs/product-brief.md` without inventing decisions. For a brief-only request, present it for review and stop.
+3. Read `references/product-brief-format.md`. Align product goals, users, observable outcomes, non-goals, constraints, and success measures with the user. Write or merge `docs/product-brief.md` without inventing decisions. For a brief-only request, present it for review and stop.
 4. Decompose work into phase → feature → item IDs. Preserve existing IDs. New IDs are append-only within their parent. Natural-language or legacy “sub-feature” means one executable item node under its feature; the canonical model has no extra grouping level. Thus two sub-features under `P1.1` become `P1.1.1` and `P1.1.2`, each a complete vertical slice.
 5. Write `docs/roadmap/roadmap.json` and one `docs/specs/<feature-id>-<slug>.json` bootstrap spec per feature. Bootstrap specs remain `draft` until reviewed.
 6. Run `validate` and `render`. Present the generated roadmap view plus a coverage/consumer summary. Fix schema or graph errors; never bypass them.
-7. After user approval, create a local planning-baseline commit containing the product brief, canonical roadmap, and draft specs. Then mark only the reviewed specs `approved` and call `bind-spec` once per feature. Run `validate` and `render` again. Report controller commit SHAs; never push without explicit approval.
+7. After user approval, create a local planning-baseline commit containing only the product brief, canonical roadmap, and draft specs. Report the planning commit and hand off contract review, approval, and binding to `ddd-spec`; this adapter never marks a spec `approved` or calls `bind-spec`. Never push without explicit approval.
 
 ## Roadmap rules
 
@@ -41,8 +41,8 @@ Every feature spec is schema version 1 and contains:
 - structured `models` with name, DDD kind, and concrete fields (`name`, `type`, `required`, `constraints`);
 - structured public `contracts` with name, kind, operation, input, output, and explicit errors;
 - real consumers and controller-generated shared-contract `{path, hash}` references;
-- `draft` or `approved` status.
+- `draft` status; `ddd-spec` is the only adapter that may promote and bind it after review.
 
-Use `hash-file` for every shared-contract digest. Do not calculate hashes in prose. Initial roadmap references may use a syntactically valid placeholder only during the uncommitted draft cycle; all committed approved features must be finalized by `bind-spec`, which writes the current behavior hash and exact item coverage.
+Use `hash-file` for every shared-contract digest. Do not calculate hashes in prose. Initial roadmap spec bindings may use a syntactically valid placeholder in the draft planning baseline; `ddd-spec` must review the contract and call `bind-spec`, which writes the current behavior hash and exact item coverage, before the feature is executable.
 
 For scoped updates, preserve unrelated nodes, gates, specs, and settled states byte-for-byte in meaning. Never renumber IDs to improve presentation.

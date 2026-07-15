@@ -7,6 +7,8 @@ description: Implement one bounded vertical slice with domain-driven design, tes
 
 Implement one complete vertical slice. Let GPT-5.6 Sol reason about the domain and repository; use `roadmapctl` only as the authority for scope, state, evidence bindings, and completion. Read `../../references/roadmapctl-protocol.md` in full before roadmap-mode work.
 
+Implement directly by default. Only when the host supports bounded workers and delegation is materially useful, read `references/subagent-prompts.md`; the parent retains all controller authority, cross-worker writes, commits, and evidence submission.
+
 ## Choose one mode
 
 - **Roadmap mode:** Require an exact run ID and controller-issued item ID, usually supplied by `ddd-auto`. Work on that item only.

@@ -36,12 +36,14 @@ Read these fields exactly:
 | `hash-file <path>` | `path`, `hash` |
 | `bind-spec <feature-id> <spec-path>` | `featureId`, `specHash`, `items.<id>.acceptanceCriteria`, `bookkeepingSha`, `revision` |
 | `start <selector> <--manifest-approved\|--sandboxed>` | `runId`, `scope[]`, `status`, `runBranch` |
-| `status <run-id\|--active>` / `resume <run-id\|--active>` | `runId`, `action`, `activeItemId`, `item`, `attempt`, `blockers`, `remaining[]`, `attemptsRemaining` |
+| `status <run-id\|--active>` / `resume <run-id\|--active>` | `runId`, `status`, `action`, `activeItemId`, `item`, `attempt`, `leaves`, `aggregates`, `blockers`, `remaining[]`, `attemptsRemaining` |
 | `next <run-id>` | `runId`, `item.id`, `item.spec`, `attempt`, `itemBaselineSha`, `specHash`, `auditReportPath`; terminal results also contain `action`, `blockers`, `remaining[]` |
 | `record <run-id> <item-id> --commit <sha> --ac <id>...` | `runId`, `itemId`, `state`, `itemBaselineSha`, `implementationSha`, `specHash`, `auditReportPath` |
 | `verify <run-id> <item-id>` | `runId`, `itemId`, `gates[]` |
-| `attest <run-id> <item-id> <gate> <report-path>` | `runId`, `itemId`, `gate`, `status` |
+| `attest <run-id> <item-id> <gate> <report-path>` | `runId`, `itemId`, `gate`, `status`, `reportPath` |
 | `finish <run-id> <item-id>` | `runId`, `itemId`, `state`, `reasons[]`, `bookkeepingSha` |
+| `retry <run-id> <item-id> --reason <text>` | `runId`, `itemId`, `attempt`, `state` |
+| `abort <run-id> --confirm` | `runId`, `status`, `reportPath`, `bookkeepingSha` |
 | `close <run-id> [--require-success]` | `runId`, `status`, `reportPath`, `bookkeepingSha` |
 
 The only valid status/resume actions are:
@@ -61,7 +63,7 @@ validate → start → status/resume → next → bounded implementation → loc
 → record → verify command gates → read-only audit → attest → finish → status/resume → next
 ```
 
-Call `close` only when the controller returns terminal action `close`. Never turn `blocked`, `failed`, `cancelled`, or `capped` into success. Report `reasons`, `blockers`, and `remaining` exactly. Attempt budgets count leaf attempts; adapters must not add their own hidden retry loop.
+Call `close` only when the controller returns terminal action `close`. When `remaining` is empty, use `close --require-success` to assert successful completion. When `remaining` is non-empty and no item is ready, use `close` without that flag so the controller can persist the exact `blocked`, `failed`, `cancelled`, or `capped` outcome and immutable report. Never turn a non-success outcome into success. Report `reasons`, `blockers`, and `remaining` exactly. Attempt budgets count leaf attempts; adapters must not add their own hidden retry loop. Use `retry` only after explicit user approval of its reason. Use `abort --confirm` only through an explicit cancellation flow; ordinary interruption recovery uses `resume`.
 
 ## Spec binding
 

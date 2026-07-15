@@ -1,14 +1,13 @@
-## Audit Scoring
+## Non-gating Audit Scoring
 
-Provide a quantitative score per dimension and overall, enabling cross-audit progress tracking.
+Provide an optional presentation score per dimension and overall only when the user explicitly requests it. Render scores in the response after the normal findings; never create or update `audit-report.md`, controller evidence, score history, or any other file. Scores do not affect finding severity, attestation, or pass/fail truth.
 
 ### Scoring Formula
 
-For each dimension D:
+For each dimension D, begin at 100 and apply deterministic finding penalties:
 
 ```
-raw_score(D) = 1 - (2×CRIT + 1.5×HIGH + 1×MED + 0.5×LOW) / total_checklist_items(D)
-score(D) = clamp(raw_score(D), 0, 1) × 100
+score(D) = clamp(100 - 40×CRIT - 25×HIGH - 10×MEDIUM - 3×LOW, 0, 100)
 ```
 
 Overall weighted score:
@@ -17,34 +16,30 @@ Overall weighted score:
 overall = Σ(score(D) × weight(D)) / Σ(weight(D))
 ```
 
-### Score Table in Final Report
+Use the advisory weight from `.audit-config.yml` when present; otherwise use weight `1.0` for every dimension.
 
-Add to `audit-report.md`:
+### Score Table in the Response
+
+Add this table after the findings in the user-facing response:
 
 ```
 ## Audit Score
 
-| Dimension | Items | CRIT | HIGH | MED | LOW | Score | Δ vs Previous |
-|-----------|-------|------|------|-----|-----|-------|---------------|
-| D1 Design | 45 | 1 | 3 | 8 | 5 | 72% | +8% |
-| D2 Architecture | 38 | 0 | 2 | 5 | 3 | 81% | +12% |
-| ... | | | | | | | |
-| **Overall (weighted)** | | | | | | **76%** | **+9%** |
-
-### Score History
-| Date | Overall | D1 | D2 | D3 | D4 | D5 | D6 | D7 | D8 |
-|------|---------|----|----|----|----|----|----|----|----|
-| 2026-03-15 | 67% | 64% | 69% | ... |
-| 2026-04-08 | 76% | 72% | 81% | ... |
+| Dimension | CRIT | HIGH | MEDIUM | LOW | Score |
+|-----------|------|------|--------|-----|-------|
+| D1 Design | 0 | 0 | 1 | 1 | 87% |
+| D2 Architecture | 0 | 1 | 0 | 0 | 75% |
+| ... | | | | | |
+| **Overall (weighted)** | | | | | **81%** |
 ```
 
 ### Score Interpretation
 
 | Range | Label | Meaning |
 |-------|-------|---------|
-| 90-100% | Excellent | Production-ready, minor polish only |
-| 75-89% | Good | Deployable with known issues tracked |
-| 60-74% | Fair | Needs targeted fixes before production |
-| 40-59% | Poor | Significant rework needed |
-| 0-39% | Critical | Major architectural or security concerns |
+| 90-100% | Low finding pressure | Few recorded deductions in this dimension |
+| 75-89% | Moderate finding pressure | Recorded issues need review |
+| 50-74% | High finding pressure | Significant findings are present |
+| 0-49% | Severe finding pressure | Concentrated or high-severity findings are present |
 
+Always display this caveat: the score summarizes recorded findings, not review coverage or deployment readiness. Any CRIT or HIGH finding remains blocking regardless of score.
