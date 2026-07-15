@@ -1,7 +1,7 @@
 {
   "name": "ddd-coding-skills",
   "description": "Deterministic DDD workflow for GPT-5.6 Sol and coding agents with JSON contracts, evidence gates, and crash-safe roadmap execution",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "author": {
     "name": "Litecore AI",
     "url": "https://github.com/litecore-ai"

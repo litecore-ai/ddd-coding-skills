@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const root = new URL('../', import.meta.url);
-const expectedVersion = '3.0.0';
+const expectedVersion = '3.0.1';
 const errors = [];
 
 function read(path) {

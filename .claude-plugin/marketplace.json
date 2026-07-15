@@ -10,7 +10,7 @@
       "name": "ddd-coding-skills",
       "source": "./",
       "description": "Deterministic DDD workflow with JSON contracts, evidence gates, and crash-safe execution",
-      "version": "3.0.0",
+      "version": "3.0.1",
       "license": "MIT",
       "homepage": "https://github.com/litecore-ai/ddd-coding-skills",
       "repository": "https://github.com/litecore-ai/ddd-coding-skills",
