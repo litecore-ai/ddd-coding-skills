@@ -58,6 +58,21 @@ function passingEvidence(bindings = currentBindings()) {
   };
 }
 
+function auditInput(bindings = currentBindings(), overrides = {}) {
+  return {
+    schemaVersion: 1,
+    schema: 'ddd-audit/v1',
+    runId: 'run-1',
+    itemId: 'P1.1.1',
+    baselineSha: bindings.itemBaselineSha,
+    implementationSha: bindings.implementationSha,
+    specHash: bindings.specHash,
+    counts: { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 },
+    findings: [],
+    ...overrides
+  };
+}
+
 function commandContext(gate, overrides = {}) {
   const gates = { tests: gate };
   return {
@@ -269,20 +284,28 @@ test('runGate terminates timed-out process trees even when a descendant inherits
   assert.fail(`descendant did not start in any bounded attempt: ${JSON.stringify(attempts)}`);
 });
 
-test('attestation must match the manifest producer, schema, bindings, and audit range', () => {
+test('attestation must match exact run, item, commit, spec, findings, and counts', () => {
   const bindings = currentBindings();
   const gate = { type: 'attestation', producer: 'ddd-audit', schema: 'ddd-audit/v1' };
-  const report = passingEvidence(bindings).audit;
-  const normalized = validateAttestation({ bindings }, gate, report);
+  const context = { bindings, runId: 'run-1', itemId: 'P1.1.1' };
+  const report = auditInput(bindings);
+  const normalized = validateAttestation(context, gate, report);
   assert.deepEqual(normalized.auditCounts, { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 });
   assert.ok(Object.isFrozen(normalized));
-  assert.throws(() => validateAttestation({ bindings }, gate, { ...report, producer: 'other' }), error => error.code === 'ATTESTATION_INVALID');
-  assert.throws(() => validateAttestation({ bindings }, gate, { ...report, bindings: currentBindings({ implementationSha: '9'.repeat(40) }) }), error => error.code === 'ATTESTATION_INVALID');
-  assert.throws(() => validateAttestation({ bindings }, gate, { ...report, auditCounts: { ...report.auditCounts, HIGH: -1 } }), error => error.code === 'ATTESTATION_INVALID');
-  assert.throws(() => validateAttestation({ bindings }, gate, { ...report, unknown: true }), error => error.code === 'ATTESTATION_INVALID');
-  const noRange = { ...report };
-  delete noRange.auditRange;
-  assert.throws(() => validateAttestation({ bindings }, gate, noRange), error => error.code === 'ATTESTATION_INVALID');
+  assert.throws(() => validateAttestation(context, gate, { ...report, schema: 'ddd-audit/v2' }), error => error.code === 'ATTESTATION_INVALID');
+  assert.throws(() => validateAttestation(context, gate, { ...report, implementationSha: '9'.repeat(40) }), error => error.code === 'ATTESTATION_INVALID');
+  assert.throws(() => validateAttestation(context, gate, { ...report, counts: { ...report.counts, HIGH: -1 } }), error => error.code === 'ATTESTATION_INVALID');
+  assert.throws(() => validateAttestation(context, gate, { ...report, unknown: true }), error => error.code === 'ATTESTATION_INVALID');
+  const noBaseline = { ...report };
+  delete noBaseline.baselineSha;
+  assert.throws(() => validateAttestation(context, gate, noBaseline), error => error.code === 'ATTESTATION_INVALID');
+  const finding = { id: 'ARCH-HIGH-001', severity: 'HIGH', file: 'src/example.mjs', line: 12, message: 'wrong dependency direction' };
+  assert.throws(() => validateAttestation(context, gate, { ...report, findings: [finding] }), error => error.code === 'ATTESTATION_INVALID');
+  assert.throws(() => validateAttestation(context, gate, {
+    ...report,
+    counts: { ...report.counts, LOW: 1 },
+    findings: [{ id: 'ARCH-LOW-001', severity: 'LOW', file: 'src/example.mjs', line: 12, message: 'x'.repeat(2001) }]
+  }), error => error.code === 'ATTESTATION_INVALID');
 });
 
 test('forged or malformed executable evidence deterministically fails completion', () => {

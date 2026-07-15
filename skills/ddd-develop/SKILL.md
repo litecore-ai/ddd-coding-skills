@@ -25,7 +25,7 @@ Never reinterpret a feature, phase, heading, or user prose as multiple leaf assi
 7. Review the diff for scope, domain invariants, public contract compatibility, error semantics, transaction boundaries, and consumer closure. Create a local implementation commit containing only this leaf. Never push.
 8. Call `roadmapctl record <run-id> <item-id> --commit <sha> --ac <id>...` with the exact assigned AC IDs. Use the returned `itemBaselineSha` and `implementationSha`; do not infer either SHA.
 9. Call `roadmapctl verify <run-id> <item-id>`. A command gate failure is a real failure; do not replace it with prose or a warning.
-10. Invoke the read-only `ddd-audit` adapter for the exact `itemBaselineSha..implementationSha` range and the same item/spec/AC contract. Call `roadmapctl attest <run-id> <item-id> audit <report-path>` only with its schema-valid report.
+10. Invoke the read-only `ddd-audit` adapter for the exact `itemBaselineSha..implementationSha` range, same item/spec/AC contract, and controller-designated report path. Require its successful `roadmapctl attest` result; never submit a hand-written substitute.
 11. Call `roadmapctl finish <run-id> <item-id>`. Report `state`, `reasons`, implementation SHA, and bookkeeping SHA exactly. Only `state: done` completes the leaf. `finish` is not batch completion; return control to `ddd-auto`.
 
 If resuming with action `record`, continue the existing bounded implementation and commit it. If resuming with action `finish`, use the returned attempt evidence and complete only missing gates or attestation before `roadmapctl finish`; never start another leaf.

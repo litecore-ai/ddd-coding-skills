@@ -33,6 +33,7 @@ import { evaluateCompletion, gateManifestHash, runGate, validateAttestation, val
 
 const EMPTY_DIGEST = `sha256:${createHash('sha256').update('').digest('hex')}`;
 const LIFECYCLE_RUN_ID = /^\d{8}T\d{6}Z-[0-9a-f]{8}$/;
+const MAX_AUDIT_REPORT_BYTES = 1024 * 1024;
 
 async function writeTextAtomic(path, contents, fs = fileSystem) {
   const temporaryPath = `${path}.tmp-${randomUUID()}`;
@@ -257,6 +258,10 @@ function expectedRunHead(run) {
   return run.pendingTransaction?.state === 'committed' && run.pendingTransaction.bookkeepingSha
     ? run.pendingTransaction.bookkeepingSha
     : run.baselineSha;
+}
+
+function auditReportPath(runId, itemId, attemptNumber) {
+  return `.ddd/audit-${runId}-${itemId}-attempt-${attemptNumber}.json`;
 }
 
 export class RoadmapController {
@@ -774,6 +779,8 @@ export class RoadmapController {
         runId,
         attempt: attemptNumber,
         itemBaselineSha: attempt.itemBaselineSha,
+        specHash: item.spec.hash,
+        auditReportPath: auditReportPath(runId, item.id, attempt.number),
         item: { ...item, spec },
         revision: updated.revision
       };
@@ -820,6 +827,8 @@ export class RoadmapController {
         state: 'verifying',
         itemBaselineSha: attempt.itemBaselineSha,
         implementationSha,
+        specHash: item.spec.hash,
+        auditReportPath: auditReportPath(runId, itemId, attempt.number),
         changedFiles: paths,
         revision: updated.revision
       };
@@ -907,25 +916,30 @@ export class RoadmapController {
       if (!item?.requiredGates.includes(gateName) || gate?.type !== 'attestation') {
         throw lifecycleError('ATTESTATION_INVALID', 'the item does not declare this attestation gate');
       }
-      const requested = resolve(this.root, reportPath);
-      const real = await this.fs.realpath(requested);
-      if (!isContained(this.root, real)) throw unsafePath();
+      const expectedReportPath = auditReportPath(runId, itemId, attempt.number);
+      if (reportPath !== expectedReportPath) {
+        throw lifecycleError('ATTESTATION_INVALID', 'attestation report path is not controller-designated');
+      }
       let report;
       try {
-        report = JSON.parse(await this.fs.readFile(real, 'utf8'));
+        const { contents } = await readContainedRegular(this.root, resolve(this.root, expectedReportPath), this.fs);
+        if (contents.byteLength > MAX_AUDIT_REPORT_BYTES) {
+          throw lifecycleError('ATTESTATION_INVALID', 'attestation report exceeds the size limit');
+        }
+        report = JSON.parse(contents.toString('utf8'));
       } catch (error) {
         throw lifecycleError('ATTESTATION_INVALID', 'attestation report is not valid JSON', { causeCode: error.code });
       }
       const { bindings } = await this.evidenceContext(run, item, attempt);
       await this.assertRunRepository(run, attempt.implementationSha);
-      const normalized = validateAttestation({ bindings, gateName }, gate, report);
+      const normalized = validateAttestation({ bindings, gateName, runId, itemId }, gate, report);
       const nextAttempt = { ...attempt, evidence: { ...attempt.evidence, [gateName]: normalized } };
       const updated = await mutateRevisionRegular(journalPath, parseRun, run.revision, current => ({
         ...current,
         attempts: replaceLastAttempt(current, itemId, nextAttempt),
         events: addEvent(current, this.timestamp(), 'attestation-recorded', itemId, { gate: gateName })
       }), { fs: this.fs, randomUUID: this.createId });
-      return { runId, itemId, gate: gateName, status: normalized.status, revision: updated.revision };
+      return { runId, itemId, gate: gateName, status: normalized.status, reportPath: expectedReportPath, revision: updated.revision };
     });
   }
 
@@ -1263,6 +1277,8 @@ export class RoadmapController {
         state: attempt.state,
         itemBaselineSha: attempt.itemBaselineSha,
         implementationSha: attempt.implementationSha,
+        specHash: item.spec.hash,
+        auditReportPath: auditReportPath(run.runId, item.id, attempt.number),
         changedFiles: [...attempt.changedFiles],
         acIds: [...attempt.acIds],
         evidence: attempt.evidence

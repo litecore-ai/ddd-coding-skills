@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { p11SevenLeafLifecycleFixture } from './helpers.mjs';
+import { auditInputReport, auditReportPathFor, p11SevenLeafLifecycleFixture } from './helpers.mjs';
 
 const LEAF_IDS = Array.from({ length: 7 }, (_, index) => `P1.1.${index + 1}`);
 
@@ -27,21 +27,14 @@ test('P1.1 remains in progress with exactly six leaves incomplete after its firs
   await repo.cli(['verify', started.runId, 'P1.1.1']);
 
   const attempt = await currentAttempt(repo, started.runId, 'P1.1.1');
-  const audit = {
-    gate: 'audit',
-    type: 'attestation',
-    producer: 'ddd-audit',
-    schema: 'ddd-audit/v1',
-    status: 'passed',
-    bindings: attempt.evidence.tests.bindings,
-    auditRange: {
-      from: attempt.evidence.tests.bindings.itemBaselineSha,
-      to: attempt.evidence.tests.bindings.implementationSha
-    },
-    auditCounts: { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
-  };
-  await repo.write('.ddd/audit-P1.1.1.json', `${JSON.stringify(audit, null, 2)}\n`);
-  await repo.cli(['attest', started.runId, 'P1.1.1', 'audit', '.ddd/audit-P1.1.1.json']);
+  const audit = auditInputReport({
+    runId: started.runId,
+    itemId: 'P1.1.1',
+    bindings: attempt.evidence.tests.bindings
+  });
+  const auditPath = auditReportPathFor(started.runId, 'P1.1.1', attempt.number);
+  await repo.write(auditPath, `${JSON.stringify(audit, null, 2)}\n`);
+  await repo.cli(['attest', started.runId, 'P1.1.1', 'audit', auditPath]);
   assert.equal((await repo.cli(['finish', started.runId, 'P1.1.1'])).state, 'done');
 
   const status = await repo.cli(['status', started.runId]);

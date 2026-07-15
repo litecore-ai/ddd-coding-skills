@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import { canonicalStringify } from '../../src/roadmapctl/canonical-json.mjs';
 import { buildRunReport, renderRoadmap } from '../../src/roadmapctl/render.mjs';
-import { lifecycleFixture } from './helpers.mjs';
+import { auditInputReport, auditReportPathFor, lifecycleFixture } from './helpers.mjs';
 
 const ITEM_ID = 'P1.1.1';
 const SETTLE_SUBJECT = `chore(roadmapctl): settle ${ITEM_ID} as done`;
@@ -30,18 +30,10 @@ async function prepareVerifiedAttempt(repo) {
   await repo.cli(['verify', runId, ITEM_ID]);
   const run = await readRun(repo, runId);
   const bindings = run.attempts[ITEM_ID][0].evidence.tests.bindings;
-  const audit = {
-    gate: 'audit',
-    type: 'attestation',
-    producer: 'ddd-audit',
-    schema: 'ddd-audit/v1',
-    status: 'passed',
-    bindings,
-    auditRange: { from: bindings.itemBaselineSha, to: bindings.implementationSha },
-    auditCounts: { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
-  };
-  await repo.write('.ddd/recovery-audit.json', `${JSON.stringify(audit, null, 2)}\n`);
-  await repo.cli(['attest', runId, ITEM_ID, 'audit', '.ddd/recovery-audit.json']);
+  const audit = auditInputReport({ runId, itemId: ITEM_ID, bindings });
+  const auditPath = auditReportPathFor(runId, ITEM_ID);
+  await repo.write(auditPath, `${JSON.stringify(audit, null, 2)}\n`);
+  await repo.cli(['attest', runId, ITEM_ID, 'audit', auditPath]);
   const attested = await readRun(repo, runId);
   return {
     runId,

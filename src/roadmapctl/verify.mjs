@@ -29,6 +29,15 @@ const OPTIONAL_COMMAND_EVIDENCE_KEYS = Object.freeze(['internal', 'diagnostic', 
 const AUDIT_EVIDENCE_KEYS = Object.freeze([
   'gate', 'type', 'producer', 'schema', 'status', 'bindings', 'auditRange', 'auditCounts'
 ]);
+const AUDIT_REPORT_KEYS = Object.freeze([
+  'schemaVersion', 'schema', 'runId', 'itemId', 'baselineSha', 'implementationSha',
+  'specHash', 'counts', 'findings'
+]);
+const AUDIT_FINDING_KEYS = Object.freeze(['id', 'severity', 'file', 'line', 'message']);
+const AUDIT_FINDING_ID = /^([A-Z][A-Z0-9-]*)-(CRIT|HIGH|MEDIUM|LOW)-(\d{3,})$/;
+const ITEM_ID = /^P\d+\.\d+\.\d+$/;
+const MAX_AUDIT_FINDINGS = 1000;
+const MAX_AUDIT_FINDING_MESSAGE = 2000;
 
 function unsafe(message, details = {}) {
   return new RoadmapError('UNSAFE_COMMAND', message, details);
@@ -456,47 +465,66 @@ function validateBindingShape(bindings, label, { exact = false } = {}) {
 
 export function validateAttestation(context, gate, report) {
   if (!exactKeys(gate, ['type', 'producer', 'schema']) || gate.type !== 'attestation') attestationError('manifest gate must be an exact attestation definition');
-  if (!exactKeys(report, AUDIT_EVIDENCE_KEYS)) attestationError('attestation report must contain only the exact report fields');
-  if (report.producer !== gate.producer || report.schema !== gate.schema) {
-    attestationError('attestation producer or schema does not match the manifest');
+  if (!exactKeys(report, AUDIT_REPORT_KEYS)) attestationError('attestation report must contain only the exact report fields');
+  if (report.schemaVersion !== 1 || report.schema !== gate.schema) {
+    attestationError('attestation schema does not match the manifest');
   }
-  if (report.type !== undefined && report.type !== 'attestation') attestationError('report type must be attestation');
-  if (!['passed', 'failed'].includes(report.status)) attestationError('attestation status must be passed or failed');
+  if (typeof context?.runId !== 'string' || report.runId !== context.runId
+      || typeof context?.itemId !== 'string' || !ITEM_ID.test(context.itemId) || report.itemId !== context.itemId) {
+    attestationError('attestation run or item identity is stale');
+  }
 
   const currentBindings = bindingSource(context);
   validateBindingShape(currentBindings, 'current', { exact: true });
-  validateBindingShape(report.bindings, 'report', { exact: true });
   const expected = normalizedBindings(currentBindings);
-  const actual = normalizedBindings(report.bindings);
-  for (const key of BINDING_KEYS.slice(0, 4)) {
-    if (actual[key] !== expected[key]) attestationError(`attestation ${key} is stale`, { field: key });
-  }
-  if (!sameArray(actual.sharedContractHashes, expected.sharedContractHashes)) {
-    attestationError('attestation shared-contract bindings are stale', { field: 'sharedContractHashes' });
+  if (report.baselineSha !== expected.itemBaselineSha
+      || report.implementationSha !== expected.implementationSha
+      || report.specHash !== expected.specHash) {
+    attestationError('attestation commit or spec binding is stale');
   }
 
-  if (!exactKeys(report.auditRange, ['from', 'to'])) attestationError('attestation audit range is required and must be exact');
-  const actualRange = report.auditRange;
-  if (!GIT_OBJECT_ID.test(actualRange.from) || !GIT_OBJECT_ID.test(actualRange.to)
-      || actualRange.from !== expected.itemBaselineSha || actualRange.to !== expected.implementationSha) {
-    attestationError('attestation audit range is stale');
-  }
-
-  if (!plainObject(report.auditCounts)
-      || Object.keys(report.auditCounts).length !== AUDIT_SEVERITIES.length
-      || AUDIT_SEVERITIES.some(severity => !Number.isSafeInteger(report.auditCounts[severity]) || report.auditCounts[severity] < 0)) {
+  if (!plainObject(report.counts)
+      || Object.keys(report.counts).length !== AUDIT_SEVERITIES.length
+      || AUDIT_SEVERITIES.some(severity => !Number.isSafeInteger(report.counts[severity]) || report.counts[severity] < 0)) {
     attestationError('attestation severity counts must be exact non-negative integers');
   }
+  if (!Array.isArray(report.findings) || report.findings.length > MAX_AUDIT_FINDINGS) {
+    attestationError('attestation findings must be a bounded array');
+  }
+  const actualCounts = Object.fromEntries(AUDIT_SEVERITIES.map(severity => [severity, 0]));
+  const findingIds = new Set();
+  for (const finding of report.findings) {
+    if (!exactKeys(finding, AUDIT_FINDING_KEYS)) attestationError('each audit finding must contain only the exact finding fields');
+    const idMatch = typeof finding.id === 'string' ? finding.id.match(AUDIT_FINDING_ID) : null;
+    if (!idMatch || finding.id.length > 128 || idMatch[2] !== finding.severity || findingIds.has(finding.id)) {
+      attestationError('audit finding IDs must be unique and encode their severity');
+    }
+    if (typeof finding.file !== 'string' || finding.file.length === 0 || finding.file.length > 1024 || finding.file.includes('\\')
+        || isAbsolute(finding.file) || finding.file.split('/').some(segment => segment === '' || segment === '.' || segment === '..')) {
+      attestationError('audit finding paths must be canonical repository-relative paths');
+    }
+    if (!Number.isSafeInteger(finding.line) || finding.line <= 0
+        || typeof finding.message !== 'string' || finding.message.trim().length === 0
+        || finding.message.length > MAX_AUDIT_FINDING_MESSAGE) {
+      attestationError('audit findings require a positive line and non-empty message');
+    }
+    findingIds.add(finding.id);
+    actualCounts[finding.severity] += 1;
+  }
+  if (AUDIT_SEVERITIES.some(severity => report.counts[severity] !== actualCounts[severity])) {
+    attestationError('attestation severity counts do not match findings');
+  }
 
+  const status = report.counts.CRIT > 0 || report.counts.HIGH > 0 ? 'failed' : 'passed';
   return immutableCopy({
     gate: context?.gateName ?? report.gate ?? 'audit',
     type: 'attestation',
     producer: gate.producer,
     schema: gate.schema,
-    status: report.status,
-    bindings: actual,
-    auditRange: { from: actualRange.from, to: actualRange.to },
-    auditCounts: Object.fromEntries(AUDIT_SEVERITIES.map(severity => [severity, report.auditCounts[severity]]))
+    status,
+    bindings: expected,
+    auditRange: { from: report.baselineSha, to: report.implementationSha },
+    auditCounts: Object.fromEntries(AUDIT_SEVERITIES.map(severity => [severity, report.counts[severity]]))
   });
 }
 

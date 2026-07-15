@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { parseRun } from '../../src/roadmapctl/schema.mjs';
-import { lifecycleFixture } from './helpers.mjs';
+import { auditInputReport, auditReportPathFor, lifecycleFixture } from './helpers.mjs';
 
 function completeRun(overrides = {}) {
   return {
@@ -55,17 +55,8 @@ async function currentAttempt(repo, runId, itemId) {
 async function attestAudit(repo, runId, itemId, counts = { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }) {
   const attempt = await currentAttempt(repo, runId, itemId);
   const bindings = attempt.evidence.tests.bindings;
-  const audit = {
-    gate: 'audit',
-    type: 'attestation',
-    producer: 'ddd-audit',
-    schema: 'ddd-audit/v1',
-    status: counts.CRIT > 0 || counts.HIGH > 0 ? 'failed' : 'passed',
-    bindings,
-    auditRange: { from: bindings.itemBaselineSha, to: bindings.implementationSha },
-    auditCounts: counts
-  };
-  const path = `.ddd/audit-${itemId}.json`;
+  const audit = auditInputReport({ runId, itemId, bindings, counts });
+  const path = auditReportPathFor(runId, itemId, attempt.number);
   await repo.write(path, `${JSON.stringify(audit, null, 2)}\n`);
   return repo.cli(['attest', runId, itemId, 'audit', path]);
 }
@@ -212,18 +203,10 @@ test('record, verify, and attest bind all evidence to one implementation commit'
   assert.doesNotMatch(JSON.stringify(attempt.evidence), /ok\n|stdout\"|stderr\"/);
 
   const bindings = attempt.evidence.tests.bindings;
-  const audit = {
-    gate: 'audit',
-    type: 'attestation',
-    producer: 'ddd-audit',
-    schema: 'ddd-audit/v1',
-    status: 'passed',
-    bindings,
-    auditRange: { from: bindings.itemBaselineSha, to: bindings.implementationSha },
-    auditCounts: { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
-  };
-  await repo.write('.ddd/audit-P1.1.1.json', `${JSON.stringify(audit, null, 2)}\n`);
-  const attested = await repo.cli(['attest', runId, 'P1.1.1', 'audit', '.ddd/audit-P1.1.1.json']);
+  const audit = auditInputReport({ runId, itemId: 'P1.1.1', bindings });
+  const auditPath = auditReportPathFor(runId, 'P1.1.1');
+  await repo.write(auditPath, `${JSON.stringify(audit, null, 2)}\n`);
+  const attested = await repo.cli(['attest', runId, 'P1.1.1', 'audit', auditPath]);
   assert.equal(attested.gate, 'audit');
   assert.equal(attested.status, 'passed');
 

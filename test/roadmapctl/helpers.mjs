@@ -135,6 +135,41 @@ export function validRun(overrides = {}) {
   };
 }
 
+export function auditReportPathFor(runId, itemId, attemptNumber = 1) {
+  return `.ddd/audit-${runId}-${itemId}-attempt-${attemptNumber}.json`;
+}
+
+export function auditInputReport({
+  runId,
+  itemId,
+  bindings,
+  counts = { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
+}) {
+  const findings = [];
+  for (const severity of ['CRIT', 'HIGH', 'MEDIUM', 'LOW']) {
+    for (let index = 1; index <= counts[severity]; index += 1) {
+      findings.push({
+        id: `TEST-${severity}-${String(index).padStart(3, '0')}`,
+        severity,
+        file: 'src/audit-fixture.mjs',
+        line: index,
+        message: `${severity} fixture finding ${index}`
+      });
+    }
+  }
+  return {
+    schemaVersion: 1,
+    schema: 'ddd-audit/v1',
+    runId,
+    itemId,
+    baselineSha: bindings.itemBaselineSha,
+    implementationSha: bindings.implementationSha,
+    specHash: bindings.specHash,
+    counts: { ...counts },
+    findings
+  };
+}
+
 export function twoLeafRoadmap({ first = 'planned', second = 'planned' } = {}) {
   const roadmap = validRoadmap();
   roadmap.nodes[2].status = first;

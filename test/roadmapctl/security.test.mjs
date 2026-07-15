@@ -7,7 +7,14 @@ import test from 'node:test';
 import { acquireRunLock, releaseRunLock } from '../../src/roadmapctl/lock.mjs';
 import { buildRunReport, renderRoadmap, renderSpec, writeImmutableReport } from '../../src/roadmapctl/render.mjs';
 import { gateManifestHash, runGate, validateGateCommand } from '../../src/roadmapctl/verify.mjs';
-import { lifecycleFixture, twoLeafRoadmap, validRun, validSpec } from './helpers.mjs';
+import {
+  auditInputReport,
+  auditReportPathFor,
+  lifecycleFixture,
+  twoLeafRoadmap,
+  validRun,
+  validSpec
+} from './helpers.mjs';
 
 function commandGate(args = ['-e', 'process.exit(0)'], cwd = '.') {
   return { type: 'command', executable: process.execPath, args, cwd, timeoutMs: 1_000 };
@@ -16,18 +23,10 @@ function commandGate(args = ['-e', 'process.exit(0)'], cwd = '.') {
 async function attestAudit(repo, runId, itemId) {
   const run = JSON.parse(await repo.read(`.ddd/runs/${runId}.json`));
   const bindings = run.attempts[itemId].at(-1).evidence.tests.bindings;
-  const report = {
-    gate: 'audit',
-    type: 'attestation',
-    producer: 'ddd-audit',
-    schema: 'ddd-audit/v1',
-    status: 'passed',
-    bindings,
-    auditRange: { from: bindings.itemBaselineSha, to: bindings.implementationSha },
-    auditCounts: { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
-  };
-  await repo.write('.ddd/security-audit.json', `${JSON.stringify(report, null, 2)}\n`);
-  await repo.cli(['attest', runId, itemId, 'audit', '.ddd/security-audit.json']);
+  const report = auditInputReport({ runId, itemId, bindings });
+  const reportPath = auditReportPathFor(runId, itemId, run.attempts[itemId].at(-1).number);
+  await repo.write(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+  await repo.cli(['attest', runId, itemId, 'audit', reportPath]);
 }
 
 test('prompt-like and command-like domain strings remain escaped inert data', async t => {
