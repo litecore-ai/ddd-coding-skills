@@ -434,8 +434,8 @@ function validAuditEvidence(report, gateName) {
   return exactKeys(report, AUDIT_EVIDENCE_KEYS)
     && report.gate === gateName
     && report.type === 'attestation'
-    && report.producer === 'ddd-audit'
-    && report.schema === 'ddd-audit/v1'
+    && report.producer === 'ddd-develop'
+    && report.schema === 'ddd-review/v1'
     && ['passed', 'failed'].includes(report.status)
     && validEvidenceBindings(report.bindings)
     && exactKeys(report.auditRange, ['from', 'to'])

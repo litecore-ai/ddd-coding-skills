@@ -41,14 +41,13 @@ test('status --active reports an inactive bootstrap without a roadmap or control
   assert.deepEqual(JSON.parse(result.stdout), {
     action: 'none',
     activeItemId: null,
-    aggregates: {},
     attempt: null,
-    attemptsRemaining: {},
     blockers: {},
     item: null,
-    leaves: {},
     remaining: [],
     runId: null,
+    scope: [],
+    selector: null,
     status: 'inactive'
   });
   assert.equal(result.stderr, '');
@@ -63,6 +62,17 @@ test('status --active reports inactive when a canonical roadmap exists without a
 
   assert.equal(result.exitCode, 0);
   assert.equal(JSON.parse(result.stdout).status, 'inactive');
+  await assert.rejects(access(join(repo.root, '.ddd')));
+});
+
+test('status rejects unsupported output-mode flags', async t => {
+  const repo = await gitFixture();
+  t.after(repo.cleanup);
+
+  const result = await runCli(repo.root, ['status', '--active', '--verbose']);
+
+  assert.equal(result.exitCode, 2);
+  assert.equal(result.stdout, '');
   await assert.rejects(access(join(repo.root, '.ddd')));
 });
 

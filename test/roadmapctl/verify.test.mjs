@@ -50,7 +50,7 @@ function passingEvidence(bindings = currentBindings()) {
     consumer: passed('consumer', bindings),
     e2e: passed('e2e', bindings),
     audit: {
-      gate: 'audit', type: 'attestation', producer: 'ddd-audit', schema: 'ddd-audit/v1',
+      gate: 'audit', type: 'attestation', producer: 'ddd-develop', schema: 'ddd-review/v1',
       status: 'passed', bindings,
       auditRange: { from: bindings.itemBaselineSha, to: bindings.implementationSha },
       auditCounts: { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
@@ -61,7 +61,7 @@ function passingEvidence(bindings = currentBindings()) {
 function auditInput(bindings = currentBindings(), overrides = {}) {
   return {
     schemaVersion: 1,
-    schema: 'ddd-audit/v1',
+    schema: 'ddd-review/v1',
     runId: 'run-1',
     itemId: 'P1.1.1',
     baselineSha: bindings.itemBaselineSha,
@@ -188,7 +188,7 @@ test('runGate reports a non-zero exit and a spawn error as normalized failures',
 
 test('runGate executes only command gates', async () => {
   await assert.rejects(
-    runGate(process.cwd(), { bindings: currentBindings() }, 'audit', { type: 'attestation', producer: 'ddd-audit', schema: 'ddd-audit/v1' }),
+    runGate(process.cwd(), { bindings: currentBindings() }, 'audit', { type: 'attestation', producer: 'ddd-develop', schema: 'ddd-review/v1' }),
     error => error.code === 'UNSAFE_COMMAND'
   );
 });
@@ -286,13 +286,13 @@ test('runGate terminates timed-out process trees even when a descendant inherits
 
 test('attestation must match exact run, item, commit, spec, findings, and counts', () => {
   const bindings = currentBindings();
-  const gate = { type: 'attestation', producer: 'ddd-audit', schema: 'ddd-audit/v1' };
+  const gate = { type: 'attestation', producer: 'ddd-develop', schema: 'ddd-review/v1' };
   const context = { bindings, runId: 'run-1', itemId: 'P1.1.1' };
   const report = auditInput(bindings);
   const normalized = validateAttestation(context, gate, report);
   assert.deepEqual(normalized.auditCounts, { CRIT: 0, HIGH: 0, MEDIUM: 0, LOW: 0 });
   assert.ok(Object.isFrozen(normalized));
-  assert.throws(() => validateAttestation(context, gate, { ...report, schema: 'ddd-audit/v2' }), error => error.code === 'ATTESTATION_INVALID');
+  assert.throws(() => validateAttestation(context, gate, { ...report, schema: 'ddd-review/v2' }), error => error.code === 'ATTESTATION_INVALID');
   assert.throws(() => validateAttestation(context, gate, { ...report, implementationSha: '9'.repeat(40) }), error => error.code === 'ATTESTATION_INVALID');
   assert.throws(() => validateAttestation(context, gate, { ...report, counts: { ...report.counts, HIGH: -1 } }), error => error.code === 'ATTESTATION_INVALID');
   assert.throws(() => validateAttestation(context, gate, { ...report, unknown: true }), error => error.code === 'ATTESTATION_INVALID');

@@ -48,7 +48,7 @@ export function parseGlobalArgs(argv) {
   if (command === 'attest' && tokens.length !== 4) usage('attest requires run id, item id, gate, and report path');
   if (command === 'finish' && tokens.length !== 2) usage('finish requires one run id and one item id');
   if (['status', 'resume'].includes(command)
-      && (tokens.length !== 1 || (tokens[0] === '--active' ? false : tokens[0].startsWith('--')))) {
+      && (tokens.length !== 1 || (tokens[0] !== '--active' && tokens[0].startsWith('--')))) {
     usage(`${command} requires one run id or --active`);
   }
   if (command === 'retry' && (tokens.length !== 4 || tokens[2] !== '--reason' || !tokens[3])) {
@@ -94,12 +94,11 @@ export async function main(argv, io = { stdout: process.stdout, stderr: process.
       result = {
         runId: null,
         status: 'inactive',
+        selector: null,
+        scope: [],
         activeItemId: null,
-        leaves: {},
-        aggregates: {},
         remaining: [],
         blockers: {},
-        attemptsRemaining: {},
         action: 'none',
         item: null,
         attempt: null

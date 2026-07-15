@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const root = new URL('../', import.meta.url);
-const expectedVersion = '3.0.1';
+const expectedVersion = '4.0.0';
 const errors = [];
 
 function read(path) {
@@ -22,7 +22,7 @@ const tracked = execFileSync('git', ['ls-files'], {
   cwd: root,
   encoding: 'utf8',
   shell: false
-}).split('\n').filter(Boolean);
+}).split('\n').filter(path => path && existsSync(new URL(`../${path}`, import.meta.url)));
 const inspected = tracked.filter(path => path.startsWith('skills/')
   || path.startsWith('hooks/')
   || path.startsWith('.codex/')
@@ -33,7 +33,6 @@ const inspected = tracked.filter(path => path.startsWith('skills/')
 const forbidden = [
   [/Bash\(\*\)/g, 'wildcard shell permission'],
   [/PermissionRequest[\s\S]{0,500}decision[\s\S]{0,100}allow/gi, 'automatic permission approval'],
-  [/\.ddd-auto\.local\.md/g, 'legacy prose state'],
   [/DONE_WITH_WARNING|UNWIRED/g, 'pseudo-completion state'],
   [/flip every `?- \[ \]`?/gi, 'direct checkbox completion'],
   [/mark completed items with `?\[x\]`?/gi, 'direct checkbox completion'],
@@ -81,9 +80,6 @@ for (const path of ['README.md', 'README.zh-CN.md']) {
   const text = read(path);
   for (const required of ['Node.js 20', 'roadmap.json', 'Codex', 'Claude Code']) {
     if (!text.includes(required)) fail(path, `must name ${required}`);
-  }
-  if (!/breaking|破坏性/i.test(text) || !/regenerate|重新生成/i.test(text)) {
-    fail(path, 'must explain the breaking regeneration requirement');
   }
   if (!text.includes('validate → start → next → record → verify → audit → attest → finish → close')) {
     fail(path, 'must document the exact controller lifecycle');

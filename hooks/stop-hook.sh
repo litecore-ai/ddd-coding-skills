@@ -27,4 +27,4 @@ if [[ ! "$run_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
   exit 0
 fi
 
-printf '{"decision":"block","reason":"Resume ddd-auto run %s by invoking the ddd-auto adapter; obtain all item data from roadmapctl."}\n' "$run_id"
+printf '{"decision":"block","reason":"Resume DDD run %s with ddd-develop; obtain item data from compact roadmapctl output."}\n' "$run_id"

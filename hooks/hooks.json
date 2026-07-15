@@ -1,5 +1,5 @@
 {
-  "description": "Bounded liveness bridge for one controller-owned ddd-auto run",
+  "description": "Bounded liveness bridge for one controller-owned DDD development run",
   "hooks": {
     "Stop": [
       {

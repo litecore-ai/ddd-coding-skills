@@ -188,8 +188,8 @@ test('command gates reject sparse argument arrays at the missing index', () => {
 
 test('attestation gates require exact producer and schema IDs', () => {
   const value = validRoadmap();
-  value.gates.audit.schema = 'ddd-audit/v2';
-  expectSchemaError(() => parseRoadmap(value), '$.gates.audit.schema', /ddd-audit\/v1/);
+  value.gates.audit.schema = 'ddd-review/v2';
+  expectSchemaError(() => parseRoadmap(value), '$.gates.audit.schema', /ddd-review\/v1/);
 });
 
 for (const status of ['planned', 'blocked', 'failed', 'cancelled', 'done']) {

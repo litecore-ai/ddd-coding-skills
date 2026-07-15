@@ -1,6 +1,6 @@
 {
   "name": "ddd-coding-skills",
-  "version": "3.0.1",
+  "version": "4.0.0",
   "type": "module",
   "bin": {
     "roadmapctl": "./bin/roadmapctl.mjs"
@@ -12,22 +12,20 @@
     "test": "node --test",
     "check": "node --test && node scripts/check-skill-contracts.mjs"
   },
-  "description": "Deterministic DDD workflow for GPT-5.6 Sol and coding agents with JSON contracts, evidence gates, and crash-safe roadmap execution",
+  "description": "Usability-first DDD planning and progressive development with compact controller contracts",
   "keywords": [
     "skills",
     "ddd",
     "domain-driven-design",
     "tdd",
-    "audit",
-    "spec",
+    "compatibility",
     "roadmap",
     "best-practices",
     "workflows",
     "automation",
     "deterministic",
-    "loop",
-    "init",
-    "scaffold"
+    "vertical-slice",
+    "progressive-development"
   ],
   "license": "MIT",
   "repository": {

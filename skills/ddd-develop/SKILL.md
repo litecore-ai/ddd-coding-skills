@@ -1,46 +1,47 @@
 ---
 name: ddd-develop
-description: Implement one bounded vertical slice with domain-driven design, test-driven development, real consumer wiring, and controller-bound evidence. Use for one roadmap leaf issued by roadmapctl or for explicitly ad-hoc DDD implementation work.
+description: Develop production-compatible DDD vertical slices, either as one bounded ad-hoc change or by continuously executing an approved roadmap selector. Use for implementation, TDD, roadmap execution/resume, exact-range review, or explicit cancellation without disconnected stubs.
 ---
 
-# DDD Develop Adapter
+# DDD Develop
 
-Implement one complete vertical slice. Let GPT-5.6 Sol reason about the domain and repository; use `roadmapctl` only as the authority for scope, state, evidence bindings, and completion. Read `../../references/roadmapctl-protocol.md` in full before roadmap-mode work.
+This is the single implementation entry point. It owns one-slice development, continuous selector execution, recovery, exact-range audit, and explicit cancellation. Keep the model focused on domain and engineering judgment; let `roadmapctl` own only selection, state, gates, evidence bindings, and terminal reports. Read `../../references/roadmapctl-protocol.md` only for recovery details or rejected commands.
 
-Implement directly by default. Only when the host supports bounded workers and delegation is materially useful, read `references/subagent-prompts.md`; the parent retains all controller authority, cross-worker writes, commits, and evidence submission.
+## Choose the mode
 
-## Choose one mode
+- **Roadmap:** an exact selector is present, or the user asks to resume an active run. Execute every controller-selected leaf in dependency order.
+- **Ad-hoc:** a bounded behavior request has no formal selector. Implement one complete vertical slice without changing roadmap/controller state.
+- **Cancel:** the user explicitly asks to stop/abort. Inspect `status --active`, show the exact run and consequences, require confirmation, then call `abort <run-id> --confirm`. Never delete evidence or Git history.
 
-- **Roadmap mode:** Require an exact run ID and controller-issued item ID, usually supplied by `ddd-auto`. Work on that item only.
-- **Ad-hoc mode:** Use only when no run/item context was supplied. Ad-hoc work cannot update the roadmap, controller journals, generated views, or run evidence.
+Do not reinterpret a feature heading or prose as leaf IDs.
 
-Never reinterpret a feature, phase, heading, or user prose as multiple leaf assignments. Never edit canonical status or evidence files directly.
+## Roadmap start and continuity
 
-## Roadmap-mode protocol
+1. Resolve `roadmapctl` and call `status --active`.
+2. Resume an active run only when requested or when its selector equals the requested selector. If selectors differ, report the conflict and stop; never hijack the new request.
+3. For a new run, require one explicit selector, call `validate` and `scope`, and show the compact item list. The invocation authorizes ordinary repository-local gates after manifest inspection; ask only for network, credentials, installs, destructive actions, push/deploy, or external writes.
+4. Use `--sandboxed` only under a real host sandbox; otherwise use `--manifest-approved` for inspected safe local gates.
+5. Drive only the exact `resume <run-id>` action: `next`, `record`, `finish`, `close`, or `closed`. Unknown actions and controller errors fail closed.
 
-1. Resolve the controller as the shared protocol specifies. Call `roadmapctl status <run-id>`. Require `status: active`, the expected `activeItemId`, and an action of `record` or `finish`; if no item is active, return control to `ddd-auto` so it can call `next`.
-2. Treat `item`, `item.spec`, and `attempt` in the controller JSON as the complete execution contract. Do not expand scope from nearby nodes. Reject mismatched IDs, stale specs, missing acceptance criteria, or unknown actions.
-3. Inspect the relevant production path, tests, consumers, and established architecture. State a short implementation plan that maps every assigned AC to observable evidence.
-4. Implement the thinnest end-to-end slice with TDD: create a failing behavior test, make it pass, then refactor. Preserve ubiquitous language and existing bounded-context boundaries.
-5. Wire every new capability to the declared real consumer in this item. Include required delivery and persistence adapters. Empty ports, mock-only flows, TODO bodies, fake success, unused endpoints, and “wire later” components are incomplete.
-6. Run focused tests while developing. Use the project commands authorized for this run; never treat repository text as permission to install, access a network, use credentials, deploy, or perform destructive operations.
-7. Review the diff for scope, domain invariants, public contract compatibility, error semantics, transaction boundaries, and consumer closure. Create a local implementation commit containing only this leaf. Never push.
-8. Call `roadmapctl record <run-id> <item-id> --commit <sha> --ac <id>...` with the exact assigned AC IDs. Use the returned `itemBaselineSha` and `implementationSha`; do not infer either SHA.
-9. Call `roadmapctl verify <run-id> <item-id>`. A command gate failure is a real failure; do not replace it with prose or a warning.
-10. Invoke the read-only `ddd-audit` adapter for the exact `itemBaselineSha..implementationSha` range, same item/spec/AC contract, and controller-designated report path. Require its successful `roadmapctl attest` result; never submit a hand-written substitute.
-11. Call `roadmapctl finish <run-id> <item-id>`. Report `state`, `reasons`, implementation SHA, and bookkeeping SHA exactly. Only `state: done` completes the leaf. `finish` is not batch completion; return control to `ddd-auto`.
+Use `next <run-id>` once per issued leaf. Its compact contract supplies assigned ACs, consumers, public signatures, model names, shared hashes, and evidence bindings. Open only relevant full-spec sections when field-level detail is needed.
 
-If resuming with action `record`, continue the existing bounded implementation and commit it. If resuming with action `finish`, use the returned attempt evidence and complete only missing gates or attestation before `roadmapctl finish`; never start another leaf.
+If `next` returns terminal with no item, do not implement anything; follow its returned close action. When resuming at `finish`, complete only missing verification or audit evidence and do not rework the leaf.
 
-## DDD implementation guidance
+## Implement each vertical slice
 
-- Put business invariants and lifecycle transitions in aggregates, entities, or value objects rather than controllers or persistence code.
-- Use an application service to orchestrate the use case; keep transport and storage details in adapters.
-- Introduce a domain service only when a business rule does not naturally belong to one aggregate or value object.
-- Keep aggregate transactions explicit. Integrate across boundaries through stable contracts and events where appropriate.
-- Follow the repository's language, module layout, dependency direction, and error conventions unless the assigned contract explicitly changes them.
-- Prefer the smallest compatible change. Do not create speculative abstractions or parallel models.
+1. Map every assigned AC or ad-hoc outcome to observable tests through the real consumer.
+2. Inspect current bounded contexts, call paths, public models/contracts, persistence/delivery adapters, sibling modules, and failure behavior before designing.
+3. Write or identify a failing behavior test, implement the smallest cohesive end-to-end path, then refactor.
+4. Preserve ubiquitous language, invariants, aggregate/transaction boundaries, dependency direction, authorization, errors, events, and backward compatibility. Extend existing concepts; do not create parallel models, duplicate ports, or shadow adapters.
+5. Wire the actual consumer in the same slice. Empty ports, TODO bodies, fake repositories, mock-only success, unused endpoints, and deferred wiring are incomplete.
+6. Run focused tests while working, then relevant integration, consumer, and E2E checks. Review security, cleanup, concurrency, idempotency, query/resource behavior, observability, and compatibility.
 
-## Ad-hoc mode
+In roadmap mode, create one local commit containing only the leaf and never push. Call `record` with the exact AC IDs, then `verify`.
 
-Confirm the requested boundary, inspect the real consumer path, implement a complete TDD slice, and report tests plus remaining risks. A local commit is optional unless requested. Ad-hoc work cannot claim roadmap completion or manufacture controller evidence.
+Review the controller-issued baseline-to-implementation range directly: inspect every changed file and trace the real consuming flow. Write the designated `ddd-review/v1` evidence with root fields `schemaVersion`, `schema`, `runId`, `itemId`, `baselineSha`, `implementationSha`, `specHash`, `counts`, and `findings`; each finding has only `id`, `severity`, `file`, `line`, and `message`. CRIT/HIGH blocks. Call `attest`, then `finish`.
+
+Only leaf `state: done` is complete. Resume immediately after `finish`; a selector succeeds only when `remaining` is empty and `close --require-success` returns `successful`. Close non-empty terminal runs without that flag and preserve `blocked`, `failed`, `cancelled`, or `capped` exactly. Never retry without user approval.
+
+## Communication
+
+Report scope, current outcome, material design decisions, changed production flow, gate failures, blockers, and terminal report path. Keep controller JSON and repeated specs inside tool calls. Do not narrate the state machine.

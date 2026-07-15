@@ -181,8 +181,8 @@ function validateGate(definition, path) {
   }
 
   rejectUnknown(definition, ['type', 'producer', 'schema'], path);
-  enumValue(definition.producer, ['ddd-audit'], `${path}.producer`);
-  enumValue(definition.schema, ['ddd-audit/v1'], `${path}.schema`);
+  enumValue(definition.producer, ['ddd-develop'], `${path}.producer`);
+  enumValue(definition.schema, ['ddd-review/v1'], `${path}.schema`);
 }
 
 function validateSpecReference(reference, path) {

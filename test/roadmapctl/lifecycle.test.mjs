@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { parseRun } from '../../src/roadmapctl/schema.mjs';
-import { auditInputReport, auditReportPathFor, lifecycleFixture } from './helpers.mjs';
+import { auditInputReport, auditReportPathFor, lifecycleFixture, validSpec } from './helpers.mjs';
 
 function completeRun(overrides = {}) {
   return {
@@ -163,6 +163,54 @@ test('next returns exactly one dependency-ordered item and rejects concurrent as
   assert.equal(journal.attempts['P1.1.1'].length, 1);
 });
 
+test('execution context keeps leaf behavior and compatibility names without full model payloads', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+
+  const assigned = await repo.cli(['next', runId]);
+
+  assert.equal(assigned.item.id, 'P1.1.1');
+  assert.deepEqual(assigned.item.spec.acceptanceCriteria.map(criterion => criterion.id), ['AC-P1.1-001']);
+  assert.deepEqual(assigned.item.spec.models, [{ name: 'Profile', kind: 'aggregate' }]);
+  assert.equal(assigned.item.spec.models[0].fields, undefined);
+  assert.equal(assigned.item.spec.contracts[0].operation, 'save-and-find-by-id');
+  assert.deepEqual(assigned.item.spec.consumers, ['ProfileController']);
+
+  const resumed = await repo.cli(['resume', runId]);
+  assert.equal(resumed.action, 'record');
+  assert.equal(resumed.selector, 'P1.1');
+  assert.deepEqual(resumed.scope, ['P1.1.1', 'P1.1.2']);
+  assert.equal(resumed.item.spec.models[0].fields, undefined);
+  assert.deepEqual(resumed.attempt.evidence, {});
+  assert.equal(resumed.leaves, undefined);
+  assert.equal(resumed.aggregates, undefined);
+});
+
+test('compact context size does not grow with detailed feature model fields', async t => {
+  const base = validSpec();
+  const spec = validSpec({
+    models: [{
+      ...base.models[0],
+      fields: Array.from({ length: 120 }, (_, index) => ({
+        name: `field${index}`,
+        type: 'string',
+        required: index % 2 === 0,
+        constraints: [`compatibility-rule-${index}`, 'non-empty']
+      }))
+    }]
+  });
+  const repo = await lifecycleFixture({ spec });
+  t.after(repo.cleanup);
+  const { runId } = await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  await repo.cli(['next', runId]);
+
+  const compact = await repo.cli(['status', runId]);
+
+  assert.ok(JSON.stringify(compact).length < 3000);
+  assert.deepEqual(compact.item.spec.models, [{ name: 'Profile', kind: 'aggregate' }]);
+});
+
 test('start fails closed when the approved spec binding is stale', async t => {
   const repo = await lifecycleFixture();
   t.after(repo.cleanup);
@@ -212,7 +260,7 @@ test('record, verify, and attest bind all evidence to one implementation commit'
 
   journal = JSON.parse(await readFile(join(repo.root, '.ddd/runs', `${runId}.json`), 'utf8'));
   attempt = journal.attempts['P1.1.1'][0];
-  assert.equal(attempt.evidence.audit.producer, 'ddd-audit');
+  assert.equal(attempt.evidence.audit.producer, 'ddd-develop');
   assert.equal(attempt.evidence.audit.bindings.implementationSha, implementation);
 });
 
@@ -243,10 +291,11 @@ test('two-leaf scope closes successfully only after both evidence-backed items f
   assert.equal((await implementCurrent(repo, runId, 'P1.1.1', 'first.txt')).state, 'done');
 
   const middle = await repo.cli(['status', runId]);
-  assert.equal(middle.leaves['P1.1.1'], 'done');
-  assert.equal(middle.leaves['P1.1.2'], 'ready');
-  assert.equal(middle.aggregates['P1.1'], 'in_progress');
   assert.deepEqual(middle.remaining, ['P1.1.2']);
+  assert.equal(middle.action, 'next');
+  const middleRoadmap = JSON.parse(await repo.read('docs/roadmap/roadmap.json'));
+  assert.equal(middleRoadmap.nodes.find(node => node.id === 'P1.1.1').status, 'done');
+  assert.equal(middleRoadmap.nodes.find(node => node.id === 'P1.1.2').status, 'planned');
   const premature = await repo.rawCli(['close', runId, '--require-success']);
   assert.notEqual(premature.exitCode, 0);
 
@@ -341,8 +390,8 @@ test('resume recovers a prepared item settlement exactly once', async t => {
   await repo.write(journalPath, `${JSON.stringify(journal, null, 2)}\n`);
 
   const recovered = await repo.cli(['resume', runId]);
-  assert.equal(recovered.leaves['P1.1.1'], 'done');
   assert.equal(recovered.action, 'next');
+  assert.deepEqual(recovered.remaining, ['P1.1.2']);
   const head = (await repo.git(['rev-parse', 'HEAD'])).stdout.trim();
   const recoveredJournal = JSON.parse(await repo.read(journalPath));
   assert.equal(recoveredJournal.pendingTransaction.state, 'committed');
@@ -525,7 +574,7 @@ test('missing audit blocks finish and close reports blocked rather than success'
   assert.deepEqual(terminal.blockers['P1.1.2'], [{ itemId: 'P1.1.1', state: 'blocked' }]);
   const closed = await repo.cli(['close', runId]);
   assert.equal(closed.status, 'blocked');
-  assert.notEqual((await repo.cli(['status', runId])).aggregates['P1.1'], 'done');
+  assert.deepEqual((await repo.cli(['status', runId])).remaining, ['P1.1.1', 'P1.1.2']);
 });
 
 test('blocking audit fails finish and close reports failed', async t => {
@@ -549,8 +598,11 @@ test('abort requires confirmation, preserves cancellation evidence, and never co
   const aborted = await repo.cli(['abort', runId, '--confirm']);
   assert.equal(aborted.status, 'cancelled');
   const status = await repo.cli(['status', runId]);
-  assert.equal(status.leaves['P1.1.1'], 'cancelled');
-  assert.notEqual(status.aggregates['P1.1'], 'done');
+  assert.equal(status.status, 'cancelled');
+  assert.deepEqual(status.remaining, ['P1.1.1', 'P1.1.2']);
+  const report = JSON.parse(await repo.read(aborted.reportPath));
+  assert.equal(report.status, 'cancelled');
+  assert.equal(report.items['P1.1.1'].status, 'cancelled');
 });
 
 test('retry preserves prior attempts and the bounded budget closes as capped', async t => {

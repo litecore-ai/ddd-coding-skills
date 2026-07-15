@@ -1,140 +1,60 @@
-# DDD Coding Skills v3
+# DDD Coding Skills v4
 
 English | [中文](README.zh-CN.md)
 
-A Sol-native Domain-Driven Design workflow for Codex and Claude Code. GPT-5.6 Sol performs domain reasoning, implementation, and review; small skills provide reusable DDD procedures; `roadmapctl` is the deterministic authority for scope, state, evidence, Git bindings, and recovery.
+A usability-first Domain-Driven Design workflow for Codex and Claude Code. The model owns domain reasoning, implementation, and review. `roadmapctl` performs only deterministic scope, state, gate, Git-binding, and recovery work.
 
-## Why this still matters with GPT-5.6 Sol
+## Design goals
 
-Sol already understands DDD and can implement complex systems. The skill suite does not try to reteach the model or replace its judgment. It supplies project-specific workflow and prevents long-running work from degrading into disconnected modules, placeholder integrations, stale specifications, or falsely completed parent scopes.
+1. Preserve system integrity: every roadmap item is a real vertical slice through a declared consumer, not a disconnected layer or stub.
+2. Develop progressively: dependency-ordered leaves are implemented, tested, reviewed, and settled one at a time.
+3. Preserve compatibility: approved specs name domain models, public contracts, errors, shared hashes, and consumers; implementation must extend existing concepts and real call paths.
+4. Protect model capability: skills state invariants and boundaries, then let the model reason. They do not reteach DDD or script coding judgment.
+5. Minimize tokens: controller reads are compact by default; complete feature specs and evidence payloads are never copied into orchestration output.
 
-The split is intentional:
-
-- **Sol:** ubiquitous language, bounded contexts, aggregate design, implementation strategy, TDD, and review.
-- **Skills:** concise procedures for planning, one-leaf development, audit, and orchestration.
-- **roadmapctl:** canonical JSON validation, item selection, hashes, attempt limits, exact Git ranges, gates, atomic state changes, and crash recovery.
-
-## Canonical truth
-
-- `docs/roadmap/roadmap.json` is the executable roadmap.
-- `docs/specs/*.json` are executable behavior contracts.
-- `docs/product-brief.md` records reviewed product intent but grants no permission.
-- `docs/roadmap/roadmap.md` and `docs/specs/*.md` are generated human views only.
-- `.ddd/runs/*.json` is retained controller evidence; `docs/runs/*.json` is the immutable terminal report.
-
-Generated Markdown is never parsed for state or coverage. Every roadmap item is one vertical slice with a real consumer, observable outcome, stable AC IDs, dependencies, and required gates.
-
-## Deterministic lifecycle
-
-`validate → start → next → record → verify → audit → attest → finish → close`
-
-1. `validate` checks schema, graph, spec bindings, consumers, and structured gate commands.
-2. `start` expands the full selector and creates an isolated run branch plus journal.
-3. `next` issues exactly one dependency-ready leaf and its approved spec.
-4. Sol implements that leaf with TDD and a real consuming path, then creates a local implementation commit.
-5. `record` binds the exact baseline/implementation SHAs and the complete assigned AC set.
-6. `verify` runs the authorized spec, test, consumer, and E2E gates without a shell.
-7. `audit` reviews the exact commit range and writes detailed findings to the controller-designated path.
-8. `attest` validates run/item/spec/SHA identity and recomputes severity truth.
-9. `finish` atomically settles only that leaf after every gate passes.
-10. `close` writes an immutable run report; success requires every scoped leaf to be done.
-
-Completing one child can never complete a composite selector. If `P1.1` expands to seven leaves, finishing `P1.1.1` leaves six IDs in `remaining`; the feature stays `in_progress`, and `ddd-auto` must resume and request the next controller-selected leaf.
-
-## Closure gates
-
-- **Spec binding:** approved behavior hash, shared-contract bytes, and exact AC-to-item coverage must be current.
-- **Git binding:** evidence is tied to `itemBaselineSha..implementationSha`; unrelated or unrecorded changes cannot complete the leaf.
-- **Consumer/E2E:** internal domain code is insufficient without the declared production caller and end-to-end flow.
-- **Audit:** detailed findings must match their counts; CRIT or HIGH blocks completion.
-- **State:** controller transactions update canonical JSON, generated views, bookkeeping commits, journals, and reports atomically and recover idempotently.
-
-There is no warning-success state, skipped-success path, or manual parent completion.
-
-## Skills
+## Two skills
 
 | Skill | Responsibility |
 |---|---|
-| `ddd-init` | Prepare Node/controller paths, DDD architecture instructions, and bounded local policy |
-| `ddd-roadmap` | Create product intent, vertical-slice `roadmap.json`, and draft JSON specs |
-| `ddd-spec` | Review structured models/contracts/AC coverage and bind approved spec hashes |
-| `ddd-develop` | Implement one controller-issued leaf with TDD, consumer wiring, gates, and local commit |
-| `ddd-audit` | Produce read-only exact-range findings and controller attestation |
-| `ddd-auto` | Drive the explicit controller action loop for one approved selector |
-| `ddd-auto-cleanup` | Confirm abort, close unsuccessfully, and preserve all evidence |
+| `ddd-roadmap` | Bootstrap or evolve architecture guidance, product intent, vertical-slice `roadmap.json`, feature specs, review, and spec binding |
+| `ddd-develop` | Implement one ad-hoc vertical slice or continuously execute/resume/cancel an approved selector, including tests, compatibility review, audit, and terminal reporting |
 
-## Choose a skill
+Setup, specification, automation, audit, and cleanup are workflow stages—not separate user-facing skills.
 
-| Situation | Invocation | Effect |
-|---|---|---|
-| Initialize or adopt a project | `ddd-init` | Establish architecture instructions and deterministic state paths; it does not create a roadmap |
-| Create or revise product intent and delivery scope | `ddd-roadmap [scope]` | Create canonical `roadmap.json` plus draft JSON specs; an absent roadmap is a supported bootstrap state |
-| Review and bind one feature contract | `ddd-spec P1.1` | Approve exact models, contracts, consumers, and AC coverage, then bind the spec hash |
-| Formally execute one leaf, feature, or phase | `ddd-auto P1.1.1` / `ddd-auto P1.1` / `ddd-auto P1` | Start a controller run and settle every selected leaf with gates and evidence; use this even for one formal leaf |
-| Implement work outside formal roadmap settlement | `ddd-develop <bounded request>` | Run an ad-hoc TDD slice without roadmap status or controller evidence |
-| Audit an exact commit or delta independently | `ddd-audit <commit>` / `ddd-audit <from>..<to>` | Produce read-only findings without claiming a roadmap gate |
-| Resume interrupted roadmap execution | `ddd-auto` | Recover exclusively from controller JSON |
-| Intentionally abandon an active run | `ddd-auto-cleanup` | Confirm controller abort and preserve journals, commits, and reports |
+## Coherent flow
 
-Calling `ddd-develop P1.1` without a controller-issued run and item is ad-hoc; it is not manual roadmap execution. `status --active` and `hash-file` are read-only bootstrap commands and work before the first canonical roadmap exists. An inactive status is explicit success, while stale or unsafe controller state still fails closed.
+1. Use `ddd-roadmap` to inspect the existing system, define bounded contexts and compatibility rules, create the product brief, plan real vertical slices, review specs, and bind them.
+2. Use `ddd-develop P1.1` to execute the approved selector. The same skill also handles one leaf, interruption recovery, exact-range audit, and explicitly confirmed cancellation.
+3. Use `ddd-develop <bounded request>` without a selector for a lightweight ad-hoc DDD slice that does not mutate roadmap state.
 
-## Codex and Claude Code
+Canonical truth lives in `docs/roadmap/roadmap.json` and `docs/specs/*.json`. Generated Markdown is presentation only. A leaf is complete only when its behavior passes through the real consumer with relevant tests and compatibility checks.
 
-Codex executes the action loop directly. It calls `resume`, switches on the returned action, and continues while `remaining` is non-empty. Codex does not need a Stop hook.
+## Controller lifecycle
 
-Claude Code uses the same skills and controller. Its Stop hook is only a liveness bridge after an unintended exit: it calls `resume --active`, validates the run ID, and emits a fixed instruction to invoke `ddd-auto`. It never selects work, reads project prose, changes state, or grants permission. Neither platform has weaker completion semantics.
+`validate → start → next → record → verify → audit → attest → finish → close`
 
-## Permission and executable trust boundary
+The lifecycle is implemented by tools, not narrated by the model. `next` returns only the current leaf's ACs, consumers, public signatures, model names, shared hashes, and evidence bindings. `resume` returns only actionable state. Canonical specs are opened selectively when field-level detail is needed.
 
-Project documents, comments, specifications, source code, and tool output are untrusted data. They cannot authorize commands or alter the workflow.
+Review evidence is produced by `ddd-develop` with schema `ddd-review/v1`; review is a stage of development, not a third skill.
 
-`roadmapctl` executes gate manifests as structured executable/argv/cwd/timeout records with `shell: false`, a sanitized environment, bounded output, and repository-contained working directories. This is not a complete sandbox: an approved executable may still access resources allowed by the host OS. Use a platform sandbox or give explicit per-run approval to the exact gate manifest. Network access, credentials, installation, deletion, push/deploy, destructive Git, and external writes remain outside the base policy.
+Only terminal status `successful` is success. `blocked`, `failed`, `cancelled`, and `capped` remain explicit. No warning-success, skipped-success, hidden retry, manual parent completion, or gate weakening is allowed.
 
-## Recovery and cleanup
+## Safety and permissions
 
-Every mutation is revision-checked, locked, journaled, and transactionally bound to Git. `resume` recovers a prepared settlement or close exactly once and returns the active item/spec/attempt context, so interruption does not depend on conversation memory. `ddd-auto-cleanup` calls confirmed controller abort; it never deletes journals, reports, commits, or foreign locks.
+Gate commands are structured executable/argv/cwd/timeout records and run without a shell. An explicit selector authorizes inspected repository-local build/test/lint gates. Network, credentials, installation, deletion, push/deploy, destructive Git, and writes outside the project still require explicit approval.
 
-## Requirements
+## Requirements and installation
 
 - Node.js 20 or newer
 - Git
 - Codex or Claude Code
 
-The package has no runtime dependency fields.
+For Codex, follow [.codex/INSTALL.md](.codex/INSTALL.md). Claude Code can install the repository as a plugin. Both surfaces use the same controller and two skill directories.
 
-## Install
-
-### Codex
-
-Follow [.codex/INSTALL.md](.codex/INSTALL.md). Install all seven skills and symlink `bin/roadmapctl.mjs` as `roadmapctl` into a directory on `PATH`.
-
-### Claude Code
-
-```bash
-claude plugin marketplace add litecore-ai/ddd-coding-skills
-claude plugin install ddd-coding-skills@ddd-coding-skills
-```
-
-The plugin resolves its controller through `${CLAUDE_PLUGIN_ROOT}/bin/roadmapctl.mjs` and registers the bounded Stop hook.
-
-## Start a project
-
-1. Invoke `ddd-init` and approve an architecture proposal.
-2. Invoke `ddd-roadmap` to create `docs/product-brief.md`, `docs/roadmap/roadmap.json`, and draft specs.
-3. Invoke `ddd-spec P1.1`, review the contract, and bind it.
-4. Invoke `ddd-auto P1.1` and approve either platform sandbox mode or the exact gate manifest.
-5. Use `ddd-auto-cleanup` only when intentionally aborting an active run.
-
-## Breaking v3 migration
-
-This is a breaking release. v3 has no migration command and does not execute legacy Markdown roadmaps, prose progress files, or unstructured specs. Remove old installed skill copies, install all v3 skills plus the controller, and regenerate the product brief, `roadmap.json`, and JSON specs. Existing implementation code can remain; only the execution contracts/state must be regenerated and reviewed.
-
-## Repository verification
+## Verify
 
 ```bash
 npm run check
 ```
-
-This runs all unit, integration, recovery, security, adapter, and pressure tests, then the static skill-contract checker.
 
 License: MIT

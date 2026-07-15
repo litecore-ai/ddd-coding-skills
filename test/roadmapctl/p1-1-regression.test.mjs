@@ -38,10 +38,11 @@ test('P1.1 remains in progress with exactly six leaves incomplete after its firs
   assert.equal((await repo.cli(['finish', started.runId, 'P1.1.1'])).state, 'done');
 
   const status = await repo.cli(['status', started.runId]);
-  assert.equal(status.leaves['P1.1.1'], 'done');
-  assert.equal(status.leaves['P1.1.2'], 'ready');
-  assert.equal(status.aggregates['P1.1'], 'in_progress');
   assert.deepEqual(status.remaining, LEAF_IDS.slice(1));
+  assert.equal(status.action, 'next');
+  const roadmap = JSON.parse(await repo.read('docs/roadmap/roadmap.json'));
+  assert.equal(roadmap.nodes.find(node => node.id === 'P1.1.1').status, 'done');
+  assert.equal(roadmap.nodes.find(node => node.id === 'P1.1.2').status, 'planned');
 
   const headBeforeClose = (await repo.git(['rev-parse', 'HEAD'])).stdout.trim();
   const journalBeforeClose = JSON.parse(await repo.read(`.ddd/runs/${started.runId}.json`));
@@ -50,7 +51,6 @@ test('P1.1 remains in progress with exactly six leaves incomplete after its firs
   const afterRejectedClose = await repo.cli(['status', started.runId]);
   const journalAfterClose = JSON.parse(await repo.read(`.ddd/runs/${started.runId}.json`));
   assert.equal(afterRejectedClose.status, 'active');
-  assert.equal(afterRejectedClose.aggregates['P1.1'], 'in_progress');
   assert.deepEqual(afterRejectedClose.remaining, LEAF_IDS.slice(1));
   assert.equal((await repo.git(['rev-parse', 'HEAD'])).stdout.trim(), headBeforeClose);
   assert.equal(journalAfterClose.revision, journalBeforeClose.revision);

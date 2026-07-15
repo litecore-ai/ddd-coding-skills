@@ -35,6 +35,43 @@ const EMPTY_DIGEST = `sha256:${createHash('sha256').update('').digest('hex')}`;
 const LIFECYCLE_RUN_ID = /^\d{8}T\d{6}Z-[0-9a-f]{8}$/;
 const MAX_AUDIT_REPORT_BYTES = 1024 * 1024;
 
+function executionSpec(item, spec) {
+  const assigned = new Set(item.spec.acceptanceCriteria);
+  return {
+    id: spec.id,
+    title: spec.title,
+    status: spec.status,
+    path: item.spec.path,
+    hash: item.spec.hash,
+    acceptanceCriteria: spec.acceptanceCriteria.filter(criterion => assigned.has(criterion.id)),
+    models: spec.models.map(model => ({ name: model.name, kind: model.kind })),
+    contracts: spec.contracts.map(contract => ({
+      name: contract.name,
+      kind: contract.kind,
+      operation: contract.operation,
+      input: contract.input,
+      output: contract.output,
+      errors: [...contract.errors]
+    })),
+    sharedContracts: spec.sharedContracts.map(contract => ({ ...contract })),
+    consumers: [...spec.consumers]
+  };
+}
+
+function attemptContext(runId, item, attempt) {
+  return {
+    number: attempt.number,
+    state: attempt.state,
+    itemBaselineSha: attempt.itemBaselineSha,
+    implementationSha: attempt.implementationSha,
+    specHash: item.spec.hash,
+    auditReportPath: auditReportPath(runId, item.id, attempt.number),
+    changedFiles: [...attempt.changedFiles],
+    acIds: [...attempt.acIds],
+    evidence: Object.fromEntries(Object.entries(attempt.evidence).map(([gate, result]) => [gate, result.status]))
+  };
+}
+
 async function writeTextAtomic(path, contents, fs = fileSystem) {
   const temporaryPath = `${path}.tmp-${randomUUID()}`;
   await fs.mkdir(dirname(path), { recursive: true });
@@ -845,7 +882,7 @@ export class RoadmapController {
         itemBaselineSha: attempt.itemBaselineSha,
         specHash: item.spec.hash,
         auditReportPath: auditReportPath(runId, item.id, attempt.number),
-        item: { ...item, spec },
+        item: { ...item, spec: executionSpec(item, spec) },
         revision: updated.revision
       };
     });
@@ -1290,15 +1327,6 @@ export class RoadmapController {
       if (itemBlockers.length > 0) blockers[itemId] = itemBlockers;
       attemptsRemaining[itemId] = Math.max(0, run.maxAttemptsPerItem - (run.attempts[itemId]?.length ?? 0));
     }
-    const aggregateIds = new Set();
-    for (const itemId of run.scope) {
-      let node = this.roadmap.nodes.find(candidate => candidate.id === itemId);
-      while (node?.parentId) {
-        aggregateIds.add(node.parentId);
-        node = this.roadmap.nodes.find(candidate => candidate.id === node.parentId);
-      }
-    }
-    const aggregates = Object.fromEntries([...aggregateIds].sort().map(id => [id, deriveAggregate(this.roadmap, id, run)]));
     const remaining = run.scope.filter(id => leaves[id] !== 'done');
     let action = 'closed';
     if (run.status === 'active') {
@@ -1312,9 +1340,9 @@ export class RoadmapController {
     return {
       runId: run.runId,
       status: run.status,
+      selector: run.selector,
+      scope: [...run.scope],
       activeItemId: run.currentItemId,
-      leaves,
-      aggregates,
       remaining,
       blockers,
       attemptsRemaining,
@@ -1335,18 +1363,8 @@ export class RoadmapController {
     const { attempt } = activeAttempt(run, item.id);
     return {
       ...snapshot,
-      item: { ...item, spec },
-      attempt: {
-        number: attempt.number,
-        state: attempt.state,
-        itemBaselineSha: attempt.itemBaselineSha,
-        implementationSha: attempt.implementationSha,
-        specHash: item.spec.hash,
-        auditReportPath: auditReportPath(run.runId, item.id, attempt.number),
-        changedFiles: [...attempt.changedFiles],
-        acIds: [...attempt.acIds],
-        evidence: attempt.evidence
-      }
+      item: { ...item, spec: executionSpec(item, spec) },
+      attempt: attemptContext(run.runId, item, attempt)
     };
   }
 

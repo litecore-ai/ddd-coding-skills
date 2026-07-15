@@ -9,12 +9,12 @@
     {
       "name": "ddd-coding-skills",
       "source": "./",
-      "description": "Deterministic DDD workflow with JSON contracts, evidence gates, and crash-safe execution",
-      "version": "3.0.1",
+      "description": "Usability-first DDD roadmap and progressive development with compact controller contracts",
+      "version": "4.0.0",
       "license": "MIT",
       "homepage": "https://github.com/litecore-ai/ddd-coding-skills",
       "repository": "https://github.com/litecore-ai/ddd-coding-skills",
-      "keywords": ["ddd", "domain-driven-design", "tdd", "audit", "roadmap", "automation", "loop", "init", "scaffold"]
+      "keywords": ["ddd", "domain-driven-design", "tdd", "compatibility", "roadmap", "vertical-slice", "progressive-development"]
     }
   ]
 }
