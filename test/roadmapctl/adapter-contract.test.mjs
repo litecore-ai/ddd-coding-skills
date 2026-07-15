@@ -60,6 +60,7 @@ test('develop binds one controller item to commit, AC, gates, audit, and finish'
 test('cleanup preserves evidence and requires confirmation before abort', async () => {
   const text = await source('skills/ddd-auto-cleanup/SKILL.md');
   assert.match(text, /status --active/);
+  assert.match(text, /exact inactive bootstrap result/);
   assert.match(text, /explicit.*confirmation/is);
   assert.match(text, /abort.*--confirm/);
   assert.doesNotMatch(text, /\brm\b|delete.*\.ddd|remove.*state/i);

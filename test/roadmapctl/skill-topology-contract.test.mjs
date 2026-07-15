@@ -36,6 +36,7 @@ test('planning ownership flows from draft roadmap specs to spec approval and bin
   assert.match(roadmap, /hand off contract review, approval, and binding to `ddd-spec`/);
   assert.match(roadmap, /never marks a spec `approved` or calls `bind-spec`/);
   assert.match(roadmap, /`ddd-spec` is the only adapter that may promote and bind/);
+  assert.match(roadmap, /exact inactive bootstrap result/);
   assert.match(spec, /Set the reviewed spec to `approved`, call `bind-spec/);
 });
 
@@ -44,6 +45,7 @@ test('initialization hands planning off without absorbing roadmap responsibiliti
 
   assert.doesNotMatch(description(init), /migration planning|phase planning|scoped planning/i);
   assert.match(init, /hand off product intent, delivery sequencing, and draft specs to `ddd-roadmap`/);
+  assert.match(init, /exact inactive bootstrap result/);
   assert.match(init, /do not invoke planning from this adapter/);
   assert.doesNotMatch(init, /use `ddd-roadmap` to create/i);
 });

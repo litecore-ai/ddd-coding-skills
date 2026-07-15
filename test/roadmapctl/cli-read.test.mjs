@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { roadmapFixture, runCli, twoLeafRoadmap } from './helpers.mjs';
+import { gitFixture, lifecycleFixture, roadmapFixture, runCli, twoLeafRoadmap } from './helpers.mjs';
 
 function runLinkedCli(bin, args) {
   return new Promise((resolve, reject) => {
@@ -29,6 +29,69 @@ test('scope command emits structured leaves only', async t => {
   assert.equal(result.exitCode, 0);
   assert.deepEqual(JSON.parse(result.stdout).items, ['P1.1.1', 'P1.1.2']);
   assert.equal(result.stderr, '');
+});
+
+test('status --active reports an inactive bootstrap without a roadmap or controller writes', async t => {
+  const repo = await gitFixture();
+  t.after(repo.cleanup);
+
+  const result = await runCli(repo.root, ['status', '--active']);
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    action: 'none',
+    activeItemId: null,
+    aggregates: {},
+    attempt: null,
+    attemptsRemaining: {},
+    blockers: {},
+    item: null,
+    leaves: {},
+    remaining: [],
+    runId: null,
+    status: 'inactive'
+  });
+  assert.equal(result.stderr, '');
+  await assert.rejects(access(join(repo.root, '.ddd')));
+});
+
+test('status --active reports inactive when a canonical roadmap exists without a run', async t => {
+  const repo = await roadmapFixture();
+  t.after(repo.cleanup);
+
+  const result = await runCli(repo.root, ['status', '--active']);
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(JSON.parse(result.stdout).status, 'inactive');
+  await assert.rejects(access(join(repo.root, '.ddd')));
+});
+
+test('status --active fails closed when an active run loses its canonical roadmap', async t => {
+  const repo = await lifecycleFixture();
+  t.after(repo.cleanup);
+  await repo.cli(['start', 'P1.1', '--manifest-approved']);
+  await rm(join(repo.root, 'docs/roadmap/roadmap.json'));
+
+  const result = await runCli(repo.root, ['status', '--active']);
+
+  assert.equal(result.exitCode, 3);
+  assert.equal(JSON.parse(result.stderr).code, 'INVALID');
+  assert.equal(result.stdout, '');
+});
+
+test('hash-file is available before the first canonical roadmap exists', async t => {
+  const repo = await gitFixture();
+  t.after(repo.cleanup);
+  await repo.write('contracts/profile.json', '{"schemaVersion":1}\n');
+
+  const result = await runCli(repo.root, ['hash-file', 'contracts/profile.json']);
+
+  assert.equal(result.exitCode, 0);
+  const value = JSON.parse(result.stdout);
+  assert.equal(value.path, 'contracts/profile.json');
+  assert.match(value.hash, /^sha256:[a-f0-9]{64}$/);
+  assert.equal(result.stderr, '');
+  await assert.rejects(access(join(repo.root, '.ddd')));
 });
 
 test('unknown command is a usage error without a stack', async t => {

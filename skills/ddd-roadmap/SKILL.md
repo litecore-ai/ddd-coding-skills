@@ -17,7 +17,7 @@ Create a vertical-slice delivery graph whose state is controlled by `roadmapctl`
 
 ## Workflow
 
-1. Resolve the controller exactly as the shared protocol requires. Run `validate` when a roadmap exists. Use `status --active` to detect an active run; if it resolves, stop planning mutations and report the run.
+1. Resolve the controller exactly as the shared protocol requires. Call `status --active` and continue only for its exact inactive bootstrap result; if it reports a run, stop planning mutations and report it, and treat any controller error as fail-closed. Run `validate` only when a canonical roadmap already exists.
 2. Determine full-project or user-scoped mode. Read user-named sources in full, then inspect only relevant product, architecture, code, test, and manifest context.
 3. Read `references/product-brief-format.md`. Align product goals, users, observable outcomes, non-goals, constraints, and success measures with the user. Write or merge `docs/product-brief.md` without inventing decisions. For a brief-only request, present it for review and stop.
 4. Decompose work into phase → feature → item IDs. Preserve existing IDs. New IDs are append-only within their parent. Natural-language or legacy “sub-feature” means one executable item node under its feature; the canonical model has no extra grouping level. Thus two sub-features under `P1.1` become `P1.1.1` and `P1.1.2`, each a complete vertical slice.

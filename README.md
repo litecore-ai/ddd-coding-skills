@@ -63,6 +63,21 @@ There is no warning-success state, skipped-success path, or manual parent comple
 | `ddd-auto` | Drive the explicit controller action loop for one approved selector |
 | `ddd-auto-cleanup` | Confirm abort, close unsuccessfully, and preserve all evidence |
 
+## Choose a skill
+
+| Situation | Invocation | Effect |
+|---|---|---|
+| Initialize or adopt a project | `ddd-init` | Establish architecture instructions and deterministic state paths; it does not create a roadmap |
+| Create or revise product intent and delivery scope | `ddd-roadmap [scope]` | Create canonical `roadmap.json` plus draft JSON specs; an absent roadmap is a supported bootstrap state |
+| Review and bind one feature contract | `ddd-spec P1.1` | Approve exact models, contracts, consumers, and AC coverage, then bind the spec hash |
+| Formally execute one leaf, feature, or phase | `ddd-auto P1.1.1` / `ddd-auto P1.1` / `ddd-auto P1` | Start a controller run and settle every selected leaf with gates and evidence; use this even for one formal leaf |
+| Implement work outside formal roadmap settlement | `ddd-develop <bounded request>` | Run an ad-hoc TDD slice without roadmap status or controller evidence |
+| Audit an exact commit or delta independently | `ddd-audit <commit>` / `ddd-audit <from>..<to>` | Produce read-only findings without claiming a roadmap gate |
+| Resume interrupted roadmap execution | `ddd-auto` | Recover exclusively from controller JSON |
+| Intentionally abandon an active run | `ddd-auto-cleanup` | Confirm controller abort and preserve journals, commits, and reports |
+
+Calling `ddd-develop P1.1` without a controller-issued run and item is ad-hoc; it is not manual roadmap execution. `status --active` and `hash-file` are read-only bootstrap commands and work before the first canonical roadmap exists. An inactive status is explicit success, while stale or unsafe controller state still fails closed.
+
 ## Codex and Claude Code
 
 Codex executes the action loop directly. It calls `resume`, switches on the returned action, and continues while `remaining` is non-empty. Codex does not need a Stop hook.

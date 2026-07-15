@@ -9,7 +9,7 @@ Stop a run through the controller; never perform filesystem cleanup. Read `../..
 
 This adapter is not run recovery. To resume or recover interrupted execution, use `ddd-auto`, which restores context through `roadmapctl resume`. Use this adapter only to abandon the displayed active run with an explicit non-success outcome.
 
-1. Call `roadmapctl status --active` and display the run ID, active item, action, remaining IDs, and blockers. If no active run exists, report that result and stop.
+1. Call `roadmapctl status --active`. If it returns the exact inactive bootstrap result, report that no active run exists and stop. Otherwise display the run ID, active item, action, remaining IDs, and blockers; treat any controller error as fail-closed.
 2. Explain that abort records an interruption, settles any active leaf as cancelled, closes the run with a non-success outcome, and preserves its journal and evidence.
 3. Require explicit user confirmation for the displayed run ID. A prior request to inspect or “clean up” is not confirmation to abort.
 4. After confirmation, call `roadmapctl abort <run-id> --confirm` exactly once.

@@ -54,6 +54,10 @@ The only valid status/resume actions are:
 - `close`: close only with the controller command; use `--require-success` when success is required.
 - `closed`: report the recorded terminal state and `reportPath` if returned by close.
 
+`status --active` is also the bootstrap-safe, read-only active-run probe. When no active pointer or active journal exists, including before the first canonical roadmap is created, it returns `runId: null`, `status: inactive`, `action: none`, null item/attempt fields, and empty state collections with exit code zero. `none` is not a run transition and is valid only for this inactive `status --active` result. If controller state exists but is stale, unsafe, or identifies an active run whose canonical roadmap is missing, the command still fails closed. The probe must not create `.ddd` or any other file.
+
+`hash-file` is likewise bootstrap-safe and does not require a canonical roadmap. It hashes only a stable, regular, repository-contained file and performs no writes.
+
 When an item is active, `status` and `resume` return the same controller-issued `item` plus an `attempt` containing its state, exact baseline/implementation SHAs, `specHash`, changed files, AC IDs, current evidence, and `auditReportPath`. When no item is active, both fields are `null`. This is the only recovery context an adapter may use after interruption. `attest` accepts an audit report only at that exact controller-designated path.
 
 ## Machine loop

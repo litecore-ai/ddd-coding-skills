@@ -85,26 +85,50 @@ export function parseGlobalArgs(argv) {
 
 export async function main(argv, io = { stdout: process.stdout, stderr: process.stderr }) {
   const { root, command, args, options } = parseGlobalArgs(argv);
-  const controller = await RoadmapController.open(root);
-  const handlers = {
-    validate: () => controller.validate(),
-    scope: () => controller.scope(args[0]),
-    render: () => controller.render(),
-    'hash-file': () => controller.hashFile(args[0]),
-    'bind-spec': () => controller.bindSpec(args[0], args[1]),
-    start: () => controller.start(args[0], options),
-    next: () => controller.next(args[0]),
-    record: () => controller.record(args[0], args[1], options),
-    verify: () => controller.verify(args[0], args[1]),
-    attest: () => controller.attest(args[0], args[1], args[2], args[3]),
-    finish: () => controller.finish(args[0], args[1]),
-    status: () => controller.status(options.active ? null : args[0]),
-    resume: () => controller.resume(options.active ? null : args[0]),
-    retry: () => controller.retry(args[0], args[1], options.reason),
-    abort: () => controller.abort(args[0], options),
-    close: () => controller.close(args[0], options)
-  };
-  const result = await handlers[command]();
+  let result;
+  if (command === 'hash-file') {
+    result = await RoadmapController.hashFileAtRoot(root, args[0]);
+  } else if (command === 'status' && options.active) {
+    const active = await RoadmapController.inspectActiveRun(root);
+    if (!active.active) {
+      result = {
+        runId: null,
+        status: 'inactive',
+        activeItemId: null,
+        leaves: {},
+        aggregates: {},
+        remaining: [],
+        blockers: {},
+        attemptsRemaining: {},
+        action: 'none',
+        item: null,
+        attempt: null
+      };
+    } else {
+      const controller = await RoadmapController.open(root);
+      result = await controller.status(null);
+    }
+  } else {
+    const controller = await RoadmapController.open(root);
+    const handlers = {
+      validate: () => controller.validate(),
+      scope: () => controller.scope(args[0]),
+      render: () => controller.render(),
+      'bind-spec': () => controller.bindSpec(args[0], args[1]),
+      start: () => controller.start(args[0], options),
+      next: () => controller.next(args[0]),
+      record: () => controller.record(args[0], args[1], options),
+      verify: () => controller.verify(args[0], args[1]),
+      attest: () => controller.attest(args[0], args[1], args[2], args[3]),
+      finish: () => controller.finish(args[0], args[1]),
+      status: () => controller.status(args[0]),
+      resume: () => controller.resume(options.active ? null : args[0]),
+      retry: () => controller.retry(args[0], args[1], options.reason),
+      abort: () => controller.abort(args[0], options),
+      close: () => controller.close(args[0], options)
+    };
+    result = await handlers[command]();
+  }
   io.stdout.write(canonicalStringify(result));
   return EXIT_CODES.OK;
 }

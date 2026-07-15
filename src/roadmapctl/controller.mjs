@@ -58,6 +58,32 @@ function unsafePath() {
   return new RoadmapError('UNSAFE_PATH', 'controller path escapes the project root');
 }
 
+async function resolveProjectRoot(root, fs) {
+  try {
+    return await fs.realpath(resolve(root ?? process.cwd()));
+  } catch (error) {
+    throw new RoadmapError('UNSAFE_PATH', 'project root is unavailable', { causeCode: error.code });
+  }
+}
+
+async function optionalContainedDirectory(root, directory, fs) {
+  let metadata;
+  try {
+    metadata = await fs.lstat(directory);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+    throw lifecycleError('STATE_PATH_UNSAFE', 'controller state directory is not a real directory');
+  }
+  const real = await fs.realpath(directory);
+  if (!isContained(root, real) || resolve(real) !== resolve(directory)) {
+    throw lifecycleError('STATE_PATH_UNSAFE', 'controller state directory escapes the project root');
+  }
+  return real;
+}
+
 async function realParentPath(root, path, fs) {
   const parent = await fs.realpath(dirname(path));
   if (!isContained(root, parent)) throw unsafePath();
@@ -91,6 +117,21 @@ async function readContainedRegular(root, path, fs) {
   } finally {
     await handle.close();
   }
+}
+
+async function hashProjectFile(root, path, fs) {
+  const requested = canonicalProjectPath(root, path);
+  let file;
+  try {
+    file = await readContainedRegular(root, requested.absolute, fs);
+  } catch (error) {
+    if (error instanceof RoadmapError) throw error;
+    throw lifecycleError('SHARED_CONTRACT_INVALID', 'shared contract is unavailable', {
+      path: requested.local,
+      causeCode: error.code
+    });
+  }
+  return { path: requested.local, hash: sha256Bytes(file.contents) };
 }
 
 function canonicalProjectPath(root, candidate) {
@@ -267,12 +308,7 @@ function auditReportPath(runId, itemId, attemptNumber) {
 export class RoadmapController {
   static async open(root, options = {}) {
     const fs = options.fs ?? fileSystem;
-    let absoluteRoot;
-    try {
-      absoluteRoot = await fs.realpath(resolve(root ?? process.cwd()));
-    } catch (error) {
-      throw new RoadmapError('UNSAFE_PATH', 'project root is unavailable', { causeCode: error.code });
-    }
+    const absoluteRoot = await resolveProjectRoot(root, fs);
     const requestedRoadmapPath = resolve(options.roadmapPath ?? join(absoluteRoot, 'docs/roadmap/roadmap.json'));
     let roadmapPath;
     let roadmap;
@@ -291,6 +327,45 @@ export class RoadmapController {
     const requestedMarkdownPath = resolve(options.markdownPath ?? join(absoluteRoot, 'docs/roadmap/roadmap.md'));
     const markdownPath = await realParentPath(absoluteRoot, requestedMarkdownPath, fs);
     return new RoadmapController(absoluteRoot, roadmap, { ...options, fs, roadmapPath, markdownPath });
+  }
+
+  static async hashFileAtRoot(root, path, options = {}) {
+    const fs = options.fs ?? fileSystem;
+    const absoluteRoot = await resolveProjectRoot(root, fs);
+    return hashProjectFile(absoluteRoot, path, fs);
+  }
+
+  static async inspectActiveRun(root, options = {}) {
+    const fs = options.fs ?? fileSystem;
+    const absoluteRoot = await resolveProjectRoot(root, fs);
+    const stateRoot = await optionalContainedDirectory(absoluteRoot, join(absoluteRoot, '.ddd'), fs);
+    if (stateRoot === null) return { active: false, runId: null };
+
+    const runsRoot = await optionalContainedDirectory(absoluteRoot, join(stateRoot, 'runs'), fs);
+    const active = [];
+    if (runsRoot !== null) {
+      for (const name of await fs.readdir(runsRoot)) {
+        const match = /^(\d{8}T\d{6}Z-[0-9a-f]{8})\.json$/.exec(name);
+        if (!match) continue;
+        const run = await readJsonRegular(join(runsRoot, name), parseRun, { fs });
+        if (run.runId !== match[1]) {
+          throw lifecycleError('STATE_CORRUPT', 'run journal file name and run id differ');
+        }
+        if (run.status === 'active') active.push(run.runId);
+      }
+    }
+
+    let pointer = null;
+    try {
+      pointer = await readJsonRegular(join(stateRoot, 'active-run.json'), parseActivePointer, { fs });
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    if (active.length === 0 && pointer === null) return { active: false, runId: null };
+    if (active.length !== 1 || pointer === null || pointer.runId !== active[0]) {
+      throw lifecycleError('ACTIVE_POINTER_STALE', 'the active-run pointer does not identify the only active journal');
+    }
+    return { active: true, runId: pointer.runId };
   }
 
   constructor(root, roadmap, options = {}) {
@@ -501,18 +576,7 @@ export class RoadmapController {
   }
 
   async hashFile(path) {
-    const requested = canonicalProjectPath(this.root, path);
-    let file;
-    try {
-      file = await readContainedRegular(this.root, requested.absolute, this.fs);
-    } catch (error) {
-      if (error instanceof RoadmapError) throw error;
-      throw lifecycleError('SHARED_CONTRACT_INVALID', 'shared contract is unavailable', {
-        path: requested.local,
-        causeCode: error.code
-      });
-    }
-    return { path: requested.local, hash: sha256Bytes(file.contents) };
+    return hashProjectFile(this.root, path, this.fs);
   }
 
   async bindSpec(featureId, specPath) {
