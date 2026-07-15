@@ -1,6 +1,6 @@
 # roadmapctl Adapter Protocol
 
-This protocol is normative for every DDD skill in this repository. Skills are adapters around `roadmapctl`; they do not implement a second workflow in prose.
+This protocol is normative for every DDD skill in this repository. GPT-5.6 Sol owns semantic reasoning, implementation, and review. Skills are thin adapters around `roadmapctl`; they do not implement a second workflow or state machine in prose.
 
 ## CLI resolution
 
@@ -36,9 +36,9 @@ Read these fields exactly:
 | `hash-file <path>` | `path`, `hash` |
 | `bind-spec <feature-id> <spec-path>` | `featureId`, `specHash`, `items.<id>.acceptanceCriteria`, `bookkeepingSha`, `revision` |
 | `start <selector> <--manifest-approved\|--sandboxed>` | `runId`, `scope[]`, `status`, `runBranch` |
-| `status <run-id\|--active>` / `resume <run-id\|--active>` | `runId`, `action`, `activeItemId`, `blockers`, `remaining[]`, `attemptsRemaining` |
-| `next <run-id>` | `runId`, `item.id`, `item.spec`, `attempt`; terminal results also contain `action`, `blockers`, `remaining[]` |
-| `record <run-id> <item-id> --commit <sha> --ac <id>...` | `runId`, `itemId`, `state`, `implementationSha` |
+| `status <run-id\|--active>` / `resume <run-id\|--active>` | `runId`, `action`, `activeItemId`, `item`, `attempt`, `blockers`, `remaining[]`, `attemptsRemaining` |
+| `next <run-id>` | `runId`, `item.id`, `item.spec`, `attempt`, `itemBaselineSha`; terminal results also contain `action`, `blockers`, `remaining[]` |
+| `record <run-id> <item-id> --commit <sha> --ac <id>...` | `runId`, `itemId`, `state`, `itemBaselineSha`, `implementationSha` |
 | `verify <run-id> <item-id>` | `runId`, `itemId`, `gates[]` |
 | `attest <run-id> <item-id> <gate> <report-path>` | `runId`, `itemId`, `gate`, `status` |
 | `finish <run-id> <item-id>` | `runId`, `itemId`, `state`, `reasons[]`, `bookkeepingSha` |
@@ -51,6 +51,8 @@ The only valid status/resume actions are:
 - `finish`: complete missing verification/attestation steps, then settle through `finish`.
 - `close`: close only with the controller command; use `--require-success` when success is required.
 - `closed`: report the recorded terminal state and `reportPath` if returned by close.
+
+When an item is active, `status` and `resume` return the same controller-issued `item` plus an `attempt` containing its state, exact baseline/implementation SHAs, changed files, AC IDs, and current evidence. When no item is active, both fields are `null`. This is the only recovery context an adapter may use after interruption.
 
 ## Machine loop
 

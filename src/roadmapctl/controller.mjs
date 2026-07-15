@@ -773,6 +773,7 @@ export class RoadmapController {
       return {
         runId,
         attempt: attemptNumber,
+        itemBaselineSha: attempt.itemBaselineSha,
         item: { ...item, spec },
         revision: updated.revision
       };
@@ -813,7 +814,15 @@ export class RoadmapController {
         attempts: replaceLastAttempt(current, itemId, nextAttempt),
         events: addEvent(current, at, 'implementation-recorded', itemId, { changedFiles: paths })
       }), { fs: this.fs, randomUUID: this.createId });
-      return { runId, itemId, state: 'verifying', implementationSha, changedFiles: paths, revision: updated.revision };
+      return {
+        runId,
+        itemId,
+        state: 'verifying',
+        itemBaselineSha: attempt.itemBaselineSha,
+        implementationSha,
+        changedFiles: paths,
+        revision: updated.revision
+      };
     });
   }
 
@@ -1235,17 +1244,43 @@ export class RoadmapController {
     };
   }
 
+  async statusWithContext(run) {
+    const snapshot = this.statusSnapshot(run);
+    if (run.currentItemId === null) {
+      return { ...snapshot, item: null, attempt: null };
+    }
+    const item = this.roadmap.nodes.find(node => node.kind === 'item' && node.id === run.currentItemId);
+    if (!item || !run.scope.includes(item.id)) {
+      throw lifecycleError('ITEM_OUT_OF_SCOPE', 'the active item is outside the run scope');
+    }
+    const spec = await this.readSpec(item);
+    const { attempt } = activeAttempt(run, item.id);
+    return {
+      ...snapshot,
+      item: { ...item, spec },
+      attempt: {
+        number: attempt.number,
+        state: attempt.state,
+        itemBaselineSha: attempt.itemBaselineSha,
+        implementationSha: attempt.implementationSha,
+        changedFiles: [...attempt.changedFiles],
+        acIds: [...attempt.acIds],
+        evidence: attempt.evidence
+      }
+    };
+  }
+
   async status(runId) {
     const resolved = await this.resolveRunId(runId);
     const run = await readJsonRegular(this.runPath(resolved), parseRun, { fs: this.fs });
-    return this.statusSnapshot(run);
+    return this.statusWithContext(run);
   }
 
   async resume(runId) {
     const resolved = await this.resolveRunId(runId, { allowClosedPointer: true });
     return this.withRunLock(resolved, async journalPath => {
       const run = await this.readRunRecovering(journalPath);
-      return this.statusSnapshot(run);
+      return this.statusWithContext(run);
     });
   }
 
@@ -1403,8 +1438,17 @@ export class RoadmapController {
     if (!confirmed) throw lifecycleError('ABORT_CONFIRMATION_REQUIRED', 'abort requires explicit confirmation');
     return this.withRunLock(runId, async journalPath => {
       const run = await this.readRunRecovering(journalPath);
-      if (run.status !== 'active' || run.currentItemId === null) {
-        throw lifecycleError('ABORT_INVALID', 'abort requires one active item');
+      if (run.status !== 'active') {
+        throw lifecycleError('ABORT_INVALID', 'abort requires an active run');
+      }
+      if (run.currentItemId === null) {
+        await this.assertRunRepository(run, expectedRunHead(run));
+        const at = this.timestamp();
+        const interrupted = await mutateRevisionRegular(journalPath, parseRun, run.revision, current => ({
+          ...current,
+          events: addEvent(current, at, 'run-abort-requested', null, {})
+        }), { fs: this.fs, randomUUID: this.createId });
+        return this.closeLocked(journalPath, interrupted);
       }
       const itemId = run.currentItemId;
       const { attempt } = activeAttempt(run, itemId);

@@ -1,5 +1,5 @@
 {
-  "description": "ddd-auto stop hook for automated roadmap execution loops",
+  "description": "Bounded liveness bridge for one controller-owned ddd-auto run",
   "hooks": {
     "Stop": [
       {

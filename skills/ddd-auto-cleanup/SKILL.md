@@ -1,36 +1,16 @@
 ---
 name: ddd-auto-cleanup
-description: Clean up after interrupting a ddd-auto loop — removes state file and reports progress summary. Use after pressing Escape to stop ddd-auto.
-allowed-tools:
-  - Bash(*)
-  - Read
-  - Glob
-hooks:
-  PermissionRequest:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: |
-            [ -f "${CLAUDE_PROJECT_DIR:-.}/.ddd-auto.local.md" ] && printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}' || true
+description: Inspect and explicitly abort an active ddd-auto roadmap run while preserving its controller journal and immutable evidence. Use when the user asks to stop, cancel, clean up, or recover an automated DDD run.
 ---
 
-# ddd-auto cleanup
+# DDD Auto Cleanup Adapter
 
-Clean up ddd-auto state and report progress after the loop has been interrupted.
+Stop a run through the controller; never perform filesystem cleanup. Read `../../references/roadmapctl-protocol.md` in full and resolve `roadmapctl` exactly as specified there.
 
-1. Check if `.ddd-auto.local.md` exists using the **Glob tool** (pattern: `.ddd-auto.local.md`)
+1. Call `roadmapctl status --active` and display the run ID, active item, action, remaining IDs, and blockers. If no active run exists, report that result and stop.
+2. Explain that abort records an interruption, settles any active leaf as cancelled, closes the run with a non-success outcome, and preserves its journal and evidence.
+3. Require explicit user confirmation for the displayed run ID. A prior request to inspect or “clean up” is not confirmation to abort.
+4. After confirmation, call `roadmapctl abort <run-id> --confirm` exactly once.
+5. Report the returned status, immutable report path, and bookkeeping SHA. If the controller rejects the abort because repository or state invariants changed, report the error and leave all artifacts untouched.
 
-2. **If NOT_FOUND**: Say "No ddd-auto state file found. Nothing to clean up."
-
-3. **If EXISTS**:
-   - Read `.ddd-auto.local.md` to get the current state (iteration, phase, completed items, skipped items)
-   - Remove the file using Bash: `rm .ddd-auto.local.md`
-   - Report a summary:
-     ```
-     ddd-auto cleanup complete.
-     - Iteration: [N]
-     - Phase: [develop/audit]
-     - Completed: [list or count]
-     - Skipped: [list or count]
-     - Remaining: [list or count]
-     ```
+Do not alter `.ddd`, generated roadmap/spec views, canonical JSON, run reports, lock files, or Git history directly. Do not hide a controller conflict or describe an aborted run as successful.
