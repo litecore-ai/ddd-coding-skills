@@ -1,6 +1,6 @@
 {
   "name": "ddd-coding-skills",
-  "description": "DDD development skill suite for coding agents: roadmap, TDD implementation, architecture audit, and automated roadmap execution",
+  "description": "Deterministic controller-backed DDD development for coding agents",
   "owner": {
     "name": "Litecore AI",
     "url": "https://github.com/litecore-ai"
@@ -9,8 +9,8 @@
     {
       "name": "ddd-coding-skills",
       "source": "./",
-      "description": "DDD development skill suite: project initialization, roadmap generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
-      "version": "2.0.0",
+      "description": "Deterministic DDD workflow with JSON contracts, evidence gates, and crash-safe execution",
+      "version": "3.0.0",
       "license": "MIT",
       "homepage": "https://github.com/litecore-ai/ddd-coding-skills",
       "repository": "https://github.com/litecore-ai/ddd-coding-skills",

@@ -7,6 +7,8 @@ description: Execute an approved roadmap selector as a deterministic sequence of
 
 Coordinate GPT-5.6 Sol; do not duplicate its coding judgment. `roadmapctl` owns selection, state, evidence, attempt limits, and terminal outcomes. Read `../../references/roadmapctl-protocol.md` in full before doing anything.
 
+In Codex, execute the loop directly; no Stop hook is needed. In Claude Code, the optional Stop hook may restore liveness but never changes the loop contract.
+
 ## Start safely
 
 1. Require one explicit roadmap selector. If absent, ask for it; never guess a phase or silently execute the entire roadmap.
@@ -26,7 +28,7 @@ Call `roadmapctl resume <run-id>` before every transition and switch only on its
 - `closed`: report the recorded terminal status and report path, then stop.
 - Any unknown action is a hard error. Stop without inventing a recovery transition.
 
-After `roadmapctl finish`, a leaf result is not a batch terminal result. Call `roadmapctl resume <run-id>` again. When `remaining` is non-empty and action is `next`, continue with the next controller-selected leaf. Never stop merely because one checkbox-sized unit finished.
+After `roadmapctl finish`, a leaf result is not a batch terminal result. Call `roadmapctl resume <run-id>` again. When `remaining` is non-empty and action is `next`, continue with the next controller-selected leaf. Never stop merely because one leaf finished.
 
 Only controller status `successful` is batch success. `blocked`, `failed`, `cancelled`, and `capped` are terminal non-success outcomes. Preserve and report their exact blockers, reasons, remaining IDs, and evidence report. Never turn an omitted, bypassed, or unverified leaf into success.
 

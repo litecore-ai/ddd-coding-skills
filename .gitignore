@@ -2,4 +2,5 @@
 .claude/
 .DS_Store
 node_modules/
+.ddd/
 docs/superpowers/

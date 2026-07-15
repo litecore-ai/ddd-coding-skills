@@ -1,75 +1,51 @@
-# Installing DDD Coding Skills for Codex
-
-Enable DDD coding skills in Codex via native skill discovery. Clone and symlink.
+# Install DDD Coding Skills v3 for Codex
 
 ## Prerequisites
 
+- Node.js 20 or newer
 - Git
-- OpenAI Codex CLI
-- `jq` (required by ddd-auto's Stop hook for JSON handling)
+- Codex with native skill discovery
+- A directory such as `$HOME/.local/bin` on `PATH`
 
-## Installation
+## Install
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/litecore-ai/ddd-coding-skills.git ~/.codex/ddd-coding-skills
-   ```
+```bash
+git clone https://github.com/litecore-ai/ddd-coding-skills.git "$HOME/.codex/ddd-coding-skills"
+mkdir -p "$HOME/.agents/skills" "$HOME/.local/bin"
+ln -s "$HOME/.codex/ddd-coding-skills/skills/ddd-init" "$HOME/.agents/skills/ddd-init"
+ln -s "$HOME/.codex/ddd-coding-skills/skills/ddd-roadmap" "$HOME/.agents/skills/ddd-roadmap"
+ln -s "$HOME/.codex/ddd-coding-skills/skills/ddd-spec" "$HOME/.agents/skills/ddd-spec"
+ln -s "$HOME/.codex/ddd-coding-skills/skills/ddd-develop" "$HOME/.agents/skills/ddd-develop"
+ln -s "$HOME/.codex/ddd-coding-skills/skills/ddd-audit" "$HOME/.agents/skills/ddd-audit"
+ln -s "$HOME/.codex/ddd-coding-skills/skills/ddd-auto" "$HOME/.agents/skills/ddd-auto"
+ln -s "$HOME/.codex/ddd-coding-skills/skills/ddd-auto-cleanup" "$HOME/.agents/skills/ddd-auto-cleanup"
+ln -s "$HOME/.codex/ddd-coding-skills/bin/roadmapctl.mjs" "$HOME/.local/bin/roadmapctl"
+```
 
-2. **Create the skills symlink:**
-   ```bash
-   mkdir -p ~/.agents/skills
-   ln -s ~/.codex/ddd-coding-skills/skills ~/.agents/skills/ddd-coding-skills
-   ```
-
-   **Windows (PowerShell):**
-   ```powershell
-   New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.agents\skills"
-   cmd /c mklink /J "$env:USERPROFILE\.agents\skills\ddd-coding-skills" "$env:USERPROFILE\.codex\ddd-coding-skills\skills"
-   ```
-
-3. **Enable multi-agent support** (required for ddd-develop subagent orchestration):
-
-   Add to `~/.codex/config.toml`:
-   ```toml
-   [features]
-   multi_agent = true
-   ```
-
-4. **Restart Codex** to discover the skills.
-
-> **Note:** The `ddd-auto` skill uses a Stop hook (`hooks/stop-hook.sh`) for reliable looping. It is automatically available when using the plugin via Claude Code's plugin system. In Codex CLI, the Stop hook mechanism is not supported — `ddd-auto` will fall back to skill-level instructions for looping, which may be less reliable.
+Restart Codex after installation. Codex drives the explicit `ddd-auto` controller loop itself; no Stop hook is required, and completion semantics are identical to Claude Code.
 
 ## Verify
 
 ```bash
-ls -la ~/.agents/skills/ddd-coding-skills
+node --version
+roadmapctl --root /path/to/project validate
+ls "$HOME/.agents/skills/ddd-develop/SKILL.md"
 ```
 
-You should see a symlink pointing to your ddd-coding-skills/skills directory. Verify all five skills are present:
+The Node version must be 20 or newer. The project validation command requires a v3 canonical `docs/roadmap/roadmap.json`.
+
+## Update
 
 ```bash
-ls ~/.agents/skills/ddd-coding-skills/
-# Expected: ddd-init  ddd-roadmap  ddd-develop  ddd-audit  ddd-auto
+git -C "$HOME/.codex/ddd-coding-skills" pull --ff-only
 ```
 
-## Updating
+The symlinks expose the update immediately. Restart Codex if skill metadata changed.
 
-```bash
-cd ~/.codex/ddd-coding-skills && git pull
-```
+## Breaking migration from v2
 
-Skills update instantly through the symlink.
+v3 does not execute legacy Markdown roadmaps or prose state. No migration command exists. Remove old installed skill copies, install all seven v3 skills plus `bin/roadmapctl.mjs`, then regenerate product briefs, `roadmap.json`, and JSON specs with `ddd-roadmap`/`ddd-spec`.
 
-## Uninstalling
+## Windows
 
-```bash
-rm ~/.agents/skills/ddd-coding-skills
-```
-
-Optionally delete the clone: `rm -rf ~/.codex/ddd-coding-skills`.
-
-**Windows (PowerShell):**
-```powershell
-Remove-Item "$env:USERPROFILE\.agents\skills\ddd-coding-skills"
-Remove-Item -Recurse -Force "$env:USERPROFILE\.codex\ddd-coding-skills"  # optional
-```
+Use directory junctions for each skill and place a small `roadmapctl.cmd` launcher on `PATH` that invokes Node with the cloned `bin/roadmapctl.mjs`. Preserve the same seven-skill layout and Node.js 20 requirement.

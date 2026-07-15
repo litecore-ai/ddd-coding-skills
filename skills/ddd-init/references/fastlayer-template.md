@@ -1,63 +1,46 @@
-## Built-in Template: fastlayer
+# Fastlayer Architecture Variant
 
-**Tech Stack:** TypeScript / Next.js
-**Reference:** https://github.com/RealMatrix-PTE-LTD/fastlayer
+Use this TypeScript/Next.js variant only after the user selects it and Node.js 20+ is available. Adapt it to the project's established language; do not impose names or error conventions that conflict with existing code.
 
-### Directory Structure
+## Bounded-context shape
 
-```
+```text
 server/
-├── handler/                    # Presentation layer
-│   └── <domain>/               # Grouped by domain
-├── infras/                     # Shared infrastructure
-│   ├── orm/
-│   │   ├── schema/             # Database schemas (Drizzle)
-│   │   └── data-preset/        # Seed data
-│   ├── auth/                   # Auth infrastructure
-│   ├── utils/                  # Shared utilities
-│   └── shared/                 # Shared types/constants
-└── modules/                    # Bounded contexts
-    └── <module>/
-        ├── acl/                # Anti-Corruption Layer
-        │   └── <service>/      # One subdir per external service
-        ├── app/
-        │   ├── dto/            # Data Transfer Objects
-        │   ├── service/        # Application services
-        │   │   └── __tests__/
-        │   └── internal/       # Cross-module interfaces
-        ├── domain/
-        │   ├── bo/             # Business Objects
-        │   │   └── __tests__/
-        │   └── model/
-        │       ├── entity/     # Entities
-        │       ├── vo/         # Value Objects
-        │       └── qo/         # Query Objects
-        ├── repo/
-        │   ├── dao/            # Data Access Objects
-        │   │   └── __tests__/
-        │   └── po/             # Persistent Objects
-        └── utils/
+├── handler/                    # Delivery adapters grouped by real consumer flow
+├── infras/                     # Shared technical adapters
+└── modules/
+    └── <bounded-context>/
+        ├── domain/             # Aggregates, entities, values, events, pure policies
+        ├── app/                # Use-case orchestration and ports
+        ├── repo/               # Persistence adapters and mappings
+        ├── acl/                # External-system anti-corruption adapters
+        └── tests/              # Unit, integration, consumer, and E2E evidence
 ```
 
-### Conventions
+Dependency direction:
 
-- Request flow: `Middleware → API Route → Handler → Service → BO → DAO → Database`
-- Tuple return: `[data, error]` for all async functions
-- Error handling: `ServiceError` objects, never `new Error()` for 4xx
-- Type system: `DTO (API) ↔ Entity (Domain) ↔ PO (Database)`
-- PO to Entity: `convertNullToUndefined<Entity>(po)`
-- Entity to PO: `entity.field ?? null`
-- Cross-module communication: via `app/internal/` interfaces
-- Tests: colocated in `__tests__/` within each layer
-
-### Standardized docs/ Structure
-
+```text
+delivery → application → domain
+persistence adapter → application/domain port
+external adapter → application/domain port
+domain → no framework, transport, storage, or network dependency
 ```
+
+Create only directories needed by the first approved vertical slice. Do not scaffold empty ports, repositories, handlers, or models. The first slice must traverse a real handler or system consumer, application use case, domain rule, required adapter, and observable result.
+
+## Canonical project state
+
+```text
 docs/
-├── roadmap/                    # ddd-roadmap output
-├── audit/                      # ddd-audit output
-├── architecture/               # Architecture documentation
-└── plans/                      # Implementation plans
+├── product-brief.md
+├── architecture/
+├── roadmap/
+│   ├── roadmap.json            # Canonical
+│   └── roadmap.md              # Generated view
+├── specs/                      # Canonical JSON plus generated views
+└── runs/                       # Immutable terminal reports
+.ddd/
+└── runs/                       # Local controller journals
 ```
 
----
+Record bounded contexts, aggregate ownership, public contracts, transaction boundaries, real consumers, and test commands in the approved architecture/roadmap documents. Let `roadmapctl` validate state; never encode execution status in this template.

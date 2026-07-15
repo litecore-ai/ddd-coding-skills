@@ -1,6 +1,6 @@
 {
   "name": "ddd-coding-skills",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
   "bin": {
     "roadmapctl": "./bin/roadmapctl.mjs"
@@ -12,7 +12,7 @@
     "test": "node --test",
     "check": "node --test && node scripts/check-skill-contracts.mjs"
   },
-  "description": "DDD development skill suite: project initialization, roadmap generation, spec generation, TDD implementation, 8-dimension architecture audit, and automated roadmap execution",
+  "description": "Deterministic DDD workflow for GPT-5.6 Sol and coding agents with JSON contracts, evidence gates, and crash-safe roadmap execution",
   "keywords": [
     "skills",
     "ddd",
@@ -24,6 +24,7 @@
     "best-practices",
     "workflows",
     "automation",
+    "deterministic",
     "loop",
     "init",
     "scaffold"

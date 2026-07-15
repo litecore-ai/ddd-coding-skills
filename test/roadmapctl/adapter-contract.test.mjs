@@ -39,6 +39,7 @@ test('Sol-native adapters are thin controller clients with no legacy authority p
 
 test('auto treats one completed leaf with remaining work as continuation, never batch success', async () => {
   const text = await source('skills/ddd-auto/SKILL.md');
+  assert.match(text, /Codex.*directly.*no Stop hook/is);
   assert.match(text, /finish.*is not.*batch.*terminal/is);
   assert.match(text, /remaining.*non-empty.*next/is);
   assert.match(text, /unknown.*action.*hard error/is);
@@ -133,6 +134,17 @@ test('status and resume restore the exact controller-issued item and attempt con
     assert.equal(snapshot.attempt.itemBaselineSha, assigned.itemBaselineSha);
     assert.equal(snapshot.attempt.implementationSha, null);
   }
+
+  const implementationSha = await repo.implementationCommit('resume-context.mjs', 'export const resumed = true;\n');
+  await repo.cli(['record', runId, assigned.item.id, '--commit', implementationSha, '--ac', 'AC-P1.1-001']);
+  await repo.cli(['verify', runId, assigned.item.id]);
+  const verifying = await repo.cli(['resume', runId]);
+  assert.equal(verifying.action, 'finish');
+  assert.equal(verifying.attempt.state, 'verifying');
+  assert.equal(verifying.attempt.implementationSha, implementationSha);
+  assert.equal(verifying.attempt.specHash, assigned.specHash);
+  assert.equal(verifying.attempt.evidence.tests.status, 'passed');
+  assert.equal(verifying.attempt.auditReportPath, assigned.auditReportPath);
 });
 
 test('confirmed abort closes an active run even before a leaf is assigned', async t => {
